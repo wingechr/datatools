@@ -5,7 +5,7 @@ import os
 import shutil
 
 
-from .exceptions import ObjectNotFoundException
+from .exceptions import ObjectNotFoundException, validate_file_id
 
 
 class AbstractFileStorage:
@@ -69,11 +69,12 @@ class FileSystemStorage(AbstractFileStorage):
         else:
             logging.debug("using data dir: %s", self.data_dir)
 
-    def get_filepath(self, file_id):
+    def _get_filepath(self, file_id):
         return os.path.join(self.data_dir, file_id)
 
     def get(self, file_id):
-        filepath = self.get_filepath(file_id)
+        file_id = validate_file_id(file_id)
+        filepath = self._get_filepath(file_id)
         if not os.path.isfile(filepath):
             raise ObjectNotFoundException(file_id)
         return open(filepath, "rb")
@@ -84,7 +85,7 @@ class FileSystemStorage(AbstractFileStorage):
             for chunk in data_stream:
                 file.write(chunk)
         file_id = data_stream.get_file_id()
-        filepath = self.get_filepath(file_id)
+        filepath = self._get_filepath(file_id)
         tmp_filepath = file.name
         if os.path.isfile(filepath):
             # file exists already

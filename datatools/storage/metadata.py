@@ -5,8 +5,7 @@ import re
 import sqlite3
 
 from datatools.utils import normalize_name, get_unix_utc
-
-from .exceptions import ObjectNotFoundException
+from .exceptions import ObjectNotFoundException, validate_file_id, InvalidValue
 
 
 class AbstractMetadataStorage:
@@ -37,6 +36,43 @@ class AbstractMetadataStorage:
             ObjectNotFoundException
         """
         raise NotImplementedError()
+
+
+def validate_unix_utc(unix_utc):
+    if not isinstance(unix_utc, (int, float)):
+        raise InvalidValue(unix_utc)
+    return unix_utc
+
+
+def validate_non_empty_str(x, max_len=None):
+    if not isinstance(x, str):
+        raise InvalidValue(x)
+    x = x.strip()
+    if not x:
+        raise InvalidValue(x)
+    if max_len and len(x) > max_len:
+        raise InvalidValue(x)
+    return x
+
+
+def validate_user(user):
+    return validate_non_empty_str(user, 128)
+
+
+def validate_identifier(identifier):
+    identifier = normalize_name(identifier)
+    return validate_non_empty_str(identifier, 128)
+
+
+def validate_identifier_values(identifier_values):
+    result = dict()
+    for identifier, value in identifier_values.items():
+        identifier = validate_identifier(identifier)
+        if identifier in result:
+            raise InvalidValue(identifier)
+        value = json.dumps(value, sort_keys=True, ensure_ascii=False)
+        result[identifier] = value
+    return result
 
 
 class SqliteMetadataStorage(AbstractMetadataStorage):
@@ -94,10 +130,8 @@ class SqliteMetadataStorage(AbstractMetadataStorage):
             logging.debug("EXECUTE: %s", sql)
             return self.connection.cursor().execute(sql)
 
-    def _create_dataset(self, file_id, user=None, unix_utc=None):
+    def _create_dataset(self, file_id, user, unix_utc):
         """Returns dataset_id"""
-        unix_utc = unix_utc or get_unix_utc()
-        user = user or self.default_user
         stmt = """SELECT MAX(dataset_id) FROM dataset;"""
         max_dataset_id = self._execute(stmt).fetchone()[0] or 0
         dataset_id = max_dataset_id + 1
@@ -106,15 +140,20 @@ class SqliteMetadataStorage(AbstractMetadataStorage):
         return dataset_id
 
     def set(self, file_id, identifier_values, user=None, unix_utc=None):
-        dataset_id = self._create_dataset(file_id, user=user, unix_utc=unix_utc)
+        file_id = validate_file_id(file_id)
+        unix_utc = validate_unix_utc(unix_utc or get_unix_utc())
+        user = validate_user(user or self.default_user)
+        identifier_values = validate_identifier_values(identifier_values)
+        dataset_id = self._create_dataset(file_id, user, unix_utc)
         stmt = """INSERT INTO metadata(dataset_id, identifier, value_json) VALUES(?, ?, ?);"""
+
         for identifier, value in identifier_values.items():
-            identifier = normalize_name(identifier)
-            value_json = json.dumps(value, sort_keys=True, ensure_ascii=False)
-            self._execute(stmt, [dataset_id, identifier, value_json])
+            self._execute(stmt, [dataset_id, identifier, value])
 
     def get(self, file_id, identifier):
-        identifier = normalize_name(identifier)
+        file_id = validate_file_id(file_id)
+        identifier = validate_identifier(identifier)
+
         stmt = """
         SELECT value_json 
         FROM metadata m JOIN dataset d ON m.dataset_id = d.dataset_id
