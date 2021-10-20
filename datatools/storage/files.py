@@ -5,11 +5,10 @@ import os
 import shutil
 
 
-class ObjectNotFoundException(Exception):
-    pass
+from .exceptions import ObjectNotFoundException
 
 
-class AbstractStorage:
+class AbstractFileStorage:
     def get(self, file_id):
         """
         Args:
@@ -57,7 +56,7 @@ class HashedByteIterator:
         return self.hash.hexdigest()
 
 
-class FileSystemStorage(AbstractStorage):
+class FileSystemStorage(AbstractFileStorage):
 
     DEFAULT_DATA_DIR = ".cache"
 
