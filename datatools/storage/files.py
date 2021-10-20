@@ -4,7 +4,7 @@ import tempfile
 import os
 import shutil
 
-from .exceptions import ObjectNotFoundException, validate_file_id
+from .exceptions import ObjectNotFoundException, validate_file_id, IntegrityException
 
 
 class AbstractFileStorage:
@@ -35,23 +35,42 @@ class AbstractFileStorage:
 class HashedByteIterator:
     DEFAULT_CHUNK_SIZE = 2 ** 1  # 2 ** 24
 
-    def __init__(self, data_stream):
+    def __init__(self, data_stream, expected_hash=None):
         self.data_stream = data_stream
         self.hash = hashlib.md5()
         self.chunk_size = self.DEFAULT_CHUNK_SIZE
+        self.expected_hash = expected_hash
+
+    def __enter__(self):
+        self.data_stream.__enter__()
+        return self
+
+    def __exit__(self, *args):
+        self.data_stream.__exit__(*args)
+        if self.expected_hash:
+            file_id = self.get_current_hash()
+            if file_id != self.expected_hash:
+                raise IntegrityException(self.expected_hash)
+            else:
+                logging.debug('Integrity check ok')
+
 
     def __iter__(self):
         return self
 
     def __next__(self):
-        chunk = self.data_stream.read(self.chunk_size)
-        logging.debug("read %d bytes (size=%d)", len(chunk), self.chunk_size)
+        chunk = self.read(self.chunk_size)
         if not chunk:
             raise StopIteration()
+        return chunk
+    
+    def read(self, size=-1):
+        chunk = self.data_stream.read(size)
+        logging.debug("read %d bytes (size=%d)", len(chunk), size)
         self.hash.update(chunk)
         return chunk
 
-    def get_file_id(self):
+    def get_current_hash(self):
         return self.hash.hexdigest()
 
 
@@ -71,19 +90,23 @@ class FileSystemStorage(AbstractFileStorage):
     def _get_filepath(self, file_id):
         return os.path.join(self.data_dir, file_id)
 
-    def get(self, file_id):
+    def get(self, file_id, check_integrity=False):
         file_id = validate_file_id(file_id)
         filepath = self._get_filepath(file_id)
         if not os.path.isfile(filepath):
             raise ObjectNotFoundException(file_id)
-        return open(filepath, "rb")
+        file = open(filepath, "rb")
+        if check_integrity:        
+            # wrap
+            file = HashedByteIterator(file, expected_hash=file_id)
+        return file
 
     def set(self, data_stream):
         data_stream = HashedByteIterator(data_stream)
         with tempfile.TemporaryFile("wb", delete=False) as file:
             for chunk in data_stream:
                 file.write(chunk)
-        file_id = data_stream.get_file_id()
+        file_id = data_stream.get_current_hash()
         filepath = self._get_filepath(file_id)
         tmp_filepath = file.name
         if os.path.isfile(filepath):

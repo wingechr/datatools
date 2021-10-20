@@ -11,7 +11,7 @@ from datatools.utils import (
     json_loads,
     strptime,
 )
-from .exceptions import ObjectNotFoundException, validate_file_id, InvalidValue
+from .exceptions import ObjectNotFoundException, validate_file_id, InvalidValueException
 
 
 class AbstractMetadataStorage:
@@ -48,18 +48,18 @@ def validate_timestamp_utc(timestamp_utc):
     if isinstance(timestamp_utc, str):
         timestamp_utc = strptime(timestamp_utc)
     elif not isinstance(timestamp_utc, datetime.datetime):
-        raise InvalidValue(timestamp_utc)
+        raise InvalidValueException(timestamp_utc)
     return timestamp_utc
 
 
 def validate_non_empty_str(x, max_len=None):
     if not isinstance(x, str):
-        raise InvalidValue(x)
+        raise InvalidValueException(x)
     x = x.strip()
     if not x:
-        raise InvalidValue(x)
+        raise InvalidValueException(x)
     if max_len and len(x) > max_len:
-        raise InvalidValue(x)
+        raise InvalidValueException(x)
     return x
 
 
@@ -77,7 +77,7 @@ def validate_identifier_values(identifier_values):
     for identifier, value in identifier_values.items():
         identifier = validate_identifier(identifier)
         if identifier in result:
-            raise InvalidValue(identifier)
+            raise InvalidValueException(identifier)
         value = json_dumps(value)
         result[identifier] = value
     return result
