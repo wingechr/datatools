@@ -8,10 +8,11 @@ from .exceptions import ObjectNotFoundException, validate_file_id, IntegrityExce
 
 
 class AbstractFileStorage:
-    def get(self, file_id):
+    def get(self, file_id, check_integrity=False):
         """
         Args:
             file_id(str): 32 character md5 hash
+            check_integrity(bool): check hash on read
 
         Returns:
             data_stream (IOBase like)
@@ -19,7 +20,11 @@ class AbstractFileStorage:
         Raises:
             ObjectNotFoundException
         """
-        raise NotImplementedError()
+        file_id = validate_file_id(file_id)
+        file = self._get(file_id)
+        if check_integrity:
+            file = HashedByteIterator(file, expected_hash=file_id)
+        return file
 
     def set(self, data_stream):
         """
@@ -29,11 +34,23 @@ class AbstractFileStorage:
         Returns:
             file_id(str): 32 character md5 hash
         """
+        return self._set(data_stream)
+
+    def _get(self, file_id):
+        raise NotImplementedError()
+
+    def __contains__(self, file_id):
+        raise NotImplementedError()
+
+    def __enter__(self):
+        raise NotImplementedError()
+
+    def __exit__(self, *args):
         raise NotImplementedError()
 
 
 class HashedByteIterator:
-    DEFAULT_CHUNK_SIZE = 2 ** 1  # 2 ** 24
+    DEFAULT_CHUNK_SIZE = 2 ** 24
 
     def __init__(self, data_stream, expected_hash=None):
         self.data_stream = data_stream
@@ -52,8 +69,7 @@ class HashedByteIterator:
             if file_id != self.expected_hash:
                 raise IntegrityException(self.expected_hash)
             else:
-                logging.debug('Integrity check ok')
-
+                logging.debug("Integrity check ok")
 
     def __iter__(self):
         return self
@@ -63,10 +79,10 @@ class HashedByteIterator:
         if not chunk:
             raise StopIteration()
         return chunk
-    
+
     def read(self, size=-1):
         chunk = self.data_stream.read(size)
-        logging.debug("read %d bytes (size=%d)", len(chunk), size)
+        logging.debug("read %d bytes (max_bytes=%d)", len(chunk), size)
         self.hash.update(chunk)
         return chunk
 
@@ -90,18 +106,14 @@ class FileSystemStorage(AbstractFileStorage):
     def _get_filepath(self, file_id):
         return os.path.join(self.data_dir, file_id)
 
-    def get(self, file_id, check_integrity=False):
-        file_id = validate_file_id(file_id)
-        filepath = self._get_filepath(file_id)
-        if not os.path.isfile(filepath):
+    def _get(self, file_id):
+        if file_id not in self:
             raise ObjectNotFoundException(file_id)
+        filepath = self._get_filepath(file_id)
         file = open(filepath, "rb")
-        if check_integrity:        
-            # wrap
-            file = HashedByteIterator(file, expected_hash=file_id)
         return file
 
-    def set(self, data_stream):
+    def _set(self, data_stream):
         data_stream = HashedByteIterator(data_stream)
         with tempfile.TemporaryFile("wb", delete=False) as file:
             for chunk in data_stream:
@@ -118,3 +130,13 @@ class FileSystemStorage(AbstractFileStorage):
             logging.debug("adding file: %s", filepath)
             shutil.move(tmp_filepath, filepath)
         return file_id
+
+    def __contains__(self, file_id):
+        filepath = self._get_filepath(file_id)
+        return os.path.isfile(filepath)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        pass

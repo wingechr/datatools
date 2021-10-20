@@ -15,7 +15,10 @@ from .exceptions import ObjectNotFoundException, validate_file_id, InvalidValueE
 
 
 class AbstractMetadataStorage:
-    def set(self, file_id, identifier_values, user, timestamp_utc):
+
+    default_user = None
+
+    def set(self, file_id, identifier_values, user=None, timestamp_utc=None):
         """
         Args:
             file_id(str): 32 character md5 hash
@@ -27,7 +30,11 @@ class AbstractMetadataStorage:
             dataset_id(int)
 
         """
-        raise NotImplementedError()
+        file_id = validate_file_id(file_id)
+        timestamp_utc = validate_timestamp_utc(timestamp_utc or get_timestamp_utc())
+        user = validate_user(user or self.default_user)
+        identifier_values = validate_identifier_values(identifier_values)
+        return self._set(file_id, identifier_values, user, timestamp_utc)
 
     def get(self, file_id, identifier):
         """
@@ -41,6 +48,22 @@ class AbstractMetadataStorage:
         Raises:
             ObjectNotFoundException
         """
+        file_id = validate_file_id(file_id)
+        identifier = validate_identifier(identifier)
+        value_json = self._get(file_id, identifier)
+        value = json_loads(value_json)
+        return value
+
+    def _set(self, file_id, identifier_values, user, timestamp_utc):
+        raise NotImplementedError()
+
+    def _get(self, file_id, identifier):
+        raise NotImplementedError()
+
+    def __enter__(self):
+        raise NotImplementedError()
+
+    def __exit__(self, *args):
         raise NotImplementedError()
 
 
@@ -148,21 +171,13 @@ class SqliteMetadataStorage(AbstractMetadataStorage):
         self._execute(stmt, [dataset_id, file_id, user, timestamp_utc])
         return dataset_id
 
-    def set(self, file_id, identifier_values, user=None, timestamp_utc=None):
-        file_id = validate_file_id(file_id)
-        timestamp_utc = validate_timestamp_utc(timestamp_utc or get_timestamp_utc())
-        user = validate_user(user or self.default_user)
-        identifier_values = validate_identifier_values(identifier_values)
+    def _set(self, file_id, identifier_values, user=None, timestamp_utc=None):
         dataset_id = self._create_dataset(file_id, user, timestamp_utc)
         stmt = """INSERT INTO metadata(dataset_id, identifier, value_json) VALUES(?, ?, ?);"""
+        for identifier, value_json in identifier_values.items():
+            self._execute(stmt, [dataset_id, identifier, value_json])
 
-        for identifier, value in identifier_values.items():
-            self._execute(stmt, [dataset_id, identifier, value])
-
-    def get(self, file_id, identifier):
-        file_id = validate_file_id(file_id)
-        identifier = validate_identifier(identifier)
-
+    def _get(self, file_id, identifier):
         stmt = """
         SELECT value_json 
         FROM metadata m JOIN dataset d ON m.dataset_id = d.dataset_id
@@ -176,8 +191,7 @@ class SqliteMetadataStorage(AbstractMetadataStorage):
         if not cur:
             raise ObjectNotFoundException((file_id, identifier))
         value_json = cur[0]
-        value = json_loads(value_json)
-        return value
+        return value_json
 
     def get_all(self, file_id):
         file_id = validate_file_id(file_id)

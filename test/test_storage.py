@@ -39,8 +39,8 @@ class TestFileSystemStorage(unittest.TestCase):
 
         # load file (and add it again)
         with self.storage.get(file_id, check_integrity=True) as file:
-            file_id = self.storage.set(file)            
-        
+            file_id = self.storage.set(file)
+
         self.assertEqual(file_id, file_name)
         self.assertEqual(file_id, file.get_current_hash())
 
