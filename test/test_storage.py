@@ -55,16 +55,23 @@ class TestSqliteMetadataStorage(unittest.TestCase):
         os.remove(cls.tempfile.name)
 
     def test_storage(self):
-        file_id = "900150983cd24fb0d6963f7d28e17f72"
-        dataset_1 = {"key1": None, "key2": "text"}
-        dataset_2 = {"key2": "text updated", "key3": [1, 2, 3]}
+        file_id_1 = "900150983cd24fb0d6963f7d28e17f72"
+        file_id_2 = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        dataset_1 = {"key1": 100, "key2": "text", "key4": {}}
+        dataset_2 = {"key1": None, "key2": "text updated", "key3": [1, 2, 3]}
         with self.db:
             self.assertRaises(
-                ObjectNotFoundException, lambda: self.db.get(file_id, "key2")
+                ObjectNotFoundException, lambda: self.db.get(file_id_1, "key2")
             )
 
-            self.db.set(file_id, dataset_1)
-            self.db.set(file_id, dataset_2)
-            value_2 = self.db.get(file_id, "key2")
+            self.db.set(file_id_1, dataset_1)
+            self.db.set(file_id_2, dataset_1)
+            self.db.set(file_id_1, dataset_2)
+            value_2 = self.db.get(file_id_1, "key2")
+            values_all = self.db.get_all(file_id_1)
 
         self.assertEqual(value_2, "text updated")
+        self.assertEqual(
+            values_all,
+            {"key3": [1, 2, 3], "key2": "text updated", "key1": None, "key4": {}},
+        )

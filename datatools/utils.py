@@ -2,26 +2,33 @@ __version__ = "0.0.1"
 
 import re
 import logging
+import json
 import datetime
 from urllib.parse import unquote_plus
 import unidecode
 
 
 DEFAULT_ENCODING = "utf-8"
-DATETIME_FMT = "%Y-%m-%d %H:%M:%S"
+DATETIME_FMT = "%Y-%m-%d %H:%M:%S.%f"
 
 
 def get_timestamp_utc():
-    result = datetime.datetime.utcnow().strftime(DATETIME_FMT)
-    return result
+    return datetime.datetime.utcnow()
+
+
+def strftime(value):
+    return value.strftime(DATETIME_FMT)
+
+
+def strptime(value):
+    return datetime.datetime.strptime(value, DATETIME_FMT)
 
 
 def get_unix_utc():
     """
     Return current unix timestamp (utc, with milliseconds)
     """
-    result = datetime.datetime.utcnow().timestamp()
-    return result
+    return get_timestamp_utc().timestamp()
 
 
 def normalize_name(name):
@@ -60,3 +67,11 @@ def normalize_name(name):
     name = re.sub("[^a-z0-9]+", "_", name).rstrip("_")
 
     return name
+
+
+def json_dumps(value):
+    return json.dumps(value, sort_keys=True, ensure_ascii=False, indent=2)
+
+
+def json_loads(value):
+    return json.loads(value)

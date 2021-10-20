@@ -1,21 +1,27 @@
 import logging
 import os
-import json
 import re
+import datetime
 import sqlite3
 
-from datatools.utils import normalize_name, get_unix_utc
+from datatools.utils import (
+    normalize_name,
+    get_timestamp_utc,
+    json_dumps,
+    json_loads,
+    strptime,
+)
 from .exceptions import ObjectNotFoundException, validate_file_id, InvalidValue
 
 
 class AbstractMetadataStorage:
-    def set(self, file_id, identifier_values, user, unix_utc):
+    def set(self, file_id, identifier_values, user, timestamp_utc):
         """
         Args:
             file_id(str): 32 character md5 hash
             identifier_values(dict): identifier must be max 128 characters, values must be json serializable
             user(str): user identification / source
-            unix_utc(float): unix timestamp (UTC)
+            timestamp_utc(float): unix timestamp (UTC)
 
         Returns:
             dataset_id(int)
@@ -38,10 +44,12 @@ class AbstractMetadataStorage:
         raise NotImplementedError()
 
 
-def validate_unix_utc(unix_utc):
-    if not isinstance(unix_utc, (int, float)):
-        raise InvalidValue(unix_utc)
-    return unix_utc
+def validate_timestamp_utc(timestamp_utc):
+    if isinstance(timestamp_utc, str):
+        timestamp_utc = strptime(timestamp_utc)
+    elif not isinstance(timestamp_utc, datetime.datetime):
+        raise InvalidValue(timestamp_utc)
+    return timestamp_utc
 
 
 def validate_non_empty_str(x, max_len=None):
@@ -70,7 +78,7 @@ def validate_identifier_values(identifier_values):
         identifier = validate_identifier(identifier)
         if identifier in result:
             raise InvalidValue(identifier)
-        value = json.dumps(value, sort_keys=True, ensure_ascii=False)
+        value = json_dumps(value)
         result[identifier] = value
     return result
 
@@ -95,7 +103,8 @@ class SqliteMetadataStorage(AbstractMetadataStorage):
                 dataset_id INTEGER PRIMARY KEY,
                 file_id CHAR(32) NOT NULL,
                 user VARCHAR(128) NOT NULL,
-                unix_utc DECIMAL(16, 6) NOT NULL
+                timestamp_utc DATETIME NOT NULL,
+                UNIQUE(file_id, timestamp_utc)
             );""",
                 """
             create table metadata(
@@ -130,21 +139,21 @@ class SqliteMetadataStorage(AbstractMetadataStorage):
             logging.debug("EXECUTE: %s", sql)
             return self.connection.cursor().execute(sql)
 
-    def _create_dataset(self, file_id, user, unix_utc):
+    def _create_dataset(self, file_id, user, timestamp_utc):
         """Returns dataset_id"""
         stmt = """SELECT MAX(dataset_id) FROM dataset;"""
         max_dataset_id = self._execute(stmt).fetchone()[0] or 0
         dataset_id = max_dataset_id + 1
-        stmt = """INSERT INTO dataset(dataset_id, file_id, user, unix_utc) VALUES(?, ?, ?, ?);"""
-        self._execute(stmt, [dataset_id, file_id, user, unix_utc])
+        stmt = """INSERT INTO dataset(dataset_id, file_id, user, timestamp_utc) VALUES(?, ?, ?, ?);"""
+        self._execute(stmt, [dataset_id, file_id, user, timestamp_utc])
         return dataset_id
 
-    def set(self, file_id, identifier_values, user=None, unix_utc=None):
+    def set(self, file_id, identifier_values, user=None, timestamp_utc=None):
         file_id = validate_file_id(file_id)
-        unix_utc = validate_unix_utc(unix_utc or get_unix_utc())
+        timestamp_utc = validate_timestamp_utc(timestamp_utc or get_timestamp_utc())
         user = validate_user(user or self.default_user)
         identifier_values = validate_identifier_values(identifier_values)
-        dataset_id = self._create_dataset(file_id, user, unix_utc)
+        dataset_id = self._create_dataset(file_id, user, timestamp_utc)
         stmt = """INSERT INTO metadata(dataset_id, identifier, value_json) VALUES(?, ?, ?);"""
 
         for identifier, value in identifier_values.items():
@@ -157,8 +166,8 @@ class SqliteMetadataStorage(AbstractMetadataStorage):
         stmt = """
         SELECT value_json 
         FROM metadata m JOIN dataset d ON m.dataset_id = d.dataset_id
-        WHERE d.file_id = ? AND identifier = ? AND unix_utc = (
-            SELECT MAX(d.unix_utc) 
+        WHERE d.file_id = ? AND identifier = ? AND timestamp_utc = (
+            SELECT MAX(d.timestamp_utc) 
             FROM metadata m JOIN dataset d ON m.dataset_id = d.dataset_id
             WHERE d.file_id = ? AND identifier = ?
         )        
@@ -167,5 +176,24 @@ class SqliteMetadataStorage(AbstractMetadataStorage):
         if not cur:
             raise ObjectNotFoundException((file_id, identifier))
         value_json = cur[0]
-        value = json.loads(value_json)
+        value = json_loads(value_json)
         return value
+
+    def get_all(self, file_id):
+        file_id = validate_file_id(file_id)
+
+        stmt = """
+        SELECT m.identifier, m.value_json 
+        FROM metadata m 
+        JOIN dataset d ON m.dataset_id = d.dataset_id
+        JOIN (            
+            SELECT m.identifier, MAX(d.timestamp_utc) as timestamp_utc
+            FROM metadata m JOIN dataset d ON m.dataset_id = d.dataset_id
+            WHERE d.file_id = ?
+            group by m.identifier
+        ) t on t.identifier = m.identifier and t.timestamp_utc = d.timestamp_utc        
+        """
+        result = {}
+        for identifier, value_json in self._execute(stmt, [file_id]).fetchall():
+            result[identifier] = json_loads(value_json)
+        return result

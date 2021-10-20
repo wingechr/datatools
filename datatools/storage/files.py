@@ -4,7 +4,6 @@ import tempfile
 import os
 import shutil
 
-
 from .exceptions import ObjectNotFoundException, validate_file_id
 
 
