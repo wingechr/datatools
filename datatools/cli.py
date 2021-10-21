@@ -7,7 +7,7 @@ import click
 import coloredlogs
 
 
-from .storage.files import FileSystemStorage
+from .storage.combined import CombinedLocalStorage
 
 __version__ = "0.0.0"
 
@@ -55,13 +55,13 @@ def file(ctx, data_dir):
 @click.option("--filepath", "-f", type=click.Path(exists=True))
 def file_set(ctx, filepath):
     data_dir = ctx.obj["data_dir"]
-    with FileSystemStorage(data_dir=data_dir) as fss:
+    with CombinedLocalStorage(data_dir=data_dir) as fss:
         if filepath:
             with open(filepath, "rb") as file:
-                file_id = fss.set(file)
+                file_id = fss.files.set(file)
         else:
             file = sys.stdin.buffer
-            file_id = fss.set(file)
+            file_id = fss.files.set(file)
     print(file_id)
 
 
@@ -72,18 +72,18 @@ def file_set(ctx, filepath):
 @click.option("--check-integrity", "-c", is_flag=True)
 def file_set(ctx, file_id, filepath, check_integrity):
     data_dir = ctx.obj["data_dir"]
-    with FileSystemStorage(data_dir=data_dir) as fss:
-        if file_id not in fss:
+    with CombinedLocalStorage(data_dir=data_dir) as fss:
+        if file_id not in fss.files:
             logging.error("File not found")
             click.Abort()
             sys.exit(1)
         if filepath:
             with open(filepath, "wb") as file:
-                for chunk in fss.get(file_id, check_integrity=check_integrity):
+                for chunk in fss.files.get(file_id, check_integrity=check_integrity):
                     file.write(chunk)
         else:
             file = sys.stdout.buffer
-            for chunk in fss.get(file_id, check_integrity=check_integrity):
+            for chunk in fss.files.get(file_id, check_integrity=check_integrity):
                 file.write(chunk)
 
 

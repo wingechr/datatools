@@ -8,6 +8,23 @@ from urllib.parse import unquote_plus
 import unidecode
 import hashlib
 
+import socket
+import getpass
+
+
+def get_user():
+    """Return current user name"""
+    return getpass.getuser()
+
+
+def get_host():
+    """Return current host name"""
+    return socket.gethostname()
+
+
+def get_user_host():
+    return "%s@%s" % (get_user(), get_host())
+
 
 DEFAULT_ENCODING = "utf-8"
 DATETIME_FMT = "%Y-%m-%d %H:%M:%S.%f"

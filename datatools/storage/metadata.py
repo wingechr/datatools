@@ -10,6 +10,7 @@ from datatools.utils import (
     json_dumps,
     json_loads,
     strptime,
+    get_user_host,
 )
 from .exceptions import ObjectNotFoundException, validate_file_id, InvalidValueException
 
@@ -108,7 +109,7 @@ def validate_identifier_values(identifier_values):
 
 class SqliteMetadataStorage(AbstractMetadataStorage):
     DEFAULT_DATABASE = ".metadata.sqlite3"
-    DEFAULT_USER = None
+    DEFAULT_USER = get_user_host()
 
     def __init__(self, database=None, default_user=None):
         self.database = os.path.abspath(database or self.DEFAULT_DATABASE)

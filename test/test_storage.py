@@ -3,10 +3,9 @@ import logging
 import tempfile
 import os
 
-from datatools.storage.files import FileSystemStorage
-from datatools.storage.metadata import SqliteMetadataStorage
+from datatools.storage.combined import CombinedLocalStorage
 from datatools.storage.exceptions import ObjectNotFoundException
-from datatools.utils import get_data_hash, json_dumps, json_loadb
+from datatools.utils import get_data_hash, json_loadb
 from datatools.package import Package, DataResource, PathResource
 from datatools.exceptions import ValidationException
 
@@ -16,65 +15,60 @@ logging.basicConfig(
 )
 
 
-class TmpFileSystemStorage(unittest.TestCase):
+class TmpCombinedStorage(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tempdir = tempfile.TemporaryDirectory()
         cls.tempdir.__enter__()
-        cls.storage = FileSystemStorage(data_dir=cls.tempdir.name)
+        cls.storage = CombinedLocalStorage(data_dir=cls.tempdir.name)
+        cls.storage.__enter__()
 
     @classmethod
     def tearDownClass(cls):
+        cls.storage.__exit__(None, None, None)
         cls.tempdir.__exit__(None, None, None)
 
 
-class TestFileSystemStorage(TmpFileSystemStorage):
+class TestFileSystemStorage(TmpCombinedStorage):
     def test_storage(self):
         file_name = "900150983cd24fb0d6963f7d28e17f72"
 
         # try to load file that has not been added
-        self.assertRaises(ObjectNotFoundException, lambda: self.storage.get(file_name))
+        self.assertRaises(
+            ObjectNotFoundException, lambda: self.storage.files.get(file_name)
+        )
 
         # add file and check if id matches name
         filepath = os.path.join(TEST_DATA_DIR, file_name)
         with open(filepath, "rb") as file:
-            file_id = self.storage.set(file)
+            file_id = self.storage.files.set(file)
         self.assertEqual(file_id, file_name)
 
         # load file (and add it again)
-        with self.storage.get(file_id, check_integrity=True) as file:
-            file_id = self.storage.set(file)
+        with self.storage.files.get(file_id, check_integrity=True) as file:
+            file_id = self.storage.files.set(file)
 
         self.assertEqual(file_id, file_name)
         self.assertEqual(file_id, file.get_current_hash())
 
 
-class TestSqliteMetadataStorage(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.tempfile = tempfile.NamedTemporaryFile(delete=True)
-        cls.tempfile.close()
-        cls.db = SqliteMetadataStorage(database=cls.tempfile.name, default_user="test")
-
-    @classmethod
-    def tearDownClass(cls):
-        os.remove(cls.tempfile.name)
-
+class TestSqliteMetadataStorage(CombinedLocalStorage):
     def test_storage(self):
         file_id_1 = "900150983cd24fb0d6963f7d28e17f72"
         file_id_2 = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
         dataset_1 = {"key1": 100, "key2": "text", "key4": {}}
         dataset_2 = {"key1": None, "key2": "text updated", "key3": [1, 2, 3]}
-        with self.db:
-            self.assertRaises(
-                ObjectNotFoundException, lambda: self.db.get(file_id_1, "key2")
-            )
 
-            self.db.set(file_id_1, dataset_1)
-            self.db.set(file_id_2, dataset_1)
-            self.db.set(file_id_1, dataset_2)
-            value_2 = self.db.get(file_id_1, "key2")
-            values_all = self.db.get_all(file_id_1)
+        self.assertRaises(
+            ObjectNotFoundException,
+            lambda: self.storage.metadata.get(file_id_1, "key2"),
+        )
+
+        self.storage.metadata.set(file_id_1, dataset_1)
+        self.storage.metadata.set(file_id_2, dataset_1)
+        self.storage.metadata.set(file_id_1, dataset_2)
+        value_2 = self.storage.metadata.get(file_id_1, "key2")
+        values_all = self.storage.metadata.get_all(file_id_1)
 
         self.assertEqual(value_2, "text updated")
         self.assertEqual(
@@ -104,15 +98,15 @@ class TestPackage(unittest.TestCase):
         self.assertEqual(get_data_hash(pkg), "b7e09943103ddef777febad39eb29e17")
 
 
-class TestPackageStorage(TmpFileSystemStorage):
+class TestPackageStorage(CombinedLocalStorage):
     def test_store_package(self):
         pkg = Package(
             "p",
             [DataResource("r1", "data1"), Package("p2", [PathResource("r2", "path2")])],
         )
-        file_id = self.storage.set(pkg.__file__())
+        file_id = self.storage.files.set(pkg.__file__())
         self.assertEqual(file_id, "f164ccea8cfd020dd8c6b2b9db630c64")
-        data_bytes = self.storage.get(file_id, check_integrity=True).read()
+        data_bytes = self.storage.files.get(file_id, check_integrity=True).read()
         data = json_loadb(data_bytes)
         pkg = Package.from_json(data)
         self.assertEqual(get_data_hash(pkg), file_id)
