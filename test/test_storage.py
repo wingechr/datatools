@@ -6,6 +6,9 @@ import os
 from datatools.storage.files import FileSystemStorage
 from datatools.storage.metadata import SqliteMetadataStorage
 from datatools.storage.exceptions import ObjectNotFoundException
+from datatools.utils import get_data_hash, json_dumps, json_loadb
+from datatools.package import Package, DataResource, PathResource
+from datatools.exceptions import ValidationException
 
 TEST_DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 logging.basicConfig(
@@ -13,7 +16,7 @@ logging.basicConfig(
 )
 
 
-class TestFileSystemStorage(unittest.TestCase):
+class TmpFileSystemStorage(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tempdir = tempfile.TemporaryDirectory()
@@ -23,8 +26,9 @@ class TestFileSystemStorage(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.tempdir.__exit__(None, None, None)
-        pass
 
+
+class TestFileSystemStorage(TmpFileSystemStorage):
     def test_storage(self):
         file_name = "900150983cd24fb0d6963f7d28e17f72"
 
@@ -77,3 +81,38 @@ class TestSqliteMetadataStorage(unittest.TestCase):
             values_all,
             {"key3": [1, 2, 3], "key2": "text updated", "key1": None, "key4": {}},
         )
+
+
+class TestUtils(unittest.TestCase):
+    def test_get_data_hash(self):
+        self.assertEqual(get_data_hash(None), "37a6259cc0c1dae299a7866489dff0bd")
+
+
+class TestPackage(unittest.TestCase):
+    def test_package(self):
+        self.assertRaises(ValidationException, lambda: DataResource(None, None))
+        # no duplicate names
+        self.assertRaises(
+            ValidationException,
+            lambda: Package(
+                "p", [DataResource("r1", "data1"), DataResource("r1", "data2")]
+            ),
+        )
+
+        pkg = Package("p", [DataResource("r1", "data1")])
+
+        self.assertEqual(get_data_hash(pkg), "b7e09943103ddef777febad39eb29e17")
+
+
+class TestPackageStorage(TmpFileSystemStorage):
+    def test_store_package(self):
+        pkg = Package(
+            "p",
+            [DataResource("r1", "data1"), Package("p2", [PathResource("r2", "path2")])],
+        )
+        file_id = self.storage.set(pkg.__file__())
+        self.assertEqual(file_id, "f164ccea8cfd020dd8c6b2b9db630c64")
+        data_bytes = self.storage.get(file_id, check_integrity=True).read()
+        data = json_loadb(data_bytes)
+        pkg = Package.from_json(data)
+        self.assertEqual(get_data_hash(pkg), file_id)

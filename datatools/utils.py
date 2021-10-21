@@ -6,6 +6,7 @@ import json
 import datetime
 from urllib.parse import unquote_plus
 import unidecode
+import hashlib
 
 
 DEFAULT_ENCODING = "utf-8"
@@ -69,9 +70,41 @@ def normalize_name(name):
     return name
 
 
+def get_byte_hash(byte_data):
+    if not isinstance(byte_data, bytes):
+        raise NotImplementedError("data must be bytes")
+    md5 = hashlib.md5(byte_data).hexdigest()
+    return md5
+
+
+def get_data_hash(data):
+    return get_byte_hash(json_dumpb(data))
+
+
+class JsonSerializable:
+    def to_json(self):
+        raise NotImplementedError
+
+
 def json_dumps(value):
-    return json.dumps(value, sort_keys=True, ensure_ascii=False, indent=2)
+    def serialize(obj):
+        if isinstance(obj, JsonSerializable):
+            return obj.to_json()
+        else:
+            raise NotImplementedError(type(obj))
+
+    return json.dumps(
+        value, sort_keys=True, ensure_ascii=False, indent=2, default=serialize
+    )
+
+
+def json_dumpb(value):
+    return json_dumps(value).encode()
 
 
 def json_loads(value):
     return json.loads(value)
+
+
+def json_loadb(value):
+    return json_loads(value.decode())
