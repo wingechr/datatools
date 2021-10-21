@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import logging
+import sys
 
 import click
 import coloredlogs
@@ -51,13 +52,39 @@ def file(ctx, data_dir):
 
 @file.command("set")
 @click.pass_context
-@click.argument("filepath", type=click.Path(exists=True))
+@click.option("--filepath", "-f", type=click.Path(exists=True))
 def file_set(ctx, filepath):
     data_dir = ctx.obj["data_dir"]
     with FileSystemStorage(data_dir=data_dir) as fss:
-        with open(filepath, "rb") as file:
+        if filepath:
+            with open(filepath, "rb") as file:
+                file_id = fss.set(file)
+        else:
+            file = sys.stdin.buffer
             file_id = fss.set(file)
     print(file_id)
+
+
+@file.command("get")
+@click.pass_context
+@click.argument("file_id")
+@click.option("--filepath", "-f", type=click.Path(exists=False))
+@click.option("--check-integrity", "-c", is_flag=True)
+def file_set(ctx, file_id, filepath, check_integrity):
+    data_dir = ctx.obj["data_dir"]
+    with FileSystemStorage(data_dir=data_dir) as fss:
+        if file_id not in fss:
+            logging.error("File not found")
+            click.Abort()
+            sys.exit(1)
+        if filepath:
+            with open(filepath, "wb") as file:
+                for chunk in fss.get(file_id, check_integrity=check_integrity):
+                    file.write(chunk)
+        else:
+            file = sys.stdout.buffer
+            for chunk in fss.get(file_id, check_integrity=check_integrity):
+                file.write(chunk)
 
 
 if __name__ == "__main__":
