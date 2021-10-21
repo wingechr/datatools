@@ -55,6 +55,7 @@ class HashedByteIterator:
     def __init__(self, data_stream, expected_hash=None):
         self.data_stream = data_stream
         self.hash = hashlib.md5()
+        self.size_bytes = 0
         self.chunk_size = self.DEFAULT_CHUNK_SIZE
         self.expected_hash = expected_hash
 
@@ -78,6 +79,7 @@ class HashedByteIterator:
         chunk = self.read(self.chunk_size)
         if not chunk:
             raise StopIteration()
+        self.size_bytes += len(chunk)
         return chunk
 
     def read(self, size=-1):
@@ -88,6 +90,9 @@ class HashedByteIterator:
 
     def get_current_hash(self):
         return self.hash.hexdigest()
+
+    def get_current_size_bytes(self):
+        return self.size_bytes
 
 
 class FileSystemStorage(AbstractFileStorage):
@@ -119,15 +124,16 @@ class FileSystemStorage(AbstractFileStorage):
             for chunk in data_stream:
                 file.write(chunk)
         file_id = data_stream.get_current_hash()
+        file_size = data_stream.get_current_size_bytes()
         filepath = self._get_filepath(file_id)
         tmp_filepath = file.name
         if os.path.isfile(filepath):
             # file exists already
-            logging.debug("file already in storage: %s", file_id)
+            logging.debug("file already in storage: %s (%d bytes)", file_id, file_size)
             os.remove(tmp_filepath)
         else:
             # copy file
-            logging.debug("adding file: %s", filepath)
+            logging.debug("adding file %s: %s (%d bytes)", filepath, file_id, file_size)
             shutil.move(tmp_filepath, filepath)
         return file_id
 
