@@ -151,6 +151,7 @@ class SqliteMetadataStorage(AbstractMetadataStorage):
         self.connection = sqlite3.connect(self.database)
 
     def __exit__(self, *args):
+        self.connection.commit()
         self.connection.close()
         self.connection = None
 
@@ -198,7 +199,7 @@ class SqliteMetadataStorage(AbstractMetadataStorage):
         file_id = validate_file_id(file_id)
 
         stmt = """
-        SELECT m.identifier, m.value_json 
+        SELECT m.identifier, m.value_json
         FROM metadata m 
         JOIN dataset d ON m.dataset_id = d.dataset_id
         JOIN (            
@@ -211,4 +212,33 @@ class SqliteMetadataStorage(AbstractMetadataStorage):
         result = {}
         for identifier, value_json in self._execute(stmt, [file_id]).fetchall():
             result[identifier] = json_loads(value_json)
+        return result
+
+    def get_all_extended(self, file_id):
+        file_id = validate_file_id(file_id)
+
+        stmt = """
+        SELECT m.identifier, m.value_json, d.timestamp_utc, d.user
+        FROM metadata m 
+        JOIN dataset d ON m.dataset_id = d.dataset_id
+        JOIN (            
+            SELECT m.identifier, MAX(d.timestamp_utc) as timestamp_utc
+            FROM metadata m JOIN dataset d ON m.dataset_id = d.dataset_id
+            WHERE d.file_id = ?
+            group by m.identifier
+        ) t on t.identifier = m.identifier and t.timestamp_utc = d.timestamp_utc        
+        """
+        result = []
+        for identifier, value_json, timestamp_utc, user in self._execute(
+            stmt, [file_id]
+        ).fetchall():
+            value = json_loads(value_json)
+            result.append(
+                {
+                    "identifier": identifier,
+                    "value": value,
+                    "timestamp_utc": timestamp_utc,
+                    "user": user,
+                }
+            )
         return result
