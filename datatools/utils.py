@@ -1,5 +1,7 @@
 __version__ = "0.0.1"
 
+from abc import abstractmethod
+from io import BytesIO
 import re
 import logging
 import json
@@ -27,7 +29,7 @@ def get_user_host():
 
 
 DEFAULT_ENCODING = "utf-8"
-DATETIME_FMT = "%Y-%m-%d %H:%M:%S.%f"
+DATETIME_UTC_FMT = "%Y-%m-%d %H:%M:%S.%f"
 
 
 def get_timestamp_utc():
@@ -35,11 +37,15 @@ def get_timestamp_utc():
 
 
 def strftime(value):
-    return value.strftime(DATETIME_FMT)
+    return value.strftime(DATETIME_UTC_FMT)
+
+
+def get_timestamp_utc_str():
+    return strftime(get_timestamp_utc())
 
 
 def strptime(value):
-    return datetime.datetime.strptime(value, DATETIME_FMT)
+    return datetime.datetime.strptime(value, DATETIME_UTC_FMT)
 
 
 def get_unix_utc():
@@ -102,11 +108,19 @@ class JsonSerializable:
     def to_json(self):
         raise NotImplementedError
 
+    def to_file(self):
+        return BytesIO(json_dumpb(self.to_json()))
+
+    def get_id(self):
+        return get_data_hash(self.to_json())
+
 
 def json_dumps(value):
     def serialize(obj):
         if isinstance(obj, JsonSerializable):
             return obj.to_json()
+        elif isinstance(obj, datetime.datetime):
+            return strftime(obj)
         else:
             raise NotImplementedError(type(obj))
 

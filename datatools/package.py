@@ -1,4 +1,3 @@
-from io import BytesIO
 from datatools.utils import JsonSerializable, json_dumpb
 from datatools.exceptions import ValidationException
 
@@ -55,9 +54,6 @@ class ResourceBase(JsonSerializable):
 
     def __str__(self):
         return self.name
-
-    def __file__(self):
-        return BytesIO(json_dumpb(self))
 
     @classmethod
     def from_json(cls, data):

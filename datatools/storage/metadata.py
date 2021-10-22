@@ -8,6 +8,7 @@ from datatools.utils import (
     normalize_name,
     get_timestamp_utc,
     json_dumps,
+    get_data_hash,
     json_loads,
     strptime,
     get_user_host,
@@ -124,7 +125,7 @@ class SqliteMetadataStorage(AbstractMetadataStorage):
             init_sql = [
                 """
             create table dataset(
-                dataset_id INTEGER PRIMARY KEY,
+                dataset_id CHAR(32) PRIMARY KEY,
                 file_id CHAR(32) NOT NULL,
                 user VARCHAR(128) NOT NULL,
                 timestamp_utc DATETIME NOT NULL,
@@ -132,7 +133,7 @@ class SqliteMetadataStorage(AbstractMetadataStorage):
             );""",
                 """
             create table metadata(
-                dataset_id INTEGER NOT NULL,
+                dataset_id CHAR(32) NOT NULL,
                 identifier varchar(128) NOT NULL,
                 value_json text NOT NULL,
                 PRIMARY KEY(dataset_id, identifier),
@@ -164,20 +165,35 @@ class SqliteMetadataStorage(AbstractMetadataStorage):
             logging.debug("EXECUTE: %s", sql)
             return self.connection.cursor().execute(sql)
 
-    def _create_dataset(self, file_id, user, timestamp_utc):
+    def _get_dataset_id(self, file_id, user, timestamp_utc, identifier_values):
         """Returns dataset_id"""
-        stmt = """SELECT MAX(dataset_id) FROM dataset;"""
-        max_dataset_id = self._execute(stmt).fetchone()[0] or 0
-        dataset_id = max_dataset_id + 1
-        stmt = """INSERT INTO dataset(dataset_id, file_id, user, timestamp_utc) VALUES(?, ?, ?, ?);"""
-        self._execute(stmt, [dataset_id, file_id, user, timestamp_utc])
+        dataset = {
+            "file_id": file_id,
+            "user": user,
+            "timestamp_utc": timestamp_utc,
+            "data": identifier_values,
+        }
+        dataset_id = get_data_hash(dataset)
         return dataset_id
 
     def _set(self, file_id, identifier_values, user=None, timestamp_utc=None):
-        dataset_id = self._create_dataset(file_id, user, timestamp_utc)
+
+        dataset_id = self._get_dataset_id(
+            file_id, user, timestamp_utc, identifier_values
+        )
+
+        stmt = """INSERT INTO dataset(dataset_id, file_id, user, timestamp_utc) VALUES(?, ?, ?, ?);"""
+        try:
+            self._execute(stmt, [dataset_id, file_id, user, timestamp_utc])
+        except sqlite3.IntegrityError:
+            # already in database
+            return dataset_id
+
         stmt = """INSERT INTO metadata(dataset_id, identifier, value_json) VALUES(?, ?, ?);"""
         for identifier, value_json in identifier_values.items():
             self._execute(stmt, [dataset_id, identifier, value_json])
+
+        return dataset_id
 
     def _get(self, file_id, identifier):
         stmt = """

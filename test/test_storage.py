@@ -5,7 +5,7 @@ import os
 
 from datatools.storage.combined import CombinedLocalStorage
 from datatools.storage.exceptions import ObjectNotFoundException
-from datatools.utils import get_data_hash, json_loadb
+from datatools.utils import get_data_hash, json_loadb, get_timestamp_utc_str
 from datatools.package import Package, DataResource, PathResource
 from datatools.exceptions import ValidationException
 
@@ -52,7 +52,7 @@ class TestFileSystemStorage(TmpCombinedStorage):
         self.assertEqual(file_id, file.get_current_hash())
 
 
-class TestSqliteMetadataStorage(CombinedLocalStorage):
+class TestSqliteMetadataStorage(TestFileSystemStorage):
     def test_storage(self):
         file_id_1 = "900150983cd24fb0d6963f7d28e17f72"
         file_id_2 = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
@@ -76,6 +76,20 @@ class TestSqliteMetadataStorage(CombinedLocalStorage):
             {"key3": [1, 2, 3], "key2": "text updated", "key1": None, "key4": {}},
         )
 
+    def test_duplicate_dataset(self):
+        metadata = {
+            "file_id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "user": "test",
+            "timestamp_utc": "1900-01-01 00:00:00.0",
+            "identifier_values": {"key": "val"},
+        }
+
+        dataset_id = self.storage.metadata.set(**metadata)
+        self.assertEqual(dataset_id, "a4f675292d086361822ea7c35a222903")
+        # do it again
+        dataset_id = self.storage.metadata.set(**metadata)
+        self.assertEqual(dataset_id, "a4f675292d086361822ea7c35a222903")
+
 
 class TestUtils(unittest.TestCase):
     def test_get_data_hash(self):
@@ -98,13 +112,13 @@ class TestPackage(unittest.TestCase):
         self.assertEqual(get_data_hash(pkg), "b7e09943103ddef777febad39eb29e17")
 
 
-class TestPackageStorage(CombinedLocalStorage):
+class TestPackageStorage(TestFileSystemStorage):
     def test_store_package(self):
         pkg = Package(
             "p",
             [DataResource("r1", "data1"), Package("p2", [PathResource("r2", "path2")])],
         )
-        file_id = self.storage.files.set(pkg.__file__())
+        file_id = self.storage.files.set(pkg.to_file())
         self.assertEqual(file_id, "f164ccea8cfd020dd8c6b2b9db630c64")
         data_bytes = self.storage.files.get(file_id, check_integrity=True).read()
         data = json_loadb(data_bytes)
