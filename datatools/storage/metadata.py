@@ -68,6 +68,17 @@ class AbstractMetadataStorage:
     def __exit__(self, *args):
         raise NotImplementedError()
 
+    def _get_dataset_id(self, file_id, user, timestamp_utc, identifier_values):
+        """Returns dataset_id"""
+        dataset = {
+            "file_id": file_id,
+            "user": user,
+            "timestamp_utc": timestamp_utc,
+            "data": identifier_values,
+        }
+        dataset_id = get_data_hash(dataset)
+        return dataset_id
+
 
 def validate_timestamp_utc(timestamp_utc):
     if isinstance(timestamp_utc, str):
@@ -164,17 +175,6 @@ class SqliteMetadataStorage(AbstractMetadataStorage):
         else:
             logging.debug("EXECUTE: %s", sql)
             return self.connection.cursor().execute(sql)
-
-    def _get_dataset_id(self, file_id, user, timestamp_utc, identifier_values):
-        """Returns dataset_id"""
-        dataset = {
-            "file_id": file_id,
-            "user": user,
-            "timestamp_utc": timestamp_utc,
-            "data": identifier_values,
-        }
-        dataset_id = get_data_hash(dataset)
-        return dataset_id
 
     def _set(self, file_id, identifier_values, user=None, timestamp_utc=None):
 
