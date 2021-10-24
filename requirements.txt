@@ -1,3 +1,4 @@
 unidecode
 click
 coloredlogs
+networkx

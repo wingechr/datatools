@@ -5,9 +5,9 @@ import os
 
 from datatools.storage.combined import CombinedLocalStorage
 from datatools.storage.exceptions import ObjectNotFoundException
-from datatools.utils import get_data_hash, json_loadb, get_timestamp_utc_str
+from datatools.utils import get_data_hash, json_dumps, json_loadb, get_timestamp_utc_str
 from datatools.package import Package, DataResource, PathResource
-from datatools.exceptions import ValidationException
+from datatools.exceptions import ValidationException, DuplicateKeyException
 
 TEST_DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 logging.basicConfig(
@@ -101,7 +101,7 @@ class TestPackage(unittest.TestCase):
         self.assertRaises(ValidationException, lambda: DataResource(None, None))
         # no duplicate names
         self.assertRaises(
-            ValidationException,
+            DuplicateKeyException,
             lambda: Package(
                 "p", [DataResource("r1", "data1"), DataResource("r1", "data2")]
             ),
@@ -118,7 +118,9 @@ class TestPackageStorage(TestFileSystemStorage):
             "p",
             [DataResource("r1", "data1"), Package("p2", [PathResource("r2", "path2")])],
         )
+
         file_id = self.storage.files.set(pkg.to_file())
+
         self.assertEqual(file_id, "f164ccea8cfd020dd8c6b2b9db630c64")
         data_bytes = self.storage.files.get(file_id, check_integrity=True).read()
         data = json_loadb(data_bytes)

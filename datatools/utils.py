@@ -9,9 +9,20 @@ import datetime
 from urllib.parse import unquote_plus
 import unidecode
 import hashlib
+from collections import UserDict
 
 import socket
 import getpass
+
+
+from datatools.exceptions import DuplicateKeyException
+
+
+class UniqueDict(UserDict):
+    def __setitem__(self, key, value):
+        if key in self:
+            raise DuplicateKeyException(key)
+        return super().__setitem__(key, value)
 
 
 def get_user():
@@ -105,20 +116,19 @@ def get_data_hash(data):
 
 
 class JsonSerializable:
-    def to_json(self):
-        raise NotImplementedError
-
     def to_file(self):
-        return BytesIO(json_dumpb(self.to_json()))
+        return BytesIO(json_dumpb(self))
 
     def get_id(self):
-        return get_data_hash(self.to_json())
+        return get_byte_hash(json_dumpb(self))
 
 
 def json_dumps(value):
     def serialize(obj):
         if isinstance(obj, JsonSerializable):
-            return obj.to_json()
+            return dict(
+                (k, v) for k, v in obj.__dict__.items() if not k.startswith("_")
+            )
         elif isinstance(obj, datetime.datetime):
             return strftime(obj)
         else:

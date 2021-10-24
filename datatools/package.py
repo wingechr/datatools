@@ -1,4 +1,4 @@
-from datatools.utils import JsonSerializable, json_dumpb
+from datatools.utils import JsonSerializable, UniqueDict
 from datatools.exceptions import ValidationException
 
 
@@ -43,65 +43,40 @@ def validate_profile(profile):
 
 
 class ResourceBase(JsonSerializable):
-    profile = "data-resource"
-
-    def __init__(self, name, profile=None):
+    def __init__(self, name, profile):
         self.name = validate_name(name)
-        self.profile = validate_profile(profile or self.profile)
-
-    def to_json(self):
-        return {"profile": self.profile, "name": self.name}
+        self.profile = validate_profile(profile)
 
     def __str__(self):
         return self.name
 
     @classmethod
     def from_json(cls, data):
-        assert data["profile"] == cls.profile
-        # remove profile
-        data = dict((k, v) for k, v in data.items() if k != "profile")
         return cls(**data)
 
 
 class PathResource(ResourceBase):
-    def __init__(self, name, path, profile=None):
+    def __init__(self, name, path, profile="data-resource"):
         super().__init__(name, profile=profile)
         self.path = validate_path(path)
 
-    def to_json(self):
-        res = super().to_json()
-        res["path"] = self.path
-        return res
-
 
 class DataResource(ResourceBase):
-    def __init__(self, name, data, profile=None):
+    def __init__(self, name, data, profile="data-resource"):
         super().__init__(name, profile=profile)
         self.data = validate_data(data)
 
-    def to_json(self):
-        res = super().to_json()
-        res["data"] = self.data
-        return res
-
 
 class Package(ResourceBase):
-
-    profile = "data-package"
-
-    def __init__(self, name, resources, profile=None):
+    def __init__(self, name, resources, profile="data-package"):
         super().__init__(name, profile=profile)
         self.resources = []
-        self._resources_by_name = {}
+        self._resources_by_name = UniqueDict()
 
         for r in resources:
             r = validate_resource(r)
-            if r.name in self._resources_by_name:
-                raise ValidationException(r.name)
             self.resources.append(r)
             self._resources_by_name[r.name] = r
 
-    def to_json(self):
-        res = super().to_json()
-        res["resources"] = [r.to_json() for r in self.resources]
-        return res
+    def get_resource(self, name):
+        return self._resources_by_name[name]
