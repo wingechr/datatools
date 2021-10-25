@@ -36,18 +36,18 @@ class TestFileSystemStorage(TmpCombinedStorage):
 
         # try to load file that has not been added
         self.assertRaises(
-            ObjectNotFoundException, lambda: self.storage.files.get(file_name)
+            ObjectNotFoundException, lambda: self.storage.get_file(file_name)
         )
 
         # add file and check if id matches name
         filepath = self.get_data_filepath(file_name)
         with open(filepath, "rb") as file:
-            file_id = self.storage.files.set(file)
+            file_id = self.storage.set_file(file)
         self.assertEqual(file_id, file_name)
 
         # load file (and add it again)
-        with self.storage.files.get(file_id, check_integrity=True) as file:
-            file_id = self.storage.files.set(file)
+        with self.storage.get_file(file_id, check_integrity=True) as file:
+            file_id = self.storage.set_file(file)
 
         self.assertEqual(file_id, file_name)
         self.assertEqual(file_id, file.get_current_hash())
@@ -62,14 +62,14 @@ class TestSqliteMetadataStorage(TestFileSystemStorage):
 
         self.assertRaises(
             ObjectNotFoundException,
-            lambda: self.storage.metadata.get(file_id_1, "key2"),
+            lambda: self.storage.get_metadata(file_id_1, "key2"),
         )
 
-        self.storage.metadata.set(file_id_1, dataset_1)
-        self.storage.metadata.set(file_id_2, dataset_1)
-        self.storage.metadata.set(file_id_1, dataset_2)
-        value_2 = self.storage.metadata.get(file_id_1, "key2")
-        values_all = self.storage.metadata.get_all(file_id_1)
+        self.storage.set_metadata(file_id_1, dataset_1)
+        self.storage.set_metadata(file_id_2, dataset_1)
+        self.storage.set_metadata(file_id_1, dataset_2)
+        value_2 = self.storage.get_metadata(file_id_1, "key2")
+        values_all = self.storage.get_all_metadata(file_id_1)
 
         self.assertEqual(value_2, "text updated")
         self.assertEqual(
@@ -85,10 +85,10 @@ class TestSqliteMetadataStorage(TestFileSystemStorage):
             "identifier_values": {"key": "val"},
         }
 
-        dataset_id = self.storage.metadata.set(**metadata)
+        dataset_id = self.storage.set_metadata(**metadata)
         self.assertEqual(dataset_id, "a4f675292d086361822ea7c35a222903")
         # do it again
-        dataset_id = self.storage.metadata.set(**metadata)
+        dataset_id = self.storage.set_metadata(**metadata)
         self.assertEqual(dataset_id, "a4f675292d086361822ea7c35a222903")
 
 
@@ -120,10 +120,10 @@ class TestPackageStorage(TestFileSystemStorage):
             [DataResource("r1", "data1"), Package("p2", [PathResource("r2", "path2")])],
         )
 
-        file_id = self.storage.files.set(pkg.to_file())
+        file_id = self.storage.set_file(pkg.to_file())
 
         self.assertEqual(file_id, "f164ccea8cfd020dd8c6b2b9db630c64")
-        data_bytes = self.storage.files.get(file_id, check_integrity=True).read()
+        data_bytes = self.storage.get_file(file_id, check_integrity=True).read()
         data = json_loadb(data_bytes)
         pkg = Package.from_json(data)
         self.assertEqual(get_data_hash(pkg), file_id)

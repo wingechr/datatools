@@ -58,11 +58,12 @@ def file(ctx, data_dir):
 def file_set(ctx, filepath):
     data_dir = ctx.obj["data_dir"]
     with CombinedLocalStorage(data_dir=data_dir) as storage:
+        logging.debug(filepath)
         if filepath:
-            file_id = storage.add_file(filepath)
+            file_id = storage.set_file_by_path(filepath)
         else:
             file = sys.stdin.buffer
-            file_id = storage.files.set(file)
+            file_id = storage.set_file(file)
     print(file_id)
 
 
@@ -74,20 +75,19 @@ def file_set(ctx, filepath):
 def file_get(ctx, file_id, filepath, check_integrity):
     data_dir = ctx.obj["data_dir"]
     with CombinedLocalStorage(data_dir=data_dir) as storage:
-        if file_id not in storage.files:
+        if file_id not in storage:
             logging.error("File not found")
             click.Abort()
             sys.exit(1)
         if filepath:
             with open(filepath, "wb") as file:
-                for chunk in storage.files.get(
-                    file_id, check_integrity=check_integrity
-                ):
+                for chunk in storage.get_file(file_id, check_integrity=check_integrity):
                     file.write(chunk)
         else:
             file = sys.stdout.buffer
-            for chunk in storage.files.get(file_id, check_integrity=check_integrity):
+            for chunk in storage.get_file(file_id, check_integrity=check_integrity):
                 file.write(chunk)
+                file.flush()
 
 
 @main.group("metadata")
@@ -105,12 +105,12 @@ def metadata_get_all(ctx, file_id, extended):
     data_dir = ctx.obj["data_dir"]
     with CombinedLocalStorage(data_dir=data_dir) as storage:
         if extended:
-            metadata = storage.metadata.get_all_extended(file_id)
+            metadata = storage.get_all_metadata_extended(file_id)
             for m in metadata:
                 m["value"] = json_dumps(m["value"])
                 print("%(identifier)s = %(value)s [%(user)s %(timestamp_utc)s]" % m)
         else:
-            metadata = storage.metadata.get_all(file_id)
+            metadata = storage.get_all_metadata(file_id)
             for k, v in metadata.items():
                 print("%s = %s" % (k, json_dumps(v)))
 

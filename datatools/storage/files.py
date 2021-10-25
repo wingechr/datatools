@@ -9,7 +9,7 @@ from datatools.utils import make_file_readlonly
 
 
 class AbstractFileStorage:
-    def get(self, file_id, check_integrity=False):
+    def get_file(self, file_id, check_integrity=False):
         """
         Args:
             file_id(str): 32 character md5 hash
@@ -27,7 +27,7 @@ class AbstractFileStorage:
             file = HashedByteIterator(file, expected_hash=file_id)
         return file
 
-    def set(self, data_stream):
+    def set_file(self, data_stream):
         """
         Args:
             data_stream: IOBase like readable binary stream
@@ -35,7 +35,12 @@ class AbstractFileStorage:
         Returns:
             file_id(str): 32 character md5 hash
         """
-        return self._set(data_stream)
+        file_id = self._set(data_stream)
+        self._post_set_action(file_id)
+        return file_id
+
+    def _post_set_action(self, file_id):
+        pass
 
     def _get(self, file_id):
         raise NotImplementedError()

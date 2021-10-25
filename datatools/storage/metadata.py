@@ -20,7 +20,7 @@ class AbstractMetadataStorage:
 
     default_user = None
 
-    def set(self, file_id, identifier_values, user=None, timestamp_utc=None):
+    def set_metadata(self, file_id, identifier_values, user=None, timestamp_utc=None):
         """
         Args:
             file_id(str): 32 character md5 hash
@@ -38,7 +38,7 @@ class AbstractMetadataStorage:
         identifier_values = validate_identifier_values(identifier_values)
         return self._set(file_id, identifier_values, user, timestamp_utc)
 
-    def get(self, file_id, identifier):
+    def get_metadata(self, file_id, identifier):
         """
         Args:
             file_id(str): 32 character md5 hash
@@ -211,7 +211,7 @@ class SqliteMetadataStorage(AbstractMetadataStorage):
         value_json = cur[0]
         return value_json
 
-    def get_all(self, file_id):
+    def get_all_metadata(self, file_id):
         file_id = validate_file_id(file_id)
 
         stmt = """
