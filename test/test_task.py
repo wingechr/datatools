@@ -1,5 +1,6 @@
-import unittest
 import logging
+
+from . import TestCase
 
 from datatools.task import (
     TaskGraph,
@@ -37,7 +38,7 @@ class Factorize(TaskHandlerBase):
                 f += 1
 
 
-class TestTaskGraph(unittest.TestCase):
+class TestTaskGraph(TestCase):
     def test_graph(self):
         tg = TaskGraph()
         node1 = tg.add_node(

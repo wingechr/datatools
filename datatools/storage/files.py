@@ -5,6 +5,7 @@ import os
 import shutil
 
 from .exceptions import ObjectNotFoundException, validate_file_id, IntegrityException
+from datatools.utils import make_file_readlonly
 
 
 class AbstractFileStorage:
@@ -135,6 +136,8 @@ class FileSystemStorage(AbstractFileStorage):
             # copy file
             logging.debug("adding file %s: %s (%d bytes)", filepath, file_id, file_size)
             shutil.move(tmp_filepath, filepath)
+            # make readonly
+            make_file_readlonly(filepath)
         return file_id
 
     def __contains__(self, file_id):

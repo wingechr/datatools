@@ -21,15 +21,13 @@ class TaskHandlerBase(Package):
     def handle(self, task_input):
         task_input_id = task_input.get_id()
         task_handler_id = self.get_id()
+
+        # TODO add to log
+        # TODO allow for caching here
+
         task_output = self._handle(task_input)
         task_output_id = task_output.get_id()
-        logging.info("%s(%s) -> %s", task_handler_id, task_input_id, task_output_id)
-        logging.info(
-            "%s(%s) -> %s",
-            json_dumps(self),
-            json_dumps(task_input),
-            json_dumps(task_output),
-        )
+
         return task_output
 
     def _handle(self, task_input):

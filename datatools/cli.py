@@ -59,20 +59,7 @@ def file_set(ctx, filepath):
     data_dir = ctx.obj["data_dir"]
     with CombinedLocalStorage(data_dir=data_dir) as storage:
         if filepath:
-            filepath = os.path.abspath(filepath)
-            with open(filepath, "rb") as file:
-                file_id = storage.files.set(file)
-
-            name = os.path.basename(filepath)
-            _name, ext = os.path.splitext(name)
-            storage.metadata.set(
-                file_id,
-                {
-                    "file_path": filepath,
-                    "file_name": name,
-                    "file_extension": ext.lstrip("."),
-                },
-            )
+            file_id = storage.add_file(filepath)
         else:
             file = sys.stdin.buffer
             file_id = storage.files.set(file)

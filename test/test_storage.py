@@ -1,21 +1,17 @@
-import unittest
 import logging
 import tempfile
 import os
 
+from . import TestCase
+
 from datatools.storage.combined import CombinedLocalStorage
 from datatools.storage.exceptions import ObjectNotFoundException
-from datatools.utils import get_data_hash, json_dumps, json_loadb, get_timestamp_utc_str
+from datatools.utils import get_data_hash, json_loadb, make_file_writable
 from datatools.package import Package, DataResource, PathResource
 from datatools.exceptions import ValidationException, DuplicateKeyException
 
-TEST_DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
-logging.basicConfig(
-    format="[%(asctime)s %(levelname)7s] %(message)s", level=logging.DEBUG
-)
 
-
-class TmpCombinedStorage(unittest.TestCase):
+class TmpCombinedStorage(TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tempdir = tempfile.TemporaryDirectory()
@@ -26,6 +22,11 @@ class TmpCombinedStorage(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.storage.__exit__(None, None, None)
+        # make file writable again, so we can delete them
+        for rt, ds, fs in os.walk(cls.tempdir.name):
+            for f in fs:
+                path = os.path.join(rt, f)
+                make_file_writable(path)
         cls.tempdir.__exit__(None, None, None)
 
 
@@ -39,7 +40,7 @@ class TestFileSystemStorage(TmpCombinedStorage):
         )
 
         # add file and check if id matches name
-        filepath = os.path.join(TEST_DATA_DIR, file_name)
+        filepath = self.get_data_filepath(file_name)
         with open(filepath, "rb") as file:
             file_id = self.storage.files.set(file)
         self.assertEqual(file_id, file_name)
@@ -91,12 +92,12 @@ class TestSqliteMetadataStorage(TestFileSystemStorage):
         self.assertEqual(dataset_id, "a4f675292d086361822ea7c35a222903")
 
 
-class TestUtils(unittest.TestCase):
+class TestUtils(TestCase):
     def test_get_data_hash(self):
         self.assertEqual(get_data_hash(None), "37a6259cc0c1dae299a7866489dff0bd")
 
 
-class TestPackage(unittest.TestCase):
+class TestPackage(TestCase):
     def test_package(self):
         self.assertRaises(ValidationException, lambda: DataResource(None, None))
         # no duplicate names

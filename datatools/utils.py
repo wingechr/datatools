@@ -1,21 +1,100 @@
 __version__ = "0.0.1"
 
-from abc import abstractmethod
 from io import BytesIO
 import re
 import logging
 import json
+import os
+import subprocess
+import platform
 import datetime
 from urllib.parse import unquote_plus
 import unidecode
 import hashlib
 from collections import UserDict
-
+from urllib.request import pathname2url
+from stat import S_IREAD, S_IRGRP, S_IROTH, S_IWRITE
 import socket
 import getpass
 
+import chardet
+import magic
+
 
 from datatools.exceptions import DuplicateKeyException
+
+DEFAULT_ENCODING = "utf-8"
+DATETIME_UTC_FMT = "%Y-%m-%d %H:%M:%S.%f"
+MIME_DETECT_BYTES = 2048
+
+
+def read_bytes_sample(filepath, size=MIME_DETECT_BYTES):
+    with open(filepath, "rb") as file:
+        if size > 0:
+            bytes = file.read(size)
+        else:
+            bytes = file.read()
+    return bytes
+
+
+def detect_text_encoding_from_filepath(filepath, size=MIME_DETECT_BYTES):
+    bytes = read_bytes_sample(filepath, size=size)
+    return detect_text_encoding_from_bytes(bytes, size=size)
+
+
+def detect_text_encoding_from_bytes(bytes, size=MIME_DETECT_BYTES):
+    if size > 0:
+        bytes = bytes[:size]
+    return chardet.detect(bytes)["encoding"]
+
+
+def detect_mime_from_filepath(filepath):
+    return magic.from_file(filepath, mime=True)
+
+
+def detect_mime_from_filepath_bytes(filepath, size=MIME_DETECT_BYTES):
+    bytes = read_bytes_sample(filepath, size=size)
+    return detect_mime_from_bytes(bytes, size=size)
+
+
+def detect_mime_from_bytes(bytes, size=MIME_DETECT_BYTES):
+    if size > 0:
+        bytes = bytes[:size]
+    mime = magic.from_buffer(bytes, mime=True)
+    return mime
+
+
+def os_open_filepath(filepath):
+    if platform.system() == "Darwin":  # macOS
+        subprocess.call(("open", filepath))
+    elif platform.system() == "Windows":  # Windows
+        os.startfile(filepath)
+    else:  # linux variants
+        subprocess.call(("xdg-open", filepath))
+
+
+def path2file_uri(path):
+    # https://en.wikipedia.org/wiki/File_URI_scheme
+    path = os.path.abspath(path)
+    url = pathname2url(path)
+    # in UNIX, this starts with only one slash,
+    # but on windows local path with three
+    # and windows network path even four
+    # which seems inconsistent
+
+    if url.startswith("////"):
+        # windows network path, including the host
+        # we want file://host/share/path
+        uri = "file:" + url[2:]
+        return uri
+
+    if url.startswith("///"):
+        # windows localpath
+        url = url[2:]
+
+    # prefix with file://HOSTNAME
+    uri = "file://%s%s" % (get_host(), url)
+    return uri
 
 
 class UniqueDict(UserDict):
@@ -39,10 +118,6 @@ def get_user_host():
     return "%s@%s" % (get_user(), get_host())
 
 
-DEFAULT_ENCODING = "utf-8"
-DATETIME_UTC_FMT = "%Y-%m-%d %H:%M:%S.%f"
-
-
 def get_timestamp_utc():
     return datetime.datetime.utcnow()
 
@@ -57,6 +132,14 @@ def get_timestamp_utc_str():
 
 def strptime(value):
     return datetime.datetime.strptime(value, DATETIME_UTC_FMT)
+
+
+def make_file_readlonly(filepath):
+    os.chmod(filepath, S_IREAD | S_IRGRP | S_IROTH)
+
+
+def make_file_writable(filepath):
+    os.chmod(filepath, S_IWRITE)
 
 
 def get_unix_utc():
