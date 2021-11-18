@@ -4,7 +4,7 @@ import tempfile
 import os
 import shutil
 
-from .exceptions import ObjectNotFoundException, validate_file_id, IntegrityException
+from datatools.exceptions import ObjectNotFoundException, validate_file_id, IntegrityException
 from datatools.utils import make_file_readlonly
 
 
