@@ -3,5 +3,3 @@ click
 coloredlogs
 networkx
 chardet
-python-magic
-python-magic-bin; sys_platform=="win32"

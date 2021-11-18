@@ -1,5 +1,5 @@
-from datatools.utils import JsonSerializable, UniqueDict
-from datatools.exceptions import ValidationException
+from .utils import JsonSerializable, UniqueDict
+from .exceptions import ValidationException
 
 
 def validate_name(name):

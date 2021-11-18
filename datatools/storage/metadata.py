@@ -4,7 +4,7 @@ import re
 import datetime
 import sqlite3
 
-from datatools.utils import (
+from .utils import (
     normalize_name,
     get_timestamp_utc,
     json_dumps,

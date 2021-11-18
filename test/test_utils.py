@@ -6,8 +6,8 @@ from datatools.utils import (
     UniqueDict,
     JsonSerializable,
     json_dumps,
-    detect_mime_from_filepath,
-    detect_mime_from_filepath_bytes,
+    #detect_mime_from_filepath,
+    #detect_mime_from_filepath_bytes,
     detect_text_encoding_from_filepath,
 )
 from datatools.exceptions import DuplicateKeyException

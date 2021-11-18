@@ -1,7 +1,7 @@
 import os
 from .files import FileSystemStorage
 from .metadata import SqliteMetadataStorage
-from datatools.utils import path2file_uri
+from .utils import path2file_uri
 
 
 class AbstractCombinedLocalStorage:

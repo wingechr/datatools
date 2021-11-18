@@ -1,7 +1,7 @@
 import logging
 import networkx as nx
-from datatools.package import Package
-from datatools.utils import JsonSerializable, json_dumps
+from .package import Package
+from .utils import JsonSerializable, json_dumps
 
 
 class TaskGeneratorBase:

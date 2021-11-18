@@ -18,17 +18,17 @@ import socket
 import getpass
 
 import chardet
-import magic
+#import magic
 
 
-from datatools.exceptions import DuplicateKeyException
+from .exceptions import DuplicateKeyException
 
 DEFAULT_ENCODING = "utf-8"
 DATETIME_UTC_FMT = "%Y-%m-%d %H:%M:%S.%f"
-MIME_DETECT_BYTES = 2048
+BYTES_SAMPLE = 2048
 
 
-def read_bytes_sample(filepath, size=MIME_DETECT_BYTES):
+def read_bytes_sample(filepath, size=BYTES_SAMPLE):
     with open(filepath, "rb") as file:
         if size > 0:
             bytes = file.read(size)
@@ -37,31 +37,31 @@ def read_bytes_sample(filepath, size=MIME_DETECT_BYTES):
     return bytes
 
 
-def detect_text_encoding_from_filepath(filepath, size=MIME_DETECT_BYTES):
+def detect_text_encoding_from_filepath(filepath, size=BYTES_SAMPLE):
     bytes = read_bytes_sample(filepath, size=size)
     return detect_text_encoding_from_bytes(bytes, size=size)
 
 
-def detect_text_encoding_from_bytes(bytes, size=MIME_DETECT_BYTES):
+def detect_text_encoding_from_bytes(bytes, size=BYTES_SAMPLE):
     if size > 0:
         bytes = bytes[:size]
     return chardet.detect(bytes)["encoding"]
 
 
-def detect_mime_from_filepath(filepath):
-    return magic.from_file(filepath, mime=True)
+#def detect_mime_from_filepath(filepath):
+#    return magic.from_file(filepath, mime=True)
 
 
-def detect_mime_from_filepath_bytes(filepath, size=MIME_DETECT_BYTES):
-    bytes = read_bytes_sample(filepath, size=size)
-    return detect_mime_from_bytes(bytes, size=size)
+#def detect_mime_from_filepath_bytes(filepath, size=BYTES_SAMPLE):
+#    bytes = read_bytes_sample(filepath, size=size)
+#    return detect_mime_from_bytes(bytes, size=size)
 
 
-def detect_mime_from_bytes(bytes, size=MIME_DETECT_BYTES):
-    if size > 0:
-        bytes = bytes[:size]
-    mime = magic.from_buffer(bytes, mime=True)
-    return mime
+#def detect_mime_from_bytes(bytes, size=BYTES_SAMPLE):
+#    if size > 0:
+#        bytes = bytes[:size]
+#    mime = magic.from_buffer(bytes, mime=True)
+#    return mime
 
 
 def os_open_filepath(filepath):
