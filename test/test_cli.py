@@ -1,12 +1,13 @@
 import logging
-import tempfile
 import os
-from . import TestCase
+import tempfile
 
 from click.testing import CliRunner
 
 from datatools.cli import main
 from datatools.utils import make_file_writable
+
+from . import TestCase
 
 
 class TmpFolder(TestCase):
@@ -36,6 +37,7 @@ class TestCli(TmpFolder):
             main, ["file", "-d", self.tempdir.name, "set", "-f", filepath]
         )
         file_id_new = res.stdout_bytes.decode().strip()
+
         self.assertEqual(res.exit_code, 0)
         self.assertEqual(file_id, file_id_new)
 

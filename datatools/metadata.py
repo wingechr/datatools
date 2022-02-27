@@ -1,83 +1,20 @@
+import datetime
 import logging
 import os
 import re
-import datetime
 import sqlite3
 
+from .exceptions import InvalidValueException, ObjectNotFoundException
 from .utils import (
-    normalize_name,
-    get_timestamp_utc,
-    json_dumps,
     get_data_hash,
-    json_loads,
-    strptime,
+    get_timestamp_utc,
     get_user_host,
+    json_dumps,
+    json_loads,
+    normalize_name,
+    strptime,
+    validate_file_id,
 )
-from .exceptions import ObjectNotFoundException, validate_file_id, InvalidValueException
-
-
-class AbstractMetadataStorage:
-
-    default_user = None
-
-    def set_metadata(self, file_id, identifier_values, user=None, timestamp_utc=None):
-        """
-        Args:
-            file_id(str): 32 character md5 hash
-            identifier_values(dict): identifier must be max 128 characters, values must be json serializable
-            user(str): user identification / source
-            timestamp_utc(float): unix timestamp (UTC)
-
-        Returns:
-            dataset_id(int)
-
-        """
-        file_id = validate_file_id(file_id)
-        timestamp_utc = validate_timestamp_utc(timestamp_utc or get_timestamp_utc())
-        user = validate_user(user or self.default_user)
-        identifier_values = validate_identifier_values(identifier_values)
-        return self._set(file_id, identifier_values, user, timestamp_utc)
-
-    def get_metadata(self, file_id, identifier):
-        """
-        Args:
-            file_id(str): 32 character md5 hash
-            identifier(str): max 128 character valid identifier
-
-        Returns:
-            value(object)
-
-        Raises:
-            ObjectNotFoundException
-        """
-        file_id = validate_file_id(file_id)
-        identifier = validate_identifier(identifier)
-        value_json = self._get(file_id, identifier)
-        value = json_loads(value_json)
-        return value
-
-    def _set(self, file_id, identifier_values, user, timestamp_utc):
-        raise NotImplementedError()
-
-    def _get(self, file_id, identifier):
-        raise NotImplementedError()
-
-    def __enter__(self):
-        raise NotImplementedError()
-
-    def __exit__(self, *args):
-        raise NotImplementedError()
-
-    def _get_dataset_id(self, file_id, user, timestamp_utc, identifier_values):
-        """Returns dataset_id"""
-        dataset = {
-            "file_id": file_id,
-            "user": user,
-            "timestamp_utc": timestamp_utc,
-            "data": identifier_values,
-        }
-        dataset_id = get_data_hash(dataset)
-        return dataset_id
 
 
 def validate_timestamp_utc(timestamp_utc):
@@ -119,9 +56,59 @@ def validate_identifier_values(identifier_values):
     return result
 
 
-class SqliteMetadataStorage(AbstractMetadataStorage):
+class SqliteMetadataStorage:
     DEFAULT_DATABASE = ".metadata.sqlite3"
     DEFAULT_USER = get_user_host()
+
+    default_user = None
+
+    def set_metadata(self, file_id, identifier_values, user=None, timestamp_utc=None):
+        """
+        Args:
+            file_id(str): 32 character md5 hash
+            identifier_values(dict): identifier must be max 128 characters,
+              values must be json serializable
+            user(str): user identification / source
+            timestamp_utc(float): unix timestamp (UTC)
+
+        Returns:
+            dataset_id(int)
+
+        """
+        file_id = validate_file_id(file_id)
+        timestamp_utc = validate_timestamp_utc(timestamp_utc or get_timestamp_utc())
+        user = validate_user(user or self.default_user)
+        identifier_values = validate_identifier_values(identifier_values)
+        return self._set(file_id, identifier_values, user, timestamp_utc)
+
+    def get_metadata(self, file_id, identifier):
+        """
+        Args:
+            file_id(str): 32 character md5 hash
+            identifier(str): max 128 character valid identifier
+
+        Returns:
+            value(object)
+
+        Raises:
+            ObjectNotFoundException
+        """
+        file_id = validate_file_id(file_id)
+        identifier = validate_identifier(identifier)
+        value_json = self._get(file_id, identifier)
+        value = json_loads(value_json)
+        return value
+
+    def _get_dataset_id(self, file_id, user, timestamp_utc, identifier_values):
+        """Returns dataset_id"""
+        dataset = {
+            "file_id": file_id,
+            "user": user,
+            "timestamp_utc": timestamp_utc,
+            "data": identifier_values,
+        }
+        dataset_id = get_data_hash(dataset)
+        return dataset_id
 
     def __init__(self, database=None, default_user=None):
         self.database = os.path.abspath(database or self.DEFAULT_DATABASE)
@@ -168,7 +155,7 @@ class SqliteMetadataStorage(AbstractMetadataStorage):
         self.connection = None
 
     def _execute(self, sql, parameters=None):
-        sql = re.sub("\s+", " ", sql).strip()
+        sql = re.sub(r"\s+", " ", sql).strip()
         if parameters:
             logging.debug("EXECUTE: %s %s", sql, parameters)
             return self.connection.cursor().execute(sql, parameters)
@@ -182,14 +169,19 @@ class SqliteMetadataStorage(AbstractMetadataStorage):
             file_id, user, timestamp_utc, identifier_values
         )
 
-        stmt = """INSERT INTO dataset(dataset_id, file_id, user, timestamp_utc) VALUES(?, ?, ?, ?);"""
+        stmt = """
+        INSERT INTO dataset(dataset_id, file_id, user, timestamp_utc)
+        VALUES(?, ?, ?, ?);
+        """
         try:
             self._execute(stmt, [dataset_id, file_id, user, timestamp_utc])
         except sqlite3.IntegrityError:
             # already in database
             return dataset_id
 
-        stmt = """INSERT INTO metadata(dataset_id, identifier, value_json) VALUES(?, ?, ?);"""
+        stmt = """
+        INSERT INTO metadata(dataset_id, identifier, value_json) VALUES(?, ?, ?);
+        """
         for identifier, value_json in identifier_values.items():
             self._execute(stmt, [dataset_id, identifier, value_json])
 
@@ -197,13 +189,13 @@ class SqliteMetadataStorage(AbstractMetadataStorage):
 
     def _get(self, file_id, identifier):
         stmt = """
-        SELECT value_json 
+        SELECT value_json
         FROM metadata m JOIN dataset d ON m.dataset_id = d.dataset_id
         WHERE d.file_id = ? AND identifier = ? AND timestamp_utc = (
-            SELECT MAX(d.timestamp_utc) 
+            SELECT MAX(d.timestamp_utc)
             FROM metadata m JOIN dataset d ON m.dataset_id = d.dataset_id
             WHERE d.file_id = ? AND identifier = ?
-        )        
+        )
         """
         cur = self._execute(stmt, [file_id, identifier, file_id, identifier]).fetchone()
         if not cur:
@@ -216,14 +208,14 @@ class SqliteMetadataStorage(AbstractMetadataStorage):
 
         stmt = """
         SELECT m.identifier, m.value_json
-        FROM metadata m 
+        FROM metadata m
         JOIN dataset d ON m.dataset_id = d.dataset_id
-        JOIN (            
+        JOIN (
             SELECT m.identifier, MAX(d.timestamp_utc) as timestamp_utc
             FROM metadata m JOIN dataset d ON m.dataset_id = d.dataset_id
             WHERE d.file_id = ?
             group by m.identifier
-        ) t on t.identifier = m.identifier and t.timestamp_utc = d.timestamp_utc        
+        ) t on t.identifier = m.identifier and t.timestamp_utc = d.timestamp_utc
         """
         result = {}
         for identifier, value_json in self._execute(stmt, [file_id]).fetchall():
@@ -235,14 +227,14 @@ class SqliteMetadataStorage(AbstractMetadataStorage):
 
         stmt = """
         SELECT m.identifier, m.value_json, d.timestamp_utc, d.user
-        FROM metadata m 
+        FROM metadata m
         JOIN dataset d ON m.dataset_id = d.dataset_id
-        JOIN (            
+        JOIN (
             SELECT m.identifier, MAX(d.timestamp_utc) as timestamp_utc
             FROM metadata m JOIN dataset d ON m.dataset_id = d.dataset_id
             WHERE d.file_id = ?
             group by m.identifier
-        ) t on t.identifier = m.identifier and t.timestamp_utc = d.timestamp_utc        
+        ) t on t.identifier = m.identifier and t.timestamp_utc = d.timestamp_utc
         """
         result = []
         for identifier, value_json, timestamp_utc, user in self._execute(

@@ -1,16 +1,12 @@
-import logging
+from datatools.exceptions import DuplicateKeyException
+from datatools.utils import (
+    JsonSerializable,
+    UniqueDict,
+    detect_text_encoding_from_filepath,
+    json_dumps,
+)
 
 from . import TestCase
-
-from datatools.utils import (
-    UniqueDict,
-    JsonSerializable,
-    json_dumps,
-    #detect_mime_from_filepath,
-    #detect_mime_from_filepath_bytes,
-    detect_text_encoding_from_filepath,
-)
-from datatools.exceptions import DuplicateKeyException
 
 
 class TestUniqueDict(TestCase):
@@ -38,25 +34,6 @@ class TestJsonSerializable(TestCase):
         # recursieve
         j = J(J(1))
         self.assertEqual(json_dumps(j), json_dumps({"a": {"a": 1}}))
-
-
-class TestMime(TestCase):
-    def test_mime(self):
-        for mime_file, mime_bytes, filename in [
-            ("text/plain", "text/plain", "mime.txt"),
-            (
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                "mime.xlsx",
-            ),
-            ("text/plain", "text/plain", "mime.json"),  # 'application/json',
-        ]:
-            filepath = self.get_data_filepath(filename)
-            mime_file_detected = detect_mime_from_filepath(filepath)
-            mime_bytes_detected = detect_mime_from_filepath_bytes(filepath)
-
-            self.assertEqual(mime_file, mime_file_detected)
-            self.assertEqual(mime_bytes, mime_bytes_detected)
 
     def test_chardet(self):
         for encoding, filename in [("utf-8", "mime.txt")]:

@@ -1,9 +1,6 @@
 import logging
 import os
 import unittest
-import logging
-import os
-
 
 logging.basicConfig(
     format="[%(asctime)s %(levelname)7s] %(message)s", level=logging.DEBUG

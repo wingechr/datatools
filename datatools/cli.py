@@ -2,14 +2,12 @@
 
 import logging
 import sys
-import os
 
 import click
 import coloredlogs
 
-
-from .storage.combined import CombinedLocalStorage
-from .utils import json_dumps
+from datatools.combined import CombinedLocalStorage
+from datatools.utils import json_dumps
 
 __version__ = "0.0.0"
 

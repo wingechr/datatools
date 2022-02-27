@@ -1,5 +1,5 @@
-from .utils import JsonSerializable, UniqueDict
 from .exceptions import ValidationException
+from .utils import JsonSerializable, UniqueDict
 
 
 def validate_name(name):

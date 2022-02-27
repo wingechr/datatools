@@ -1,7 +1,6 @@
-import logging
 import networkx as nx
+
 from .package import Package
-from .utils import JsonSerializable, json_dumps
 
 
 class TaskGeneratorBase:
@@ -19,14 +18,14 @@ class TaskHandlerBase(Package):
         super().__init__(name, resources=[], profile="task-handler")
 
     def handle(self, task_input):
-        task_input_id = task_input.get_id()
-        task_handler_id = self.get_id()
+        # task_input_id = task_input.get_id()
+        # task_handler_id = self.get_id()
 
         # TODO add to log
         # TODO allow for caching here
 
         task_output = self._handle(task_input)
-        task_output_id = task_output.get_id()
+        # task_output_id = task_output.get_id()
 
         return task_output
 
@@ -89,7 +88,7 @@ class TaskGraph:
 
     def execute(self):
         # iterate over nodes in correct order
-        # see https://networkx.org/documentation/stable/reference/algorithms/generated/networkx.algorithms.dag.topological_sort.html
+        # see https://networkx.org/documentation/stable/reference/algorithms/generated/networkx.algorithms.dag.topological_sort.html # noqa: E501
         for nid in nx.topological_sort(self.graph):
             node = self.graph.nodes[nid]
             task_generator = node["task_generator"]

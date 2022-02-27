@@ -1,14 +1,16 @@
-import logging
-import tempfile
 import os
+import tempfile
+
+from datatools.combined import CombinedLocalStorage
+from datatools.exceptions import (
+    DuplicateKeyException,
+    ObjectNotFoundException,
+    ValidationException,
+)
+from datatools.package import DataResource, Package, PathResource
+from datatools.utils import get_data_hash, json_loadb, make_file_writable
 
 from . import TestCase
-
-from datatools.storage.combined import CombinedLocalStorage
-from datatools.storage.exceptions import ObjectNotFoundException
-from datatools.utils import get_data_hash, json_loadb, make_file_writable
-from datatools.package import Package, DataResource, PathResource
-from datatools.exceptions import ValidationException, DuplicateKeyException
 
 
 class TmpCombinedStorage(TestCase):

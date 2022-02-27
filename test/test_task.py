@@ -1,15 +1,13 @@
-import logging
-
-from . import TestCase
-
+from datatools.package import DataResource
 from datatools.task import (
-    TaskGraph,
-    TaskInput,
     TaskGeneratorBase,
+    TaskGraph,
     TaskHandlerBase,
+    TaskInput,
     TaskOutput,
 )
-from datatools.package import DataResource
+
+from . import TestCase
 
 
 class GenerateNumberToFactorize(TaskGeneratorBase):
