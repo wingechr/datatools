@@ -24,3 +24,4 @@ class TestHashedByteIterator(TestCase):
 
         self.assertEqual(tuple(chunks1), tuple(chunks2))
         self.assertEqual(tuple(chunks1), tuple(chunks3))
+        self.assertEqual(sum(len(x) for x in chunks1), 5)

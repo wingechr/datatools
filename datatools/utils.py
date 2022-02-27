@@ -252,7 +252,6 @@ class HashedByteIterator:
                 logging.debug("Integrity check ok")
 
     def __iter__(self):
-        logging.error(type(self.data_stream))
         if isinstance(self.data_stream, str):
             logging.info("opening file: %s", self.data_stream)
             self.data_stream = open(self.data_stream, "rb")

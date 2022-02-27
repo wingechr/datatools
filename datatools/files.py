@@ -55,7 +55,6 @@ class FileSystemStorage:
         file = open(filepath, "rb")
         if check_integrity:
             file = HashedByteIterator(file, expected_hash=file_id)
-        logging.error(type(file))
         return file
 
     def set_file(self, data_stream):
