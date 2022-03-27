@@ -104,28 +104,47 @@ def datetime2str(x):
     return x.strftime(FMT_DATETIMES[0])
 
 
+CONVERION_MAP = {
+    (str, bool): str2bool,
+    (str, int): str2int,
+    (str, float): str2float,
+    (str, Decimal): str2Decimal,
+    (float, int): float2int,
+    (int, float): float,
+    (bool, str): bool2str,
+    (int, str): str,
+    (int, bool): int2bool,
+    (float, str): str,
+    (float, bool): lambda x: int2bool(float2int(x)),
+    (str, datetime.date): str2date,
+    (str, datetime.time): str2time,
+    (str, datetime.datetime): str2datetime,
+    (datetime.date, str): date2str,
+    (datetime.time, str): time2str,
+    (datetime.datetime, str): datetime2str,
+}
+
+
 def convert(x, to_type):
     from_type = type(x)
     if to_type == from_type:
         return x
-    y = {
-        (str, bool): str2bool,
-        (str, int): str2int,
-        (str, float): str2float,
-        (str, Decimal): str2Decimal,
-        (float, int): float2int,
-        (int, float): float,
-        (bool, str): bool2str,
-        (int, str): str,
-        (int, bool): int2bool,
-        (float, str): str,
-        (str, datetime.date): str2date,
-        (str, datetime.time): str2time,
-        (str, datetime.datetime): str2datetime,
-        (datetime.date, str): date2str,
-        (datetime.time, str): time2str,
-        (datetime.datetime, str): datetime2str,
-    }[(from_type, to_type)](x)
+    key = (from_type, to_type)
+    if key not in CONVERION_MAP:
+        raise NotImplementedError(
+            "Conversion from %s to %s" % (from_type.__name__, to_type.__name__)
+        )
+    f = CONVERION_MAP[key]
+    try:
+        y = f(x)
+    except Exception:
+        raise ValueError(
+            "Conversion from %s to %s failed for %s"
+            % (from_type.__name__, to_type.__name__, repr(x))
+        )
     if type(y) != to_type:
-        raise TypeError("%s != %s" % (type(y), to_type))
+        raise ValueError(
+            "Conversion from %s to %s failed for %s"
+            % (from_type.__name__, to_type.__name__, repr(x))
+        )
     return y

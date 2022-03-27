@@ -9,9 +9,25 @@
 import datetime
 import re
 
-from ..convert import convert
-from .exceptions import ValidationException
+from ..convert import convert as _convert
+from .exceptions import (
+    ValidationException,
+    ValidationNotImplementedError,
+    NullableException,
+    ConversionException,
+)
 from .utils import parse_sql_type
+
+
+def convert(val, to_type):
+    if val is None:
+        raise NullableException()
+    try:
+        return _convert(val, to_type)
+    except NotImplementedError as exc:
+        raise ValidationNotImplementedError(exc)
+    except Exception as exc:
+        raise ConversionException(exc)
 
 
 def ValColumn(field, value_validator, val_null=None):
@@ -33,10 +49,7 @@ def ValColumn(field, value_validator, val_null=None):
             if val in vals_null:
                 row[field] = None
             else:
-                try:
-                    row[field] = value_validator(val)
-                except Exception as exc:
-                    raise ValidationException(str(exc))
+                row[field] = value_validator(val)
 
         return call
 
@@ -100,20 +113,6 @@ def ValEnum(field, vals, val_null=None):
     return ValDict(field, val_map, val_null=val_null)
 
 
-def ValBool(
-    field,
-    val_true=(True, 1, "1", "true", "True", "TRUE"),
-    val_false=(False, 0, "0", "false", "False", "FALSE"),
-    val_null=None,
-):
-    val_map = {}
-    for v in val_true:
-        val_map[v] = True
-    for v in val_false:
-        val_map[v] = False
-    return ValDict(field, val_map, val_null=val_null)
-
-
 def ValSql(field, sql_type, val_null=None):
     type_name, type_args = parse_sql_type(sql_type)
 
@@ -122,7 +121,8 @@ def ValSql(field, sql_type, val_null=None):
 
         def value_validator(val):
             val = convert(val, str)
-            assert len(val) == length
+            if len(val) != length:
+                raise ValidationException("len(%s): %d != %d" % (val, len(val), length))
             return val
 
     elif type_name == "VARCHAR":
@@ -130,7 +130,10 @@ def ValSql(field, sql_type, val_null=None):
 
         def value_validator(val):
             val = convert(val, str)
-            assert len(val) <= max_length
+            if len(val) > max_length:
+                raise ValidationException(
+                    "len(%s): %d > %d" % (val, len(val), max_length)
+                )
             return val
 
     elif type_name == "BIT":
@@ -150,7 +153,8 @@ def ValSql(field, sql_type, val_null=None):
 
         def value_validator(val):
             val = convert(val, int)
-            assert min_val <= val <= max_val
+            if not min_val <= val <= max_val:
+                raise ValidationException("%d <= %d <= %d" % min_val, val, max_val)
             return val
 
     elif type_name == "SMALLINT":
@@ -158,7 +162,8 @@ def ValSql(field, sql_type, val_null=None):
 
         def value_validator(val):
             val = convert(val, int)
-            assert min_val <= val <= max_val
+            if not min_val <= val <= max_val:
+                raise ValidationException("%d <= %d <= %d" % min_val, val, max_val)
             return val
 
     elif type_name == "INT":
@@ -166,7 +171,8 @@ def ValSql(field, sql_type, val_null=None):
 
         def value_validator(val):
             val = convert(val, int)
-            assert min_val <= val <= max_val
+            if not min_val <= val <= max_val:
+                raise ValidationException("%d <= %d <= %d" % min_val, val, max_val)
             return val
 
     elif type_name == "BIGINT":

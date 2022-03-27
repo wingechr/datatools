@@ -4,24 +4,29 @@
 * optionally continue on validation failure to collect all problems in a dataset
 * convert unique constraints in dataset
 """
+
+from collections import OrderedDict
 from .exceptions import ValidationException
-from .factories import ValExcessFields, ValRegexp, ValSql, ValUnique
+from .factories import ValExcessFields, ValSql, ValUnique, ValColumn
 
 
-def validate(data, validator_classes):
+def validate(data, validator_classes, fail_fast=False):
 
-    validators = [c() for c in validator_classes]
+    validators = OrderedDict((name, c()) for name, c in validator_classes.items())
     errors = {}
 
     # apply validators to each row
     for index, row in enumerate(data):
-        for validate_row in validators:
+        for name, validate_row in validators.items():
             try:
                 validate_row(row)
             except ValidationException as exc:
-                if index not in errors:
-                    errors[index] = []
-                errors[index].append(str(exc))
+                key = (name, type(exc))
+                if key not in errors:
+                    errors[key] = []
+                errors[key].append((index, str(exc)))
+                if fail_fast:
+                    raise Exception(errors)
 
     # return errors
     return errors
