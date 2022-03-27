@@ -203,3 +203,11 @@ def ValSql(field, sql_type, val_null=None):
         raise NotImplementedError(type_name)
 
     return ValColumn(field, value_validator, val_null=val_null)
+
+
+def ValStr(field, val_null=None):
+    def value_validator(val):
+        val = convert(val, str)
+        return val
+
+    return ValColumn(field, value_validator, val_null=val_null)

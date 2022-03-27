@@ -8,7 +8,7 @@
 from collections import OrderedDict
 
 from .exceptions import ValidationException
-from .factories import ValColumn, ValExcessFields, ValSql, ValUnique
+from .factories import ValColumn, ValExcessFields, ValSql, ValStr, ValUnique
 
 
 def validate(data, validator_classes, fail_fast=False):
