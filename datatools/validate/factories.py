@@ -11,10 +11,10 @@ import re
 
 from ..convert import convert as _convert
 from .exceptions import (
+    ConversionException,
+    NullableException,
     ValidationException,
     ValidationNotImplementedError,
-    NullableException,
-    ConversionException,
 )
 from .utils import parse_sql_type
 

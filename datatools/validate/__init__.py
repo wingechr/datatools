@@ -6,8 +6,9 @@
 """
 
 from collections import OrderedDict
+
 from .exceptions import ValidationException
-from .factories import ValExcessFields, ValSql, ValUnique, ValColumn
+from .factories import ValColumn, ValExcessFields, ValSql, ValUnique
 
 
 def validate(data, validator_classes, fail_fast=False):

@@ -223,7 +223,7 @@ def validate_file_id(file_id):
 
 
 class HashedByteIterator:
-    DEFAULT_CHUNK_SIZE = 2**24
+    DEFAULT_CHUNK_SIZE = 2 ** 24
 
     def __init__(
         self, data_stream, expected_hash=None, chunk_size=None, max_bytes=None
