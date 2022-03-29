@@ -4,10 +4,10 @@ from decimal import Decimal
 FMT_DATES = ["%Y-%m-%d"]
 FMT_TIMES = ["%H:%M:%S"]
 FMT_DATETIMES = [
-    "%Y-%m-%d %H:%M:%S",
-    "%Y-%m-%dT%H:%M:%S",
-    "%Y-%m-%d %H:%M:%S.%f",
     "%Y-%m-%dT%H:%M:%S.%f",
+    "%Y-%m-%dT%H:%M:%S",
+    "%Y-%m-%d %H:%M:%S",
+    "%Y-%m-%d %H:%M:%S.%f",
     "%Y-%m-%d",
 ]
 
@@ -59,9 +59,9 @@ def str2bool(x):
 
 def bool2str(x):
     if x:
-        return "true"
+        return "1"
     else:
-        return "false"
+        return "0"
 
 
 def float2int(x):

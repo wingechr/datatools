@@ -29,7 +29,7 @@ class TmpFolder(TestCase):
 
 class TestCli(TmpFolder):
     def test_cli(self):
-        file_id = "900150983cd24fb0d6963f7d28e17f72"
+        file_id = "0bee89b07a248e27c83fc3d5951213c1"
         filepath = self.get_data_filepath(file_id)
         logging.error(filepath)
 

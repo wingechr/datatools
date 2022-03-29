@@ -5,7 +5,7 @@ from unittest import TestCase
 from datatools.convert import convert
 
 
-class TmpConvert(TestCase):
+class TestConvert(TestCase):
     def test_bool(self):
         conv = partial(convert, to_type=bool)
         for x, y in [
@@ -92,7 +92,10 @@ class TmpConvert(TestCase):
 
         conv = partial(convert, to_type=str)
         for y, x in [
-            ("1900-01-02 00:00:00", datetime.datetime(1900, 1, 2)),
-            ("1900-01-02 03:04:05", datetime.datetime(1900, 1, 2, 3, 4, 5)),
+            ("1900-01-02T00:00:00.000000", datetime.datetime(1900, 1, 2)),
+            (
+                "1900-01-02T03:04:05.001000",
+                datetime.datetime(1900, 1, 2, 3, 4, 5, 1000),
+            ),
         ]:
             self.assertEqual(conv(x), y)

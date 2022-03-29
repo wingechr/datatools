@@ -140,6 +140,7 @@ def ValSql(field, sql_type, val_null=None):
 
         def value_validator(val):
             val = convert(val, bool)
+            val = convert(val, str)
             return val
 
     elif type_name == "FLOAT":
@@ -154,7 +155,7 @@ def ValSql(field, sql_type, val_null=None):
         def value_validator(val):
             val = convert(val, int)
             if not min_val <= val <= max_val:
-                raise ValidationException("%d <= %d <= %d" % min_val, val, max_val)
+                raise ValidationException("%d <= %d <= %d" % (min_val, val, max_val))
             return val
 
     elif type_name == "SMALLINT":
@@ -163,7 +164,7 @@ def ValSql(field, sql_type, val_null=None):
         def value_validator(val):
             val = convert(val, int)
             if not min_val <= val <= max_val:
-                raise ValidationException("%d <= %d <= %d" % min_val, val, max_val)
+                raise ValidationException("%d <= %d <= %d" % (min_val, val, max_val))
             return val
 
     elif type_name == "INT":
@@ -185,29 +186,24 @@ def ValSql(field, sql_type, val_null=None):
 
         def value_validator(val):
             val = convert(val, datetime.date)
+            val = convert(val, str)
             return val
 
     elif type_name == "TIME":
 
         def value_validator(val):
             val = convert(val, datetime.time)
+            val = convert(val, str)
             return val
 
     elif type_name == "DATETIME":
 
         def value_validator(val):
             val = convert(val, datetime.datetime)
+            val = convert(val, str)
             return val
 
     else:
         raise NotImplementedError(type_name)
-
-    return ValColumn(field, value_validator, val_null=val_null)
-
-
-def ValStr(field, val_null=None):
-    def value_validator(val):
-        val = convert(val, str)
-        return val
 
     return ValColumn(field, value_validator, val_null=val_null)

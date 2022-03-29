@@ -34,7 +34,7 @@ class TmpCombinedStorage(TestCase):
 
 class TestFileSystemStorage(TmpCombinedStorage):
     def test_storage(self):
-        file_name = "900150983cd24fb0d6963f7d28e17f72"
+        file_name = "0bee89b07a248e27c83fc3d5951213c1"
 
         # try to load file that has not been added
         self.assertRaises(
@@ -57,7 +57,7 @@ class TestFileSystemStorage(TmpCombinedStorage):
 
 class TestSqliteMetadataStorage(TestFileSystemStorage):
     def test_storage(self):
-        file_id_1 = "900150983cd24fb0d6963f7d28e17f72"
+        file_id_1 = "0bee89b07a248e27c83fc3d5951213c1"
         file_id_2 = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
         dataset_1 = {"key1": 100, "key2": "text", "key4": {}}
         dataset_2 = {"key1": None, "key2": "text updated", "key3": [1, 2, 3]}
