@@ -10,7 +10,7 @@ from datatools.exceptions import (
 from datatools.package import DataResource, Package, PathResource
 from datatools.utils import get_data_hash, json_loadb, make_file_writable
 
-from . import TestCase
+from . import TEST_HASH, TestCase, create_testfile
 
 
 class TmpCombinedStorage(TestCase):
@@ -34,24 +34,25 @@ class TmpCombinedStorage(TestCase):
 
 class TestFileSystemStorage(TmpCombinedStorage):
     def test_storage(self):
-        file_name = "0bee89b07a248e27c83fc3d5951213c1"
+        test_data = TEST_HASH["bytes"]
+        test_file_id = TEST_HASH["file_id"]
+        filepath = create_testfile(test_data)
 
         # try to load file that has not been added
         self.assertRaises(
-            ObjectNotFoundException, lambda: self.storage.get_file(file_name)
+            ObjectNotFoundException, lambda: self.storage.get_file(test_file_id)
         )
 
         # add file and check if id matches name
-        filepath = self.get_data_filepath(file_name)
         with open(filepath, "rb") as file:
             file_id = self.storage.set_file(file)
-        self.assertEqual(file_id, file_name)
+        self.assertEqual(file_id, test_file_id)
 
         # load file (and add it again)
         with self.storage.get_file(file_id, check_integrity=True) as file:
             file_id = self.storage.set_file(file)
 
-        self.assertEqual(file_id, file_name)
+        self.assertEqual(file_id, test_file_id)
         self.assertEqual(file_id, file.get_current_hash())
 
 

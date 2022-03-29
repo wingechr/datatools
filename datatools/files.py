@@ -52,7 +52,7 @@ class FileSystemStorage:
         if file_id not in self:
             raise ObjectNotFoundException(file_id)
         filepath = self._get_filepath(file_id)
-        file = open(filepath, "rb")
+        file = open(filepath, "rb").__enter__()
         if check_integrity:
             file = HashedByteIterator(file, expected_hash=file_id)
         return file

@@ -185,6 +185,7 @@ class SqliteMetadataStorage:
         for identifier, value_json in identifier_values.items():
             self._execute(stmt, [dataset_id, identifier, value_json])
 
+        self._execute("COMMIT")
         return dataset_id
 
     def _get(self, file_id, identifier):

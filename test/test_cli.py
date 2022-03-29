@@ -7,7 +7,7 @@ from click.testing import CliRunner
 from datatools.cli import main
 from datatools.utils import make_file_writable
 
-from . import TestCase
+from . import TEST_HASH, TestCase, create_testfile
 
 
 class TmpFolder(TestCase):
@@ -29,8 +29,9 @@ class TmpFolder(TestCase):
 
 class TestCli(TmpFolder):
     def test_cli(self):
-        file_id = "0bee89b07a248e27c83fc3d5951213c1"
-        filepath = self.get_data_filepath(file_id)
+        test_data = TEST_HASH["bytes"]
+        file_id = TEST_HASH["file_id"]
+        filepath = create_testfile(test_data)
         logging.error(filepath)
 
         res = self.runner.invoke(
@@ -58,11 +59,3 @@ class TestCli(TmpFolder):
 
         self.assertEqual(res.exit_code, 0)
         self.assertEqual(bytes, bytes_read)
-
-        # metadata
-        res = self.runner.invoke(
-            main, ["metadata", "-d", self.tempdir.name, "get-all", file_id]
-        )
-        self.assertEqual(res.exit_code, 0)
-        data = res.stdout_bytes.decode()
-        self.assertTrue(file_id in data)

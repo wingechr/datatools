@@ -242,7 +242,6 @@ class HashedByteIterator:
         pass
 
     def _stop_iteration(self):
-        logging.info("stop")
         self.data_stream.__exit__(None, None, None)
         if self.expected_hash:
             file_id = self.get_current_hash()
@@ -253,10 +252,10 @@ class HashedByteIterator:
 
     def __iter__(self):
         if isinstance(self.data_stream, str):
-            logging.info("opening file: %s", self.data_stream)
+            logging.debug("opening file: %s", self.data_stream)
             self.data_stream = open(self.data_stream, "rb")
         elif isinstance(self.data_stream, bytes):
-            logging.info("buffer data: %s")
+            logging.debug("buffer data: %s")
             self.data_stream = BytesIO(self.data_stream)
         self.data_stream.__enter__()
         return self
