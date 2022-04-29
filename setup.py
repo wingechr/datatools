@@ -1,5 +1,4 @@
-import re
-from setuptools import setup, find_packages
+from setuptools import setup
 
 if __name__ == "__main__":
 
@@ -14,22 +13,22 @@ if __name__ == "__main__":
             "chardet",
             "pandas",
             "numpy",
-            "scipy"
-        ],        
+            "scipy",
+        ],
         name="datatools",
         description="",  # should be one line
         long_description="",
-        long_description_content_type="text/markdown",  # text/markdown or text/x-rst or text/plain
+        long_description_content_type="text/markdown",
         version="0.0.0",
-        #author=pkg.__author__,
-        #author_email=pkg.__email__,
-        #maintainer=pkg.__author__,
-        #maintainer_email=pkg.__email__,
-        #url=pkg.__url__,
-        #download_url=pkg.__url__,
+        # author=pkg.__author__,
+        # author_email=pkg.__email__,
+        # maintainer=pkg.__author__,
+        # maintainer_email=pkg.__email__,
+        # url=pkg.__url__,
+        # download_url=pkg.__url__,
         platforms=["any"],
         license="Public Domain",
-        #project_urls={"Bug Tracker": pkg.__url__,},
+        # project_urls={"Bug Tracker": pkg.__url__,},
         classifiers=[
             "Programming Language :: Python :: 3",
             "License :: CC0 1.0 Universal (CC0 1.0) Public Domain Dedication",
