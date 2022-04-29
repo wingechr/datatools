@@ -16,6 +16,7 @@ if __name__ == "__main__":
             "scipy",
             "requests",
             "sqlalchemy",
+            "datapackage",
         ],
         name="datatools",
         description="",  # should be one line

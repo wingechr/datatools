@@ -1,4 +1,5 @@
 import hashlib
+import logging
 
 from .json import json_dumps
 
@@ -17,15 +18,19 @@ def hash_sha256(byte_iter):
     sha256 = hashlib.sha256()
     for chunk in byte_iter:
         sha256.update(chunk)
-    return sha256.hexdigest()
+    sha256 = sha256.hexdigest()
+    logging.debug(f"SHA256: {sha256}")
+    return sha256
 
 
 def hash_sha256_obj(obj):
     bytes = json_dumps(obj).encode()
-    return hash_sha256([bytes])
+    hash = hash_sha256([bytes])
+    return hash
 
 
 def hash_sha256_filepath(filepath):
+    logging.debug(f"HASHING {filepath}")
     with open(filepath, "rb") as file:
         sha256 = hash_sha256(iter_bytes(file))
     return sha256

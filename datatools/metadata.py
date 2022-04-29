@@ -5,6 +5,7 @@ import re
 import sqlite3
 
 from .exceptions import InvalidValueException, ObjectNotFoundException
+from .files import makedirs
 from .text import normalize_name
 from .utils import (
     get_data_hash,
@@ -114,7 +115,7 @@ class SqliteMetadataStorage:
         self.database = os.path.abspath(database or self.DEFAULT_DATABASE)
         self.default_user = default_user or self.DEFAULT_USER
 
-        os.makedirs(os.path.dirname(self.database), exist_ok=True)
+        makedirs(os.path.dirname(self.database), exist_ok=True)
         if os.path.isfile(self.database):
             logging.debug("using database: %s", self.database)
             init_sql = None

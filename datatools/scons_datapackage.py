@@ -3,33 +3,35 @@ import os
 import re
 from urllib.parse import urlparse
 
-from datapackage import Package
-from datapackage.exceptions import ValidationError
-
-from .bytes import hash_sha256_filepath, hash_sha256_obj
-from .datetime import get_timestamp_utc
-from .info import get_user_host
-from .json import json_dump, json_load
+from .datapackage import Package, get_pkg_file, pkg_dump, pkg_load
+from .files import copy_uri, get_filepath_uri, makedirs, normpath
 from .logging import show_trace
-from .path import copy_uri, get_filepath_uri
 from .requests import download_file
 from .sql import download_sql
-from .zipfile import unzip_file
+from .text import normalize_name
+from .zipfile import unzip_all
+
+
+def validate_resource_path(resource_path):
+    if not resource_path.startswith("data/"):
+        raise ValueError(resource_path)
+    return normpath(resource_path)
 
 
 def get(target_pkg, source_pkg):
     source_base_path = source_pkg.base_path
     for resource in source_pkg.resources:
-
-        resource_filepath = get_resource_filepath(resource.descriptor)
-        target_filepath = target_pkg.base_path + "/data/" + resource_filepath
+        resource_path = resource.descriptor["data"]["target"]
+        resource_path = validate_resource_path(resource_path)
+        target_filepath = target_pkg.base_path + "/" + resource_path
         target_dir = os.path.dirname(target_filepath)
-        os.makedirs(target_dir, exist_ok=True)
-        source_uri = resource.descriptor["data"]
+        makedirs(target_dir, exist_ok=True)
+        source_uri = resource.descriptor["data"]["source"]
         source_scheme = urlparse(source_uri).scheme
+        logging.debug(f"SOURCE: {source_uri}")
         if re.match(r"^file$", source_scheme):
             copy_uri(source_uri, target_filepath, source_base_path=source_base_path)
-        elif re.match(r"^http[s]$", source_scheme):
+        elif re.match(r"^https?$", source_scheme):
             download_file(source_uri, target_filepath)
         elif re.match(r"^.*sql.*$", source_scheme):
             download_sql(source_uri, target_filepath)
@@ -38,91 +40,27 @@ def get(target_pkg, source_pkg):
         target_pkg.add_resource(
             {
                 "name": resource.name,
-                "file": resource_filepath,
                 "source": source_uri,
-                "path": "data/" + resource_filepath,
+                "path": normpath(resource_path),
             }
         )
 
 
 def unzip(target_pkg, source_pkg):
+    # TODO: test
     target_data_dir = target_pkg.base_path + "/data"
     for resource in source_pkg.resources:
         source_zipfile = source_pkg.base_path + "/" + resource.descriptor["path"]
         source_sha256 = resource.descriptor["sha256"]
-        for name in unzip_file(source_zipfile, target_data_dir):
+        for filename in unzip_all(source_zipfile, target_data_dir):
             target_pkg.add_resource(
                 {
-                    "name": name,
+                    "name": normalize_name(filename),
                     "source": get_filepath_uri(source_zipfile),
                     "source_sha256": source_sha256,
-                    "path": "data/" + name,
+                    "path": "data/" + normpath(filename),
                 }
             )
-
-
-def get_resource_filepath(resource_descriptor):
-    if "path" in resource_descriptor:
-        path = resource_descriptor["path"]
-    elif "file" in resource_descriptor:
-        path = "data/" + resource_descriptor["file"]
-    else:
-        path = "data/" + resource_descriptor["name"]
-    return path
-
-
-def get_pkg_file(path):
-    if not path.endswith(".json"):
-        path += "/datapackage.json"
-    return path
-
-
-def pkg_load(filepath):
-    descriptor = json_load(filepath)
-    base_path = os.path.dirname(filepath)
-    pkg = Package(descriptor, base_path=base_path)
-    pkg = validate_pkg(pkg)
-    return pkg
-
-
-def validate_pkg(pkg):
-    try:
-        pkg.valid
-    except ValidationError as err:
-        logging.error(err.errors)
-        raise
-    return pkg
-
-
-def pkg_dump(pkg, filepath):
-    # NOTE: because we want to modify
-    # the resource descriptors, we have to
-    # re-build the package
-
-    descriptor = pkg.descriptor
-    base_path = pkg.base_path
-    descriptor["datetime_utc"] = get_timestamp_utc()
-    descriptor["creator"] = get_user_host()
-
-    for resource_descriptor in descriptor["resources"]:
-        if "data" in resource_descriptor:
-            sha256 = hash_sha256_obj(resource_descriptor["data"])
-        else:
-            resource_filepath = (
-                base_path + "/" + get_resource_filepath(resource_descriptor)
-            )
-            print(
-                resource_filepath, base_path, get_resource_filepath(resource_descriptor)
-            )
-            sha256 = hash_sha256_filepath(resource_filepath)
-        resource_descriptor["sha256"] = sha256
-
-    try:
-        pkg = Package(descriptor, strict=True, base_path=base_path)
-    except ValidationError as err:
-        logging.error(err.errors)
-        raise
-    json_dump(descriptor, filepath)
 
 
 class DatapackageBuilder:
@@ -151,7 +89,7 @@ class DatapackageBuilder:
                 name = re.sub(r"\.json$", "", basename)
             pkg = Package({"name": name}, base_path=os.path.dirname(target_path))
             data_dir = pkg.base_path + "/data"
-            os.makedirs(data_dir, exist_ok=True)
+            makedirs(data_dir, exist_ok=True)
             func(pkg, *positional_sources_pkgs, **named_sources_pkgs)
             pkg_dump(pkg, target_path)
 
