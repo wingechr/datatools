@@ -239,7 +239,8 @@ class HashedByteIterator:
         return self
 
     def __exit__(self, *args):
-        pass
+        if self.data_stream:
+            self.data_stream.__exit__(*args)
 
     def _stop_iteration(self):
         self.data_stream.__exit__(None, None, None)

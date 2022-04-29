@@ -126,7 +126,9 @@ class TestPackageStorage(TestFileSystemStorage):
         file_id = self.storage.set_file(pkg.to_file())
 
         self.assertEqual(file_id, "f164ccea8cfd020dd8c6b2b9db630c64")
-        data_bytes = self.storage.get_file(file_id, check_integrity=True).read()
+        with self.storage.get_file(file_id, check_integrity=True) as file:
+            data_bytes = file.read()
+
         data = json_loadb(data_bytes)
         pkg = Package.from_json(data)
         self.assertEqual(get_data_hash(pkg), file_id)
