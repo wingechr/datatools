@@ -5,13 +5,13 @@ import re
 import sqlite3
 
 from .exceptions import InvalidValueException, ObjectNotFoundException
+from .text import normalize_name
 from .utils import (
     get_data_hash,
     get_timestamp_utc,
     get_user_host,
     json_dumps,
     json_loads,
-    normalize_name,
     strptime,
     validate_file_id,
 )

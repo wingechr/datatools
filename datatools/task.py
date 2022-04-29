@@ -1,6 +1,6 @@
 import networkx as nx
 
-from .package import Package
+from .task_package import Package
 
 
 class TaskGeneratorBase:

@@ -1,4 +1,3 @@
-from datatools.package import DataResource
 from datatools.task import (
     TaskGeneratorBase,
     TaskGraph,
@@ -6,6 +5,7 @@ from datatools.task import (
     TaskInput,
     TaskOutput,
 )
+from datatools.task_package import DataResource
 
 from . import TestCase
 

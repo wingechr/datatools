@@ -14,6 +14,8 @@ if __name__ == "__main__":
             "pandas",
             "numpy",
             "scipy",
+            "requests",
+            "sqlalchemy",
         ],
         name="datatools",
         description="",  # should be one line

@@ -7,7 +7,7 @@ from datatools.exceptions import (
     ObjectNotFoundException,
     ValidationException,
 )
-from datatools.package import DataResource, Package, PathResource
+from datatools.task_package import DataResource, Package, PathResource
 from datatools.utils import get_data_hash, json_loadb, make_file_writable
 
 from . import TEST_HASH, TestCase, create_testfile

@@ -1,4 +1,3 @@
-import logging
 import os
 import tempfile
 
@@ -32,7 +31,6 @@ class TestCli(TmpFolder):
         test_data = TEST_HASH["bytes"]
         file_id = TEST_HASH["file_id"]
         filepath = create_testfile(test_data)
-        logging.error(filepath)
 
         res = self.runner.invoke(
             main, ["file", "-d", self.tempdir.name, "set", "-f", filepath]
