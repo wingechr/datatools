@@ -1,8 +1,0 @@
-unidecode
-click
-coloredlogs
-networkx
-chardet
-pandas
-numpy
-scipy

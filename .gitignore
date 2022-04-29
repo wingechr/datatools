@@ -1,6 +1,13 @@
-*.pyc
-.env
-.venv
-env
-venv
-.tox
+# Byte-compiled / optimized / DLL files
+**/__pycache__/
+**/*.py[cod]
+**/*$py.class
+
+# Python
+**/*.egg-info
+
+# IDE
+**/.idea
+**/.vscode
+**/.spyderproject
+**/.spyproject
