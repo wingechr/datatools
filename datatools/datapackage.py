@@ -27,7 +27,7 @@ def validate_pkg(pkg):
     return pkg
 
 
-def get_pkg_file(path):
+def get_pkg_json_file(path):
     if not path.endswith(".json"):
         path += "/datapackage.json"
     return path
@@ -37,6 +37,9 @@ def pkg_dump(pkg, filepath):
     # NOTE: because we want to modify
     # the resource descriptors, we have to
     # re-build the package
+    if isinstance(pkg, dict):
+        base_path = os.path.dirname(filepath)
+        pkg = Package(pkg, base_path=base_path)
 
     descriptor = pkg.descriptor
     base_path = pkg.base_path

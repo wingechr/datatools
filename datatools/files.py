@@ -1,7 +1,8 @@
 import logging
 import os
 import shutil
-import stat
+
+# import stat
 import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
@@ -28,17 +29,28 @@ def get_filepath_uri(filepath):
     return uri
 
 
-def copy_uri(source_uri, target_filepath, source_base_path="."):
-    source_filepath = urlparse(source_uri).path
-    # remove leading slash
-    source_filepath = source_filepath[1:]
-    # if relative path: append source_base_path
-    if source_filepath.startswith("./"):
-        source_filepath = source_base_path + source_filepath[1:]
+def assert_slash_end(path):
+    if not path.endswith("/"):
+        path += "/"
+    return path
 
-    copy(source_filepath, target_filepath)
-    # make files also writable, so scons can delete them
-    os.chmod(target_filepath, stat.S_IWRITE | stat.S_IREAD)
+
+def walk_rel(start, filter=None):
+    for rt, _ds, fs in os.walk(start):
+        rt_rel = os.path.relpath(rt, start)
+        for f in fs:
+            filepath_rel = normpath(os.path.join(rt_rel, f))
+            if not filter or filter(filepath_rel):
+                yield filepath_rel
+            else:
+                logging.debug(f"SKIPPING: {filepath_rel}")
+
+
+def copy_uri(source_uri, target_path, overwrite=False):
+    source_path = urlparse(source_uri).path
+    if source_path.startswith("/./"):  # relative path
+        source_path = source_path.lstrip("/./")
+    copy(source_path, target_path, overwrite=overwrite)
 
 
 def makedirs(path, exist_ok=True):
@@ -127,11 +139,25 @@ class FileSystemStorage:
         return file_id
 
 
-def copy(source_filepath, target_filepath):
+def copy(source_filepath, target_filepath, overwrite=False):
+    assert_not_exist(target_filepath, overwrite=overwrite)
+    makedirs(os.path.dirname(target_filepath), exist_ok=True)
     logging.debug(f"COPY {source_filepath} ==> {target_filepath}")
     shutil.copy(source_filepath, target_filepath)
 
 
-def move(source_filepath, target_filepath):
+def move(source_filepath, target_filepath, overwrite=False):
+    assert_not_exist(target_filepath, overwrite=overwrite)
+    makedirs(os.path.dirname(target_filepath), exist_ok=True)
     logging.debug(f"MOVE {source_filepath} ==> {target_filepath}")
     shutil.move(source_filepath, target_filepath)
+
+
+def assert_not_exist(target_filepath, overwrite=False):
+    if not os.path.exists(target_filepath):
+        return
+    if not overwrite:
+        logging.error(f"File exists: {target_filepath}")
+        raise FileExistsError(f"File exists: {target_filepath}")
+    logging.debug(f"RM {target_filepath}")
+    os.remove(target_filepath)

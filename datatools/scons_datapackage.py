@@ -3,9 +3,8 @@ import os
 import re
 from urllib.parse import urlparse
 
-from .datapackage import Package, get_pkg_file, pkg_dump, pkg_load
+from .datapackage import Package, get_pkg_json_file, pkg_dump, pkg_load
 from .files import copy_uri, get_filepath_uri, makedirs, normpath
-from .logging import show_trace
 from .requests import download_file
 from .sql import download_sql
 from .text import normalize_name
@@ -19,7 +18,6 @@ def validate_resource_path(resource_path):
 
 
 def get(target_pkg, source_pkg):
-    source_base_path = source_pkg.base_path
     for resource in source_pkg.resources:
         resource_path = resource.descriptor["data"]["target"]
         resource_path = validate_resource_path(resource_path)
@@ -30,11 +28,15 @@ def get(target_pkg, source_pkg):
         source_scheme = urlparse(source_uri).scheme
         logging.debug(f"SOURCE: {source_uri}")
         if re.match(r"^file$", source_scheme):
-            copy_uri(source_uri, target_filepath, source_base_path=source_base_path)
+            copy_uri(
+                source_uri,
+                target_filepath,
+                overwrite=True,
+            )
         elif re.match(r"^https?$", source_scheme):
-            download_file(source_uri, target_filepath)
+            download_file(source_uri, target_filepath, overwrite=True)
         elif re.match(r"^.*sql.*$", source_scheme):
-            download_sql(source_uri, target_filepath)
+            download_sql(source_uri, target_filepath, overwrite=True)
         else:
             raise NotImplementedError(source_scheme)
         target_pkg.add_resource(
@@ -68,11 +70,10 @@ class DatapackageBuilder:
         self._env = env
 
     def __call__(self, func, target_pkg_path, *positional_sources, **named_sources):
-        @show_trace
         def wrapped_func(target, source, env):
             if len(target) != 1:
                 raise Exception("Only works with single target")
-            target_path = env.GetBuildPath(target[0])
+            target_json_path = env.GetBuildPath(target[0])
             sources_paths = [env.GetBuildPath(p) for p in source]
             sources_pkgs = [pkg_load(s) for s in sources_paths]
             named_sources_names = tuple(named_sources.keys())
@@ -81,24 +82,29 @@ class DatapackageBuilder:
             named_sources_pkgs = dict(
                 zip(named_sources_names, sources_pkgs[n_positional:])
             )
-            basename = os.path.basename(target_path)
-            if basename == "datapackage.json":
-                # use folder name
-                name = os.path.basename(os.path.dirname(target_path))
-            else:
-                name = re.sub(r"\.json$", "", basename)
-            pkg = Package({"name": name}, base_path=os.path.dirname(target_path))
-            data_dir = pkg.base_path + "/data"
-            makedirs(data_dir, exist_ok=True)
+            basename = os.path.basename(target_json_path)
+            if basename != "datapackage.json":
+                raise Exception(target_json_path)
+            # use folder name
+            target_basepath = os.path.dirname(target_json_path)
+            target_datapath = target_basepath + "/data"
+            pkg_name = os.path.basename(target_basepath)
+            pkg_name = normalize_name(pkg_name)
+            pkg = Package({"name": pkg_name}, base_path=target_basepath)
+            makedirs(target_datapath, exist_ok=True)
             func(pkg, *positional_sources_pkgs, **named_sources_pkgs)
-            pkg_dump(pkg, target_path)
+            pkg_dump(pkg, target_json_path)
 
         named_sources_sources = tuple(named_sources.values())
-        target_pkg_file = get_pkg_file(target_pkg_path)
-        sources_pkg_files = [
-            get_pkg_file(s) for s in positional_sources + named_sources_sources
+        target_pkg_json_file = get_pkg_json_file(target_pkg_path)
+        target_pkg_basepath = os.path.dirname(target_pkg_json_file)
+        sources_pkg_json_files = [
+            get_pkg_json_file(s) for s in positional_sources + named_sources_sources
         ]
 
-        self._env.Command(target_pkg_file, sources_pkg_files, wrapped_func)
+        tgt = self._env.Command(
+            target_pkg_json_file, sources_pkg_json_files, wrapped_func
+        )
+        tgt = self._env.Clean(tgt, target_pkg_basepath)
 
-        return target_pkg_file
+        return tgt

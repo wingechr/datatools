@@ -2,10 +2,12 @@ from urllib.parse import parse_qs, urlparse, urlunparse
 
 import sqlalchemy as sa
 
+from .files import assert_not_exist
 from .json import json_dump
 
 
-def download_sql(source_uri, target_filepath):
+def download_sql(source_uri, target_filepath, overwrite=False):
+    assert_not_exist(target_filepath, overwrite=overwrite)
     source_uri = urlparse(source_uri)
     query = parse_qs(source_uri.query)["q"][0]
     source_uri = urlunparse(source_uri._replace(query=None))
