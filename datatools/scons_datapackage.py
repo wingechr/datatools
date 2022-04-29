@@ -105,6 +105,6 @@ class DatapackageBuilder:
         tgt = self._env.Command(
             target_pkg_json_file, sources_pkg_json_files, wrapped_func
         )
-        tgt = self._env.Clean(tgt, target_pkg_basepath)
+        self._env.Clean(tgt, target_pkg_basepath)
 
         return tgt

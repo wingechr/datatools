@@ -4,7 +4,7 @@ from urllib.parse import unquote_plus
 import unidecode
 
 
-def normalize_name(name):
+def normalize_name(name, convert_camel=True):
     """
     >>> normalize_name('Hello  World!')
     'hello_world'
@@ -33,11 +33,13 @@ def normalize_name(name):
     name = unidecode.unidecode(name)
 
     # camel case to python
-    name = re.sub("([a-z])([A-Z])", r"\1_\2", name)
+    if convert_camel:
+        name = re.sub("([a-z])([A-Z])", r"\1_\2", name)
 
     # lower case and remove all blocks of invalid characters
     name = name.lower()
     name = re.sub("[^a-z0-9]+", "_", name)
+    name = name.strip("_")
     name = re.sub("^[^a-z]*", "", name)
 
     return name
