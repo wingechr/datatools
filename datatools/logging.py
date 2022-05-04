@@ -10,11 +10,14 @@ def get_level(level=None):
     return level
 
 
-def basicConfig(level=None):
+def basicConfig(level=None, logfile_path=None):
     logging.basicConfig(
         format="[%(asctime)s %(levelname)7s] %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
         level=get_level(level),
+        filename=logfile_path,
+        filemode="a",
+        encoding="utf-8",
     )
 
 
