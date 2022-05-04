@@ -39,7 +39,7 @@ class FileSystemStorage:
     def get_file(self, file_id, check_integrity=False):
         """
         Args:
-            file_id(str): 32 character md5 hash
+            file_id(str): 64 character sha256 hash
             check_integrity(bool): check hash on read
 
         Returns:
@@ -63,7 +63,7 @@ class FileSystemStorage:
             data_stream: IOBase like readable binary stream
 
         Returns:
-            file_id(str): 32 character md5 hash
+            file_id(str): 64 character sha256 hash
         """
         data_stream = HashedByteIterator(data_stream)
         with tempfile.NamedTemporaryFile("wb", delete=False) as file:

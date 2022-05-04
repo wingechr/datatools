@@ -65,7 +65,7 @@ class SqliteMetadataStorage:
     def set_metadata(self, file_id, identifier_values, user=None, timestamp_utc=None):
         """
         Args:
-            file_id(str): 32 character md5 hash
+            file_id(str): 64 character sha256 hash
             identifier_values(dict): identifier must be max 128 characters,
               values must be json serializable
             user(str): user identification / source
@@ -84,7 +84,7 @@ class SqliteMetadataStorage:
     def get_metadata(self, file_id, identifier):
         """
         Args:
-            file_id(str): 32 character md5 hash
+            file_id(str): 64 character sha256 hash
             identifier(str): max 128 character valid identifier
 
         Returns:
