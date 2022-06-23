@@ -131,8 +131,8 @@ def get_unix_utc():
 def get_byte_hash(byte_data):
     if not isinstance(byte_data, bytes):
         raise NotImplementedError("data must be bytes")
-    md5 = hashlib.md5(byte_data).hexdigest()
-    return md5
+    sha256 = hashlib.sha256(byte_data).hexdigest()
+    return sha256
 
 
 def get_data_hash(data):
@@ -188,7 +188,7 @@ class HashedByteIterator:
         self, data_stream, expected_hash=None, chunk_size=None, max_bytes=None
     ):
         self.data_stream = data_stream
-        self.hash = hashlib.md5()
+        self.hash = hashlib.sha256()
         self.size_bytes = 0
         self.max_bytes = max_bytes
         self.chunk_size = chunk_size or self.DEFAULT_CHUNK_SIZE
