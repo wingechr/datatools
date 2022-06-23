@@ -37,9 +37,7 @@ if __name__ == "__main__":
             "License :: CC0 1.0 Universal (CC0 1.0) Public Domain Dedication",
             "Operating System :: OS Independent",
         ],
-        entry_points={
-            # "console_scripts": ["cmd = PACKAGE_NAME.scripts.NAME:main"]
-        },
+        entry_points={"console_scripts": ["datatools = datatools.__main__:main"]},
         package_data={
             # "package.module": [file_patterns]
         },
