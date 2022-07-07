@@ -2,11 +2,18 @@ import jsonschema
 import requests
 import requests_cache
 
+from datatools import utils
+
+SCHEMA_SUFFIX = ".schema.json"
+
 requests_cache.install_cache("datatools_schema_cache", backend="sqlite", use_temp=True)
 
 
 def load_schema(uri: str) -> object:
-    return requests.get(uri).json()
+    if uri.startswith("http://") or uri.startswith("https://"):
+        return requests.get(uri).json()
+    # local file
+    return utils.json.load(uri)
 
 
 def validate_json(json, schema=None) -> object:

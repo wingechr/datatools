@@ -5,6 +5,10 @@ from click.testing import CliRunner
 
 import datatools.__main__
 
+SCHEMA_DIR = "schema"
+JSONSCHEMA_JSON = "jsonschema.schema.json"
+
+
 logging.basicConfig(
     format="[%(asctime)s %(levelname)7s] %(message)s", level=logging.INFO
 )
