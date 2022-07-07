@@ -5,9 +5,8 @@ import logging
 import click
 import coloredlogs
 
-__version__ = "0.0.0"
+import datatools
 
-# https://coloredlogs.readthedocs.io/en/latest/api.html#changing-the-date-time-format
 coloredlogs.DEFAULT_LOG_FORMAT = "[%(asctime)s %(levelname)7s] %(message)s"
 coloredlogs.DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 coloredlogs.DEFAULT_FIELD_STYLES = {
@@ -22,9 +21,9 @@ coloredlogs.DEFAULT_LEVEL_STYLES = {
 }
 
 
-@click.command()
+@click.group()
 @click.pass_context
-@click.version_option(__version__)
+@click.version_option(datatools.__version__)
 @click.option(
     "--loglevel",
     "-l",
@@ -33,13 +32,27 @@ coloredlogs.DEFAULT_LEVEL_STYLES = {
 )
 def main(ctx, loglevel):
     """Script entry point."""
-    if isinstance(loglevel, str):  # e.g. 'debug'/'DEBUG' -> logging.DEBUG
+    if isinstance(loglevel, str):
         loglevel = getattr(logging, loglevel.upper())
     coloredlogs.install(level=loglevel)
     ctx.ensure_object(dict)
 
 
+@main.group(name="validate")
+@click.pass_context
+def validate(ctx):
+    pass
+
+
+@validate.command(name="json")
+@click.pass_context
+@click.argument("json_file", type=click.types.Path(exists=True))
+@click.argument("schema_file", type=click.types.Path(exists=True), required=False)
+def validate_json(ctx, json_file: object, schema_file=None):
+    json = datatools.utils.json_load(json_file)
+    schema = datatools.utils.json_load(schema_file) if schema_file else None
+    datatools.validate_json(json, schema)
+
+
 if __name__ == "__main__":
-    main(
-        prog_name="datatools"
-    )  # pylint: disable=no-value-for-parameter # (because it's click decorated)
+    main(prog_name="datatools")
