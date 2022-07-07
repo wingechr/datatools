@@ -49,8 +49,8 @@ def validate(ctx):
 @click.argument("json_file", type=click.types.Path(exists=True))
 @click.argument("schema_file", type=click.types.Path(exists=True), required=False)
 def validate_json(ctx, json_file: object, schema_file=None):
-    json = datatools.utils.json_load(json_file)
-    schema = datatools.utils.json_load(schema_file) if schema_file else None
+    json = datatools.utils.json.load(json_file)
+    schema = datatools.utils.json.load(schema_file) if schema_file else None
     datatools.validate_json(json, schema)
 
 

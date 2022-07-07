@@ -17,5 +17,5 @@ class TestSchema(TestCase):
                 filepaths.append(filepath)
         self.assertTrue(filepaths)  # must have at least one
         for fp in filepaths:
-            json = utils.json_load(fp)
+            json = utils.json.load(fp)
             validate_json(json)
