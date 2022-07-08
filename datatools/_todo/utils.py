@@ -23,8 +23,8 @@ DATETIME_UTC_FMT = "%Y-%m-%d %H:%M:%S.%f"
 BYTES_SAMPLE = 2048
 
 
-def read_bytes_sample(filepath, size=BYTES_SAMPLE):
-    with open(filepath, "rb") as file:
+def read_bytes_sample(file_path, size=BYTES_SAMPLE):
+    with open(file_path, "rb") as file:
         if size > 0:
             bytes_data = file.read(size)
         else:
@@ -32,8 +32,8 @@ def read_bytes_sample(filepath, size=BYTES_SAMPLE):
     return bytes_data
 
 
-def detect_text_encoding_from_filepath(filepath, size=BYTES_SAMPLE):
-    bytes = read_bytes_sample(filepath, size=size)
+def detect_text_encoding_from_file_path(file_path, size=BYTES_SAMPLE):
+    bytes = read_bytes_sample(file_path, size=size)
     return detect_text_encoding_from_bytes(bytes, size=size)
 
 
@@ -43,13 +43,13 @@ def detect_text_encoding_from_bytes(bytes, size=BYTES_SAMPLE):
     return chardet.detect(bytes)["encoding"]
 
 
-def os_open_filepath(filepath):
+def os_open_file_path(file_path):
     if platform.system() == "Darwin":  # macOS
-        subprocess.call(("open", filepath))
+        subprocess.call(("open", file_path))
     elif platform.system() == "Windows":  # Windows
-        os.startfile(filepath)
+        os.startfile(file_path)
     else:  # linux variants
-        subprocess.call(("xdg-open", filepath))
+        subprocess.call(("xdg-open", file_path))
 
 
 def path2file_uri(path):
@@ -113,12 +113,12 @@ def strptime(value):
     return datetime.datetime.strptime(value, DATETIME_UTC_FMT)
 
 
-def make_file_readlonly(filepath):
-    os.chmod(filepath, S_IREAD | S_IRGRP | S_IROTH)
+def make_file_readlonly(file_path):
+    os.chmod(file_path, S_IREAD | S_IRGRP | S_IROTH)
 
 
-def make_file_writable(filepath):
-    os.chmod(filepath, S_IWRITE)
+def make_file_writable(file_path):
+    os.chmod(file_path, S_IWRITE)
 
 
 def get_unix_utc():

@@ -23,9 +23,9 @@ def relpath(path, start):
     return result
 
 
-def get_filepath_uri(filepath):
-    filepath = Path(os.path.realpath(filepath))
-    uri = filepath.as_uri()
+def get_file_path_uri(file_path):
+    file_path = Path(os.path.realpath(file_path))
+    uri = file_path.as_uri()
     return uri
 
 
@@ -39,11 +39,11 @@ def walk_rel(start, filter=None):
     for rt, _ds, fs in os.walk(start):
         rt_rel = os.path.relpath(rt, start)
         for f in fs:
-            filepath_rel = normpath(os.path.join(rt_rel, f))
-            if not filter or filter(filepath_rel):
-                yield filepath_rel
+            file_path_rel = normpath(os.path.join(rt_rel, f))
+            if not filter or filter(file_path_rel):
+                yield file_path_rel
             else:
-                logging.debug(f"SKIPPING: {filepath_rel}")
+                logging.debug(f"SKIPPING: {file_path_rel}")
 
 
 def copy_uri(source_uri, target_path, overwrite=False):
@@ -70,8 +70,8 @@ class FileSystemStorage:
         self.sf_len = sf_len
 
     def __contains__(self, file_id):
-        filepath = self._get_filepath(file_id)
-        return os.path.isfile(filepath)
+        file_path = self._get_file_path(file_id)
+        return os.path.isfile(file_path)
 
     def __enter__(self):
         return self
@@ -79,7 +79,7 @@ class FileSystemStorage:
     def __exit__(self, *args):
         pass
 
-    def _get_filepath(self, file_id):
+    def _get_file_path(self, file_id):
         data_dir = self.data_dir
         for i in range(self.sf_depth):
             subfolder = file_id[i * self.sf_len : (i + 1) * self.sf_len]
@@ -104,8 +104,8 @@ class FileSystemStorage:
         file_id = validate_file_id(file_id)
         if file_id not in self:
             raise ObjectNotFoundException(file_id)
-        filepath = self._get_filepath(file_id)
-        file = open(filepath, "rb").__enter__()
+        file_path = self._get_file_path(file_id)
+        file = open(file_path, "rb").__enter__()
         if check_integrity:
             file = HashedByteIterator(file, expected_hash=file_id)
         return file
@@ -124,40 +124,42 @@ class FileSystemStorage:
                 file.write(chunk)
         file_id = data_stream.get_current_hash()
         file_size = data_stream.get_current_size_bytes()
-        filepath = self._get_filepath(file_id)
-        tmp_filepath = file.name
-        if os.path.isfile(filepath):
+        file_path = self._get_file_path(file_id)
+        tmp_file_path = file.name
+        if os.path.isfile(file_path):
             # file exists already
             logging.debug("file already in storage: %s (%d bytes)", file_id, file_size)
-            os.remove(tmp_filepath)
+            os.remove(tmp_file_path)
         else:
             # copy file
-            logging.debug("adding file %s: %s (%d bytes)", filepath, file_id, file_size)
-            move(tmp_filepath, filepath)
+            logging.debug(
+                "adding file %s: %s (%d bytes)", file_path, file_id, file_size
+            )
+            move(tmp_file_path, file_path)
             # make readonly
-            make_file_readlonly(filepath)
+            make_file_readlonly(file_path)
         return file_id
 
 
-def copy(source_filepath, target_filepath, overwrite=False):
-    assert_not_exist(target_filepath, overwrite=overwrite)
-    makedirs(os.path.dirname(target_filepath), exist_ok=True)
-    logging.debug(f"COPY {source_filepath} ==> {target_filepath}")
-    shutil.copy(source_filepath, target_filepath)
+def copy(source_file_path, target_file_path, overwrite=False):
+    assert_not_exist(target_file_path, overwrite=overwrite)
+    makedirs(os.path.dirname(target_file_path), exist_ok=True)
+    logging.debug(f"COPY {source_file_path} ==> {target_file_path}")
+    shutil.copy(source_file_path, target_file_path)
 
 
-def move(source_filepath, target_filepath, overwrite=False):
-    assert_not_exist(target_filepath, overwrite=overwrite)
-    makedirs(os.path.dirname(target_filepath), exist_ok=True)
-    logging.debug(f"MOVE {source_filepath} ==> {target_filepath}")
-    shutil.move(source_filepath, target_filepath)
+def move(source_file_path, target_file_path, overwrite=False):
+    assert_not_exist(target_file_path, overwrite=overwrite)
+    makedirs(os.path.dirname(target_file_path), exist_ok=True)
+    logging.debug(f"MOVE {source_file_path} ==> {target_file_path}")
+    shutil.move(source_file_path, target_file_path)
 
 
-def assert_not_exist(target_filepath, overwrite=False):
-    if not os.path.exists(target_filepath):
+def assert_not_exist(target_file_path, overwrite=False):
+    if not os.path.exists(target_file_path):
         return
     if not overwrite:
-        logging.error(f"File exists: {target_filepath}")
-        raise FileExistsError(f"File exists: {target_filepath}")
-    logging.debug(f"RM {target_filepath}")
-    os.remove(target_filepath)
+        logging.error(f"File exists: {target_file_path}")
+        raise FileExistsError(f"File exists: {target_file_path}")
+    logging.debug(f"RM {target_file_path}")
+    os.remove(target_file_path)

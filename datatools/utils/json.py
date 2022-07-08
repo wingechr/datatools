@@ -1,16 +1,4 @@
-import datetime
 import json
-
-
-def serialize(x):
-    if isinstance(x, datetime.datetime):
-        return x.strftime("%Y-%m-%dT%H:%M:%S%z")
-    elif isinstance(x, datetime.date):
-        return x.strftime("%Y-%m-%d")
-    elif isinstance(x, datetime.time):
-        return x.strftime("%H:%M:%S")
-    else:
-        raise NotImplementedError(type(x))
 
 
 def dumps(data, serialize=None):
@@ -19,9 +7,9 @@ def dumps(data, serialize=None):
     )
 
 
-def dump(data, filepath: str, serialize=None):
+def dump(data, file_path: str, serialize=None):
     data_s = dumps(data, serialize=serialize)
-    with open(filepath, "w", encoding="utf-8") as file:
+    with open(file_path, "w", encoding="utf-8") as file:
         file.write(data_s)
 
 
@@ -29,7 +17,7 @@ def loads(data: str):
     return json.loads(data)
 
 
-def load(filepath: str):
-    with open(filepath, "r", encoding="utf-8") as file:
+def load(file_path: str):
+    with open(file_path, "r", encoding="utf-8") as file:
         data_s = file.read()
     return loads(data_s)

@@ -11,6 +11,11 @@ if __name__ == "__main__":
             "coloredlogs",
             "requests",
             "requests_cache",
+            "scons",
+            "tzlocal",
+            "pytz",
+            "pandas",
+            "sqlalchemy",
         ],
         name="datatools",
         description="",  # should be one line

@@ -3,9 +3,9 @@ import os
 import re
 from urllib.parse import urlparse
 
+from ..utils.requests import download_file
 from .datapackage import Package, get_pkg_json_file, pkg_dump, pkg_load
-from .files import copy_uri, get_filepath_uri, makedirs, normpath
-from .requests import download_file
+from .files import copy_uri, get_file_path_uri, makedirs, normpath
 from .sql import download_sql
 from .text import normalize_name
 from .zipfile import unzip_all
@@ -21,8 +21,8 @@ def get(target_pkg, source_pkg):
     for resource in source_pkg.resources:
         resource_path = resource.descriptor["data"]["target"]
         resource_path = validate_resource_path(resource_path)
-        target_filepath = target_pkg.base_path + "/" + resource_path
-        target_dir = os.path.dirname(target_filepath)
+        target_file_path = target_pkg.base_path + "/" + resource_path
+        target_dir = os.path.dirname(target_file_path)
         makedirs(target_dir, exist_ok=True)
         source_uri = resource.descriptor["data"]["source"]
         source_scheme = urlparse(source_uri).scheme
@@ -30,13 +30,13 @@ def get(target_pkg, source_pkg):
         if re.match(r"^file$", source_scheme):
             copy_uri(
                 source_uri,
-                target_filepath,
+                target_file_path,
                 overwrite=True,
             )
         elif re.match(r"^https?$", source_scheme):
-            download_file(source_uri, target_filepath, overwrite=True)
+            download_file(source_uri, target_file_path, overwrite=True)
         elif re.match(r"^.*sql.*$", source_scheme):
-            download_sql(source_uri, target_filepath, overwrite=True)
+            download_sql(source_uri, target_file_path, overwrite=True)
         else:
             raise NotImplementedError(source_scheme)
         target_pkg.add_resource(
@@ -58,7 +58,7 @@ def unzip(target_pkg, source_pkg):
             target_pkg.add_resource(
                 {
                     "name": normalize_name(filename),
-                    "source": get_filepath_uri(source_zipfile),
+                    "source": get_file_path_uri(source_zipfile),
                     "source_sha256": source_sha256,
                     "path": "data/" + normpath(filename),
                 }

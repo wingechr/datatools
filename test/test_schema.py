@@ -9,15 +9,15 @@ from . import JSONSCHEMA_JSON, SCHEMA_DIR, TestCase
 
 class TestSchema(TestCase):
     def test_schema(self):
-        filepaths = []
+        file_paths = []
         for rt, _, fs in os.walk(SCHEMA_DIR):
             for f in fs:
                 if not f.endswith(SCHEMA_SUFFIX):
                     continue
-                filepath = os.path.join(rt, f)
-                filepaths.append(filepath)
-        self.assertTrue(filepaths)  # must have at least one
-        for fp in filepaths:
+                file_path = os.path.join(rt, f)
+                file_paths.append(file_path)
+        self.assertTrue(file_paths)  # must have at least one
+        for fp in file_paths:
             json = utils.json.load(fp)
             validate_json(json)
 

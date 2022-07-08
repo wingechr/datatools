@@ -1,0 +1,25 @@
+import os
+import datatools
+import logging
+
+logging.basicConfig(format="[%(asctime)s %(levelname)7s] %(message)s", level=logging.INFO)
+
+env = Environment(
+    tools=[], # don't load tools
+    ENV=os.environ
+)
+env.Decider('MD5-timestamp')
+env.SetOption('warn', 'no-visual-c-missing') # don't war for missing compiler
+
+# create default context files so we can use them as dependencies
+def create_context(data):
+    def command(target, source, env):
+        datatools.utils.json.dump(data, str(target[0]))
+    return command
+
+now = datatools.utils.datetime.now()
+now_date = datatools.utils.datetime.fmt_date(now)
+#now_datetime = datatools.utils.datetime.fmt_datetime_tz(now)
+
+meta_date = AlwaysBuild(env.Command('_meta/date.json', [], create_context(now_date)))
+#meta_datetime = AlwaysBuild(env.Command('_meta/datetime.json', [], create_context(now_datetime)))

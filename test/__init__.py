@@ -18,6 +18,7 @@ class TestCase(unittest.TestCase):
     def _test_cli(self, fun_name, args):
         fun = getattr(datatools.__main__, fun_name)
         runner = CliRunner()
-        result = runner.invoke(fun, args)
-        # output = result.output
-        self.assertEqual(result.exit_code, 0)
+        res = runner.invoke(fun, args, catch_exceptions=False)
+
+        if not res.exit_code == 0:
+            raise Exception(res.output)

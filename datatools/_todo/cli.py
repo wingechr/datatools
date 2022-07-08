@@ -52,13 +52,13 @@ def file(ctx, data_dir):
 
 @file.command("set")
 @click.pass_context
-@click.option("--filepath", "-f", type=click.Path(exists=True))
-def file_set(ctx, filepath):
+@click.option("--file_path", "-f", type=click.Path(exists=True))
+def file_set(ctx, file_path):
     data_dir = ctx.obj["data_dir"]
     with CombinedLocalStorage(data_dir=data_dir) as storage:
-        logging.debug(filepath)
-        if filepath:
-            file_id = storage.set_file_by_path(filepath)
+        logging.debug(file_path)
+        if file_path:
+            file_id = storage.set_file_by_path(file_path)
         else:
             file = sys.stdin.buffer
             file_id = storage.set_file(file)
@@ -68,17 +68,17 @@ def file_set(ctx, filepath):
 @file.command("get")
 @click.pass_context
 @click.argument("file_id")
-@click.option("--filepath", "-f", type=click.Path(exists=False))
+@click.option("--file_path", "-f", type=click.Path(exists=False))
 @click.option("--check-integrity", "-c", is_flag=True)
-def file_get(ctx, file_id, filepath, check_integrity):
+def file_get(ctx, file_id, file_path, check_integrity):
     data_dir = ctx.obj["data_dir"]
     with CombinedLocalStorage(data_dir=data_dir) as storage:
         if file_id not in storage:
             logging.error("File not found")
             click.Abort()
             sys.exit(1)
-        if filepath:
-            with open(filepath, "wb") as file:
+        if file_path:
+            with open(file_path, "wb") as file:
                 for chunk in storage.get_file(file_id, check_integrity=check_integrity):
                     file.write(chunk)
         else:

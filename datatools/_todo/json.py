@@ -16,10 +16,10 @@ def json_serialize(x):
         raise NotImplementedError(type(x))
 
 
-def json_dump(data, filepath):
+def json_dump(data, file_path):
     data_s = json_dumps(data)
-    logging.debug("WRITE %s", filepath)
-    with open(filepath, "w", encoding=ENCODING) as file:
+    logging.debug("WRITE %s", file_path)
+    with open(file_path, "w", encoding=ENCODING) as file:
         file.write(data_s)
 
 
@@ -27,7 +27,7 @@ def json_dumps(data):
     return json.dumps(data, indent=2, sort_keys=True, ensure_ascii=False, default=None)
 
 
-def json_load(filepath):
-    logging.debug("READ %s", filepath)
-    with open(filepath, "r", encoding=ENCODING) as file:
+def json_load(file_path):
+    logging.debug("READ %s", file_path)
+    with open(file_path, "r", encoding=ENCODING) as file:
         return json.load(file)
