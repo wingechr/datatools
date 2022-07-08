@@ -1,10 +1,9 @@
 import datetime
 from functools import partial
 from os.path import getsize
+from test import TestCase
 
 from datatools import utils
-
-from . import TestCase
 
 
 class TestHash(TestCase):
@@ -99,3 +98,12 @@ class TestCollections(TestCase):
         dct = utils.collection.UniqueMap([(1, 2), (3, 4)])
         dct[2] = 1
         self.assertRaises(KeyError, partial(dct.__setitem__, 2, None))
+
+
+class TestCache(TestCase):
+    def test_cache(self):
+        cache = utils.cache.FileCache()
+        cache[1] = b"test"
+        # different data with same id
+        self.assertRaises(Exception, partial(cache.__setitem__, 1, b"test2"))
+        self.assertEqual(cache[1].read(), b"test")

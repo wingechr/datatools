@@ -1,6 +1,5 @@
 import os
-
-from . import JSONSCHEMA_JSON, SCHEMA_DIR, TestCase
+from test import JSONSCHEMA_JSON, SCHEMA_DIR, TestCase
 
 
 class TestCLI(TestCase):

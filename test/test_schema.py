@@ -1,9 +1,8 @@
 """Test all schemata"""
 import os
+from test import JSONSCHEMA_JSON, SCHEMA_DIR, TestCase
 
 from datatools.utils.json import SCHEMA_SUFFIX, load, load_schema, validate
-
-from . import JSONSCHEMA_JSON, SCHEMA_DIR, TestCase
 
 
 class TestSchema(TestCase):
