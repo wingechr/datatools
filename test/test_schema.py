@@ -1,8 +1,9 @@
 """Test all schemata"""
 import os
+from functools import partial
 from test import JSONSCHEMA_JSON, SCHEMA_DIR, TestCase
 
-from datatools.utils.json import SCHEMA_SUFFIX, load, load_schema, validate
+from datatools.utils.json import SCHEMA_SUFFIX, Validator, load, load_schema, validate
 
 
 class TestSchema(TestCase):
@@ -23,3 +24,9 @@ class TestSchema(TestCase):
         file_uri = f"{SCHEMA_DIR}/{JSONSCHEMA_JSON}"
         schema = load_schema(file_uri)
         validate(schema, schema)
+
+
+class TestValidate(TestCase):
+    def test_validate(self):
+        _ = partial(Validator())
+        pass

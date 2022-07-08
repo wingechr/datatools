@@ -64,7 +64,7 @@ def hash(ctx, file_path, method):
 
 @main.command(name="download")
 @click.pass_context
-@click.argument("source_uri", type=click.types.Path(exists=True))
+@click.argument("source_uri")
 @click.argument("target_file_path", type=click.types.Path(exists=False))
 def download(ctx, source_uri, target_file_path):
     datatools.utils.http.download(source_uri, target_file_path)

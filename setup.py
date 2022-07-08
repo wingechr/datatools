@@ -19,6 +19,9 @@ if __name__ == "__main__":
             "unidecode",
             "inflection",
             "chardet",
+            "frictionless",
+            "lxml",
+            "openpyxl",
         ],
         name="datatools",
         description="",  # should be one line
@@ -39,8 +42,6 @@ if __name__ == "__main__":
             "License :: CC0 1.0 Universal (CC0 1.0) Public Domain Dedication",
             "Operating System :: OS Independent",
         ],
-        # entry_points={"console_scripts": ["datatools = datatools.__main__:main"]},
-        package_data={
-            # "package.module": [file_patterns]
-        },
+        entry_points={"console_scripts": ["dt = datatools.__main__:main"]},
+        package_data={"datapackage.schema": ["**.schema.json"]},
     )

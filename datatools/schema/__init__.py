@@ -1,3 +1,3 @@
-import os
+from os.path import dirname
 
-SCHEMA_DIR = os.path.dirname(__file__)
+SCHEMA_DIR = dirname(__file__)

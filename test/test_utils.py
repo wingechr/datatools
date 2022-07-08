@@ -39,28 +39,50 @@ class TestHash(TestCase):
         # different methods of reading the file
         it1 = Iterator(__file__, max_size=file_size)  # open from path, limit read
         data1 = it1.read()
+        hash1 = it1.get_current_hash()
+        self.assertEqual(file_size, it1.get_current_size())
+        self.assertEqual(data, data1)
 
-        # open from file, and use context
-        with Iterator(open(__file__, "rb")) as it2:
-            data2 = it2.read()
+        # open from file
+        it2 = Iterator(open(__file__, "rb"))
+        data2 = it2.read()
+        self.assertEqual(file_size, it2.get_current_size())
+        self.assertEqual(data, data2)
+        self.assertEqual(hash1, it2.get_current_hash())
 
         # open with bytes, and iterate
         it3 = Iterator(data, chunk_size=100)
         data3 = b""
         for chunk in it3:
             data3 += chunk
-
-        self.assertEqual(data, data1)
-        self.assertEqual(data, data2)
-        self.assertEqual(data, data3)
-
-        self.assertEqual(file_size, it1.get_current_size())
-        self.assertEqual(file_size, it2.get_current_size())
         self.assertEqual(file_size, it3.get_current_size())
+        self.assertEqual(data, data3)
+        self.assertEqual(hash1, it3.get_current_hash())
 
-        hash1 = it1.get_current_hash()
-        self.assertEqual(hash1, it2.get_current_hash())
-        self.assertEqual(hash1, it2.get_current_hash())
+        # use generator
+        def gen():
+            yield data[:1]
+            yield data[1:]
+
+        it4 = Iterator(gen())
+        data4 = it4.read()
+        self.assertEqual(file_size, it4.get_current_size())
+        self.assertEqual(data, data4)
+        self.assertEqual(hash1, it4.get_current_hash())
+
+        # use list iterator
+        it5 = Iterator(list(gen()))
+        data5 = it5.read()
+        self.assertEqual(file_size, it5.get_current_size())
+        self.assertEqual(data, data5)
+        self.assertEqual(hash1, it5.get_current_hash())
+
+        # use Iterator itself
+        it6 = Iterator(Iterator(__file__, max_size=file_size))
+        data6 = it6.read()
+        self.assertEqual(file_size, it6.get_current_size())
+        self.assertEqual(data, data6)
+        self.assertEqual(hash1, it6.get_current_hash())
 
 
 class TestDatetime(TestCase):
