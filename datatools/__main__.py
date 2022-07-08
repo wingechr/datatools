@@ -59,7 +59,7 @@ def json_validate(ctx, json_file: object, schema_file=None):
 @click.argument("file_path", type=click.types.Path(exists=True))
 @click.option("--method", "-m", type=str, default="sha256")
 def hash(ctx, file_path, method):
-    print(datatools.utils.byte.hash_file(file_path, method=method))
+    print(datatools.utils.byte.hash(file_path, method=method))
 
 
 @main.command(name="download")

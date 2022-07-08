@@ -3,8 +3,6 @@ import logging  # noqa
 import socket
 import subprocess as sp
 
-from .. import utils  # noqa
-
 
 def get_user():
     """Return current user name"""

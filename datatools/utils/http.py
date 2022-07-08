@@ -2,8 +2,6 @@ import logging  # noqa
 
 import requests
 
-from .. import utils  # noqa
-
 CHUNK_SIZE = 2**20
 
 

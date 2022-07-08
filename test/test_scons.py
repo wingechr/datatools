@@ -1,13 +1,14 @@
 import os
 import subprocess as sp
 import tempfile
+from os.path import abspath
 
 from . import TestCase
 
 
 class __TODO__TestScons(TestCase):
     def test_scons(self):
-        root_dir = os.path.abspath(".")
+        root_dir = abspath(".")
         example_dir = os.path.join(root_dir, "test", "example")
         sconstruct = os.path.join(example_dir, "SConstruct")
         with tempfile.TemporaryDirectory() as tempdir:

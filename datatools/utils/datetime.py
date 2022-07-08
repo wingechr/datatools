@@ -1,10 +1,8 @@
-import datetime
 import logging  # noqa
+from datetime import date, datetime, time, timezone
 
 import pytz
 import tzlocal
-
-from .. import utils  # noqa
 
 FMT_DATETIME_TZ = "%Y-%m-%dT%H:%M:%S%z"
 FMT_DATETIME = "%Y-%m-%dT%H:%M:%S"
@@ -21,11 +19,11 @@ def _get_timezone_local():
     return tzlocal.get_localzone()
 
 
-def get_current_timezone_offset() -> datetime.timezone:
+def get_current_timezone_offset() -> timezone:
     """e.g.  DstTzInfo 'Europe/Berlin' LMT+0:53:00 STD"""
     tz_local = _get_timezone_local()
-    now = datetime.datetime.now()
-    return datetime.timezone(tz_local.utcoffset(now))
+    now = datetime.now()
+    return timezone(tz_local.utcoffset(now))
 
 
 def to_timezone(dt, tz):
@@ -36,11 +34,11 @@ def to_timezone(dt, tz):
 
 
 def now():
-    return to_timezone(datetime.datetime.now(), get_current_timezone_offset())
+    return to_timezone(datetime.now(), get_current_timezone_offset())
 
 
 def utcnow():
-    return to_timezone(datetime.datetime.utcnow(), get_timezone_utc())
+    return to_timezone(datetime.utcnow(), get_timezone_utc())
 
 
 def fmt_date(dt):
@@ -63,14 +61,14 @@ def fmt_datetime_tz(dt):
 
 
 def serialize(x):
-    if isinstance(x, datetime.datetime):
+    if isinstance(x, datetime):
         if x.tzinfo:
             return fmt_datetime_tz(x)
         else:
             return fmt_datetime(x)
-    elif isinstance(x, datetime.date):
+    elif isinstance(x, date):
         return fmt_date(x)
-    elif isinstance(x, datetime.time):
+    elif isinstance(x, time):
         return fmt_time(x)
     else:
         raise NotImplementedError(type(x))

@@ -1,9 +1,7 @@
 import logging  # noqa
 
-from .. import utils  # noqa
 
-
-class FrozenMap:
+class FrozenUniqueMap:
     """immutable, ordered map of unique hashables mapping to variables"""
 
     __slots__ = ["__values", "__indices", "__keys"]
@@ -15,9 +13,9 @@ class FrozenMap:
         self.__values = []
 
         for key, val in items:
-            self.__setitem(key, val)
+            self._setitem(key, val)
 
-    def __setitem(self, key, val):
+    def _setitem(self, key, val):
         if key in self.__indices:  # ensure uniqueness
             raise KeyError(f"{key} not unique")
         idx = len(self.__indices)
@@ -48,8 +46,8 @@ class FrozenMap:
         return self.__indices[key]
 
 
-class UniqueMap(FrozenMap):
+class UniqueMap(FrozenUniqueMap):
     """ordered map of unique hashables mapping to variables"""
 
     def __setitem__(self, key, val):
-        return self.__setitem(key, val)
+        return self._setitem(key, val)

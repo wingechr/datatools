@@ -5,7 +5,7 @@ import jsonschema
 import requests
 import requests_cache
 
-from .. import utils  # noqa
+from ..utils.byte import hash as byte_hash
 
 SCHEMA_SUFFIX = ".schema.json"
 
@@ -16,7 +16,7 @@ def load_schema(uri: str) -> object:
     if uri.startswith("http://") or uri.startswith("https://"):
         return requests.get(uri).json()
     # local file
-    return utils.json.load(uri)
+    return load(uri)
 
 
 def validate(json, schema=None) -> object:
@@ -31,6 +31,8 @@ def validate(json, schema=None) -> object:
 
 
 class Validator:
+    __slots__ = []
+
     def __init__(self, schema):
         if isinstance(schema, str):
             schema = load_schema(schema)
@@ -64,4 +66,4 @@ def load(file_path: str):
 
 def hash(json_data, method="sha256") -> str:
     bytes_data = dumps(json_data).encode()
-    return utils.byte.hash(bytes_data, method=method)
+    return byte_hash(bytes_data, method=method)
