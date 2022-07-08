@@ -38,20 +38,20 @@ def main(ctx, loglevel):
     ctx.ensure_object(dict)
 
 
-@main.group(name="validate")
+@main.group(name="json")
 @click.pass_context
-def validate(ctx):
+def json(ctx):
     pass
 
 
-@validate.command(name="json")
+@json.command(name="validate")
 @click.pass_context
 @click.argument("json-file", type=click.types.Path(exists=True))
 @click.option("--schema-file", "-s", type=click.types.Path(exists=True), default=None)
-def validate_json(ctx, json_file: object, schema_file=None):
+def json_validate(ctx, json_file: object, schema_file=None):
     json = datatools.utils.json.load(json_file)
     schema = datatools.utils.json.load(schema_file) if schema_file else None
-    datatools.validate_json(json, schema)
+    datatools.utils.json.validate(json, schema)
 
 
 @main.command(name="hash")
@@ -59,7 +59,7 @@ def validate_json(ctx, json_file: object, schema_file=None):
 @click.argument("file_path", type=click.types.Path(exists=True))
 @click.option("--method", "-m", type=str, default="sha256")
 def hash(ctx, file_path, method):
-    print(datatools.utils.bytes.hash_file(file_path, method=method))
+    print(datatools.utils.byte.hash_file(file_path, method=method))
 
 
 @main.command(name="download")
@@ -67,7 +67,7 @@ def hash(ctx, file_path, method):
 @click.argument("source_uri", type=click.types.Path(exists=True))
 @click.argument("target_file_path", type=click.types.Path(exists=False))
 def download(ctx, source_uri, target_file_path):
-    datatools.utils.requests.download(source_uri, target_file_path)
+    datatools.utils.http.download(source_uri, target_file_path)
 
 
 if __name__ == "__main__":

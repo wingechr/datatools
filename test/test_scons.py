@@ -5,7 +5,7 @@ import tempfile
 from . import TestCase
 
 
-class TestScons(TestCase):
+class __TODO__TestScons(TestCase):
     def test_scons(self):
         root_dir = os.path.abspath(".")
         example_dir = os.path.join(root_dir, "test", "example")

@@ -1,4 +1,7 @@
+import logging  # noqa
 from zipfile import ZipFile
+
+from .. import utils  # noqa
 
 
 def unzip_all(zipfile, target_path):

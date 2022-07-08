@@ -16,6 +16,9 @@ if __name__ == "__main__":
             "pytz",
             "pandas",
             "sqlalchemy",
+            "unidecode",
+            "inflection",
+            "chardet",
         ],
         name="datatools",
         description="",  # should be one line

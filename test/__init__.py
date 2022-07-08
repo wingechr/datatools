@@ -5,7 +5,7 @@ from click.testing import CliRunner
 
 import datatools.__main__
 
-SCHEMA_DIR = "schema"
+SCHEMA_DIR = "datatools/schema"
 JSONSCHEMA_JSON = "jsonschema.schema.json"
 
 

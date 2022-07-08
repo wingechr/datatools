@@ -1,8 +1,4 @@
-from . import utils
-from .validate import validate_json
+from . import exceptions, utils
 
 __version__ = "0.0.0"
-__all__ = [
-    "validate_json",
-    "utils",
-]
+__all__ = ["utils", "exceptions"]

@@ -1,8 +1,7 @@
 """Test all schemata"""
 import os
 
-from datatools import utils
-from datatools.validate import SCHEMA_SUFFIX, load_schema, validate_json
+from datatools.utils.json import SCHEMA_SUFFIX, load, load_schema, validate
 
 from . import JSONSCHEMA_JSON, SCHEMA_DIR, TestCase
 
@@ -18,10 +17,10 @@ class TestSchema(TestCase):
                 file_paths.append(file_path)
         self.assertTrue(file_paths)  # must have at least one
         for fp in file_paths:
-            json = utils.json.load(fp)
-            validate_json(json)
+            json = load(fp)
+            validate(json)
 
     def test_load_schema_file(self):
         file_uri = f"{SCHEMA_DIR}/{JSONSCHEMA_JSON}"
         schema = load_schema(file_uri)
-        validate_json(schema, schema)
+        validate(schema, schema)

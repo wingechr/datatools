@@ -1,10 +1,14 @@
+import logging  # noqa
 import re
 from urllib.parse import unquote_plus
 
+import inflection
 import unidecode
 
+from .. import utils  # noqa
 
-def normalize_name(name, convert_camel=True):
+
+def normalize(name):
     """
     >>> normalize_name('Hello  World!')
     'hello_world'
@@ -15,6 +19,7 @@ def normalize_name(name, convert_camel=True):
     >>> normalize_name('François fährt Straßenbahn zum Café Málaga')
     'francois_faehrt_strassenbahn_zum_cafe_malaga'
     """
+
     name = unquote_plus(name)
 
     # manual replacements for german
@@ -32,9 +37,7 @@ def normalize_name(name, convert_camel=True):
     # maske ascii
     name = unidecode.unidecode(name)
 
-    # camel case to python
-    if convert_camel:
-        name = re.sub("([a-z])([A-Z])", r"\1_\2", name)
+    name = inflection.dasherize(name)
 
     # lower case and remove all blocks of invalid characters
     name = name.lower()
