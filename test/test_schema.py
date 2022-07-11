@@ -27,6 +27,6 @@ class TestSchema(TestCase):
 
 
 class TestValidate(TestCase):
-    def test_validate(self):
+    def __TODO__test_validate(self):
         _ = partial(Validator())
         pass
