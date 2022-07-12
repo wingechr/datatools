@@ -15,7 +15,7 @@ if __name__ == "__main__":
             "tzlocal",
             "pytz",
             "pandas",
-            "sqlalchemy",
+            "sqlalchemy>=1.4.0",
             "unidecode",
             "inflection",
             "chardet",

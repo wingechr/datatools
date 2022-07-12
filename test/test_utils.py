@@ -1,4 +1,5 @@
 import datetime
+import os
 from functools import partial
 from os.path import getsize
 from test import TestCase
@@ -129,3 +130,10 @@ class TestCache(TestCase):
         # different data with same id
         self.assertRaises(Exception, partial(cache.__setitem__, 1, b"test2"))
         self.assertEqual(cache[1].read(), b"test")
+
+
+class TestTemp(TestCase):
+    def test_temp(self):
+        with utils.temp.NamedClosedTemporaryFile() as filepath:
+            self.assertTrue(os.path.isfile(filepath))
+        self.assertFalse(os.path.isfile(filepath))

@@ -8,6 +8,7 @@ from . import (
     http,
     json,
     sql,
+    temp,
     text,
     uri,
     zip,
@@ -27,4 +28,5 @@ __all__ = [
     "sql",
     "text",
     "uri",
+    "temp",
 ]

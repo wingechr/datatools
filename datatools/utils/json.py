@@ -42,28 +42,37 @@ class Validator:
         return validate(json, self.schema)
 
 
-def dumps(data, serialize=None):
+def dumps(data: object, serialize=None) -> str:
     return json.dumps(
         data, indent=2, sort_keys=True, ensure_ascii=False, default=serialize
     )
 
 
-def dump(data, file_path: str, serialize=None):
-    data_s = dumps(data, serialize=serialize)
+def dump(data: object, file_path: str, serialize=None) -> None:
+    str_data = dumps(data, serialize=serialize)
     with open(file_path, "w", encoding="utf-8") as file:
-        file.write(data_s)
+        file.write(str_data)
 
 
-def loads(data: str):
-    return json.loads(data)
+def loads(str_data: str) -> object:
+    return json.loads(str_data)
 
 
-def load(file_path: str):
+def loadb(bytes_data: bytes, encoding: str = "utf-8") -> object:
+    str_data = bytes_data.decode(encoding=encoding)
+    return loads(str_data)
+
+
+def dumpb(data: object) -> bytes:
+    return dumps(data).encode()
+
+
+def load(file_path: str) -> object:
     with open(file_path, "r", encoding="utf-8") as file:
         data_s = file.read()
     return loads(data_s)
 
 
-def hash(json_data, method="sha256") -> str:
-    bytes_data = dumps(json_data).encode()
+def hash(data, method="sha256") -> str:
+    bytes_data = dumpb(data)
     return byte_hash(bytes_data, method=method)
