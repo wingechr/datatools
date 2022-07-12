@@ -37,9 +37,20 @@ def validate_jsonschema(data, schema: str | dict | bool = True) -> object:
 
 
 def validate_dataschema(data, schema):
+    if not schema:
+        raise Exception("no schema")
     res = validate_resource({"data": data, "schema": schema})
-    print(res)
+    if not res["valid"]:
+        raise Exception(res)
     return data
+
+
+def guess_dataschema(data):
+    res = validate_resource({"data": data})
+    tasks = res["tasks"]
+    assert len(tasks) == 1
+    schema = tasks[0]["resource"]["schema"]
+    return schema
 
 
 class SchemaValidator:
@@ -88,7 +99,3 @@ def load(file_path: str) -> object:
 def hash(data, method="sha256") -> str:
     bytes_data = dumpb(data)
     return byte_hash(bytes_data, method=method)
-
-
-def validate_data(data, schema):
-    pass

@@ -3,8 +3,8 @@ from functools import partial
 from tempfile import TemporaryDirectory
 from test import TestCase
 
-from datatools.resource import FileResource, resource
-from datatools.utils.json import dumpb
+from datatools.resource import MemoryResource, resource
+from datatools.utils.json import dumpb, guess_dataschema
 from datatools.utils.temp import NamedClosedTemporaryFile
 
 
@@ -93,9 +93,7 @@ class TestResource(TestCase):
             )
 
             # check if global hash is updated
-            hash = FileResource(tempdir + "/datapackage.json").read(as_json=True)[
-                "hash"
-            ]
+            hash = resource(tempdir + "/datapackage.json").read(as_json=True)["hash"]
             self.assertEqual(
                 hash,
                 "sha256:0730b410d31df039f3c284ea0ac28cd27eb417bf13d078c98e854a8cf008c519",  # noqa
@@ -104,3 +102,72 @@ class TestResource(TestCase):
             # load dp
             data = resource(tempdir + "#test.json").read()
             self.assertEqual(data, dumpb(data_in))
+
+    def test_validate_json_schema(self):
+        # use in memory resource
+        res = MemoryResource({"key": 9})
+
+        # this should fail (wrong type)
+        self.assertRaises(
+            Exception,
+            partial(res.read, as_json=True, validate_json_schema={"type": "array"}),
+        )
+
+        # this should fail (schema broken)
+        self.assertRaises(
+            Exception, partial(res.read, as_json=True, validate_json_schema={"type": 1})
+        )
+
+        # this should work
+        res.read(as_json=True, validate_json_schema={"type": "object"})
+
+    def test_validate_data_schema(self):
+        data = [{"i": 1, "s": "s1"}, {"s": None, "i": 2}]
+        schema = {
+            "fields": [
+                {"type": "integer", "name": "i"},
+                {"type": "string", "name": "s"},
+            ]
+        }
+
+        res = MemoryResource(data)
+
+        # fail: no schema
+        self.assertRaises(
+            Exception, partial(res.read, as_json=True, validate_data_schema={})
+        )
+
+        # fail: broken schema
+        self.assertRaises(
+            Exception,
+            partial(res.read, as_json=True, validate_data_schema={"fields": None}),
+        )
+
+        # fail: invalid schema
+        self.assertRaises(
+            Exception,
+            partial(
+                res.read,
+                as_json=True,
+                validate_data_schema={
+                    "fields": [
+                        {"type": "integer", "name": "i"},
+                        {"type": "integer", "name": "s"},
+                    ]
+                },
+            ),
+        )
+
+        # works
+        res.read(as_json=True, validate_data_schema=schema)
+
+    def test_guess_dataschema(self):
+        data = [{"i": 1, "s": "s1"}, {"s": None, "i": 2}]
+        schema = {
+            "fields": [
+                {"type": "integer", "name": "i"},
+                {"type": "string", "name": "s"},
+            ]
+        }
+        guessed_schema = guess_dataschema(data)
+        self.assertEqual(dumpb(schema), dumpb(guessed_schema))

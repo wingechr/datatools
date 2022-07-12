@@ -116,14 +116,15 @@ class Resource(ABC):
         if not as_json or validate_bytes_hash:
             data_bytes = to_bytes(data)
 
-        if validate_bytes_hash:
+        if validate_bytes_hash is not None:
             validate_hash(data_bytes, validate_bytes_hash)
 
         if as_json:
             data = to_json(data)
-            if validate_json_schema:
+
+            if validate_json_schema is not None:
                 validate_jsonschema(data, validate_json_schema)
-            if validate_data_schema:
+            if validate_data_schema is not None:
                 validate_dataschema(data, validate_data_schema)
 
         else:
