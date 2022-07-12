@@ -3,7 +3,7 @@ from functools import partial
 from tempfile import TemporaryDirectory
 from test import TestCase
 
-from datatools.resource import DatapackageResource, FileResource, resource
+from datatools.resource import FileResource, resource
 from datatools.utils.json import dumpb
 from datatools.utils.temp import NamedClosedTemporaryFile
 
@@ -68,7 +68,7 @@ class TestResource(TestCase):
     def test_dpg(self):
         data_in = [{"i": 1, "s": "s1"}, {"s": None, "i": 2}]
         with TemporaryDirectory() as tempdir:
-            res = DatapackageResource(tempdir + "#test.json")
+            res = resource(tempdir + "#test.json")
             report = res.write(data_in)
             self.assertTrue(os.path.isfile(tempdir + "/datapackage.json"))
             self.assertEqual(
@@ -80,7 +80,7 @@ class TestResource(TestCase):
             self.assertRaises(Exception, res.write, data_in)
             res.write(data_in, overwrite=True)  # works now
 
-            report = DatapackageResource(tempdir + "#test2.json").write(data_in)
+            report = resource(tempdir + "#test2.json").write(data_in)
             self.assertTrue(os.path.isfile(tempdir + "/data/test2.json"))
             # same hash, but different name (only data is hashed)
             self.assertEqual(
@@ -98,5 +98,5 @@ class TestResource(TestCase):
             )
 
             # load dp
-            data = DatapackageResource(tempdir + "#test.json").read()
+            data = resource(tempdir + "#test.json").read()
             self.assertEqual(data, dumpb(data_in))

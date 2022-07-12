@@ -351,16 +351,18 @@ class DatapackageResource(Resource):
 def resource(uri_or_path: str) -> Resource:
     if not is_uri(uri_or_path):
         # it's a path
-        scheme = "file"
+        if "#" in uri_or_path:
+            scheme = "dpr"  # its a datapackage resource
+        else:
+            scheme = "file"
     else:
         scheme = get_scheme(uri_or_path)
 
     if scheme == "file":
         cls = FileResource
 
-    # elif scheme == "dpr": # FIXME: for fiel and dpr: parse uri
-    #    cls = DatapackageResource
-
+    elif scheme == "dpr":  # FIXME: for file and dpr: parse uri
+        cls = DatapackageResource
     elif scheme.startswith("http"):
         cls = HttpResource
     elif "sql" in scheme:
