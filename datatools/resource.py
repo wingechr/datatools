@@ -7,7 +7,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 import pandas as pd
 import requests
 
-from datatools.utils.byte import hash
+from datatools.utils.byte import hash, validate_hash
 from datatools.utils.collection import FrozenUniqueMap
 from datatools.utils.datetime import fmt_datetime_tz, now
 from datatools.utils.env import get_user
@@ -15,6 +15,7 @@ from datatools.utils.json import dumpb as json_dumpb
 from datatools.utils.json import dumps as json_dumps
 from datatools.utils.json import load as json_load
 from datatools.utils.json import loadb as json_loadb
+from datatools.utils.json import validate_dataschema, validate_jsonschema
 
 logging.basicConfig(
     format="[%(asctime)s %(levelname)7s] %(message)s",
@@ -104,22 +105,42 @@ class Report(FrozenUniqueMap):
 
 
 class Resource(ABC):
-    def read(self, as_json=False) -> bytes | object:
+    def read(
+        self,
+        as_json=False,
+        validate_bytes_hash: str = None,
+        validate_json_schema: str | dict | bool = None,
+        validate_data_schema: dict = None,
+    ) -> bytes | object:
         data = self._read()
+        if not as_json or validate_bytes_hash:
+            data_bytes = to_bytes(data)
+
+        if validate_bytes_hash:
+            validate_hash(data_bytes, validate_bytes_hash)
+
         if as_json:
             data = to_json(data)
+            if validate_json_schema:
+                validate_jsonschema(data, validate_json_schema)
+            if validate_data_schema:
+                validate_dataschema(data, validate_data_schema)
+
         else:
-            data = to_bytes(data)
+            if validate_json_schema:
+                raise Exception("cannot use json validate on bytes")
+            if validate_data_schema:
+                raise Exception("cannot use data validate on bytes")
+            data = data_bytes
+
         return data
 
     def write(self, data: bytes | object, overwrite=False) -> Report:
         result = self._write(data, overwrite=overwrite)
-        if isinstance(result, bytes):
-            return Report(result)
-        elif isinstance(result, Report):
+        if isinstance(result, Report):
             return result
-        else:
-            raise TypeError(type(result))
+        result = to_bytes(result)
+        return Report(result)
 
     @abstractmethod
     def _read(self) -> bytes | object:
@@ -211,7 +232,7 @@ class SqlResource(Resource):
         table = self.query_get_single("table")
         assert table
         schema = self.query_get_single("schema")
-        data_bytes = to_bytes(data)
+        data_bytes = to_bytes(data)  # check if it can be serialized
         data = to_json(data)
         df = pd.DataFrame(data)
         if_exists = "append" if overwrite else "fail"  # TODO: replace?
@@ -241,7 +262,7 @@ class HttpResource(Resource):
 
     def _write(self, data: bytes | object, overwrite=False) -> bytes:
         if not overwrite:
-            raise NotImplementedError("overwrite not yet defined for http")
+            raise NotImplementedError("check existence not yet defined for http")
         # todo: content type header?
         data = to_bytes(data)
         resp = requests.post(self.uri, data)
@@ -346,6 +367,22 @@ class DatapackageResource(Resource):
         if not err_on_exist:
             raise KeyError(name)
         return None
+
+
+class MemoryResource(Resource):
+    __slots__ = ["__data"]
+
+    def __init__(self, data=None):
+        self.__data = data
+
+    def _read(self) -> bytes | object:
+        return self.__data
+
+    def _write(self, data: bytes | object, overwrite=False) -> bytes:
+        if self.__data is not None and not overwrite:
+            raise Exception("read only")
+        self.__data = data
+        return self.__data
 
 
 def resource(uri_or_path: str) -> Resource:
