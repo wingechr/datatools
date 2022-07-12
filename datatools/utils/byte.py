@@ -13,6 +13,19 @@ def hash(byte_data, method="sha256") -> str:
     return iterator.get_current_hash()
 
 
+def validate(byte_data, method, hashsum):
+    data_hashsum = hash(byte_data, method=method)
+    if hashsum != data_hashsum:
+        raise Exception(
+            "Validation Error: expected %s does not match %s", hashsum, data_hashsum
+        )
+
+
+def validate_hash(byte_data, hash):
+    method, hashsum = hash.split(":")
+    return validate(byte_data, method, hashsum)
+
+
 class Iterator:
     __slots__ = [
         "data_stream",

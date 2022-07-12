@@ -4,6 +4,7 @@ import logging  # noqa
 import jsonschema
 import requests
 import requests_cache
+from frictionless.validate import validate_resource
 
 from ..utils.byte import hash as byte_hash
 
@@ -19,18 +20,29 @@ def load_schema(uri: str) -> object:
     return load(uri)
 
 
-def validate(json, schema=None) -> object:
-    if not schema:
-        uri = json["$schema"]
-        schema = load_schema(uri)
-    elif isinstance(schema, str):
+def validate_jsonschema(data, schema: str | dict | bool = True) -> object:
+    if isinstance(schema, str):
         schema = load_schema(schema)
+    elif isinstance(schema, dict):
+        pass
+    elif schema is True:
+        uri = data["$schema"]
+        schema = load_schema(uri)
+    else:
+        raise NotImplementedError(schema)
 
-    jsonschema.validate(json, schema)
-    return json
+    jsonschema.validate(data, schema)
+
+    return data
 
 
-class Validator:
+def validate_dataschema(data, schema):
+    res = validate_resource({"data": data, "schema": schema})
+    print(res)
+    return data
+
+
+class SchemaValidator:
     __slots__ = []
 
     def __init__(self, schema):
@@ -39,7 +51,7 @@ class Validator:
         self.schema = schema
 
     def validate(self, json):
-        return validate(json, self.schema)
+        return validate_jsonschema(json, self.schema)
 
 
 def dumps(data: object, serialize=None) -> str:
@@ -76,3 +88,7 @@ def load(file_path: str) -> object:
 def hash(data, method="sha256") -> str:
     bytes_data = dumpb(data)
     return byte_hash(bytes_data, method=method)
+
+
+def validate_data(data, schema):
+    pass

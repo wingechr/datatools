@@ -50,8 +50,8 @@ def json(ctx):
 @click.option("--schema-file", "-s", type=click.types.Path(exists=True), default=None)
 def json_validate(ctx, json_file: object, schema_file=None):
     json = datatools.utils.json.load(json_file)
-    schema = datatools.utils.json.load(schema_file) if schema_file else None
-    datatools.utils.json.validate(json, schema)
+    schema = datatools.utils.json.load(schema_file) if schema_file else True
+    datatools.utils.json.validate_jsonschema(json, schema)
 
 
 @main.command(name="hash")
