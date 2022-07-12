@@ -1,15 +1,20 @@
 import logging
 import os
 import re
+from abc import ABC, abstractmethod
 from urllib.parse import parse_qs, unquote, urlparse
 
 import pandas as pd
 import requests
 
+from datatools.utils.byte import hash
+from datatools.utils.collection import FrozenUniqueMap
+from datatools.utils.datetime import fmt_datetime_tz, now
+from datatools.utils.env import get_user
 from datatools.utils.json import dumpb as json_dumpb
 from datatools.utils.json import dumps as json_dumps
+from datatools.utils.json import load as json_load
 from datatools.utils.json import loadb as json_loadb
-from datatools.utils.json import loads as json_loads
 
 logging.basicConfig(
     format="[%(asctime)s %(levelname)7s] %(message)s",
@@ -64,38 +69,72 @@ def uri_to_path(uri):
     return path
 
 
-class Resource:
-    def read_bytes(self):
+def to_json(x):
+    if isinstance(x, bytes):
+        return json_loadb(x)
+    elif isinstance(x, Resource):
+        return to_json(x.read())
+    return x
+
+
+def to_bytes(x):
+    if isinstance(x, bytes):
+        return x
+    elif isinstance(x, Resource):
+        return to_bytes(x.read())
+    return json_dumpb(x)
+
+
+class Report(FrozenUniqueMap):
+    def __init__(self, data_bytes, hash_method="sha256"):
+        hashsum = hash(data_bytes, method=hash_method)
+        data = {
+            "hash": f"{hash_method}:{hashsum}",
+            "size": len(data_bytes),
+            "user": get_user(),
+            "timestamp": fmt_datetime_tz(now()),
+        }
+        super().__init__(data.items())
+
+    def to_dict(self):
+        return dict(self.items())
+
+    def __str__(self):
+        return json_dumps(self.to_dict())
+
+
+class Resource(ABC):
+    def read(self, as_json=False) -> bytes | object:
+        data = self._read()
+        if as_json:
+            data = to_json(data)
+        else:
+            data = to_bytes(data)
+        return data
+
+    def write(self, data: bytes | object, overwrite=False) -> Report:
+        result = self._write(data, overwrite=overwrite)
+        if isinstance(result, bytes):
+            return Report(result)
+        elif isinstance(result, Report):
+            return result
+        else:
+            raise TypeError(type(result))
+
+    @abstractmethod
+    def _read(self) -> bytes | object:
         raise NotImplementedError()
 
-    def read_text(self):
-        data_bytes = self.read_bytes()
-        return data_bytes.decode()
-
-    def read_json(self):
-        data_bytes = self.read_bytes()
-        return json_loadb(data_bytes)
-
-    def write_bytes(self, byte_data: bytes, overwrite=False):
+    @abstractmethod
+    def _write(self, data: bytes | object, overwrite=False) -> bytes | Report:
         raise NotImplementedError()
-
-    def write_text(self, text_data: str, overwrite=False):
-        data_bytes = text_data.encode()
-        return self.write_bytes(data_bytes, overwrite=overwrite)
-
-    def write_json(self, data: object, overwrite=False):
-        data_bytes = json_dumpb(data)
-        return self.write_bytes(data_bytes, overwrite=overwrite)
-
-    def write_resource(self, resource: object, overwrite=False):
-        data_bytes = resource.read_bytes()
-        return self.write_bytes(data_bytes, overwrite=overwrite)
 
 
 class FileResource(Resource):
     __slots__ = ["__path"]
 
     def __init__(self, path):
+        path = path.replace("\\", "/")
         self.__path = path
 
     @property
@@ -106,20 +145,25 @@ class FileResource(Resource):
     def filepath(self):
         return os.path.abspath(self.path)
 
-    def read_bytes(self):
-        with open(self.filepath, "rb") as file:
-            return file.read()
-
     def exists(self):
         return os.path.exists(self.filepath)
 
-    def write_bytes(self, byte_data: bytes, overwrite=False):
+    def _read(self) -> bytes | object:
+        with open(self.filepath, "rb") as file:
+            data = file.read()
+        return data
+
+    def _write(self, data: bytes | object, overwrite=False) -> bytes:
+        # prepare folder
         if not overwrite and self.exists():
             raise FileExistsError(self.filepath)
         os.makedirs(os.path.dirname(self.filepath), exist_ok=True)
+
+        data = to_bytes(data)
+
         try:
             with open(self.filepath, "wb") as file:
-                file.write(byte_data)
+                file.write(data)
         except Exception:
             # cleanup
             if self.exists():
@@ -128,6 +172,8 @@ class FileResource(Resource):
                 except Exception:
                     pass
             raise
+
+        return data
 
 
 class SqlResource(Resource):
@@ -147,15 +193,7 @@ class SqlResource(Resource):
     def uri(self):
         return self.__uri
 
-    def read_bytes(self):
-        data = self.read_json(resource)
-        return json_dumpb(data)
-
-    def read_text(self):
-        data = self.read_json(resource)
-        return json_dumps(data)
-
-    def read_json(self):
+    def _read(self) -> bytes | object:
         sql = self.query_get_single("sql")
         table = self.query_get_single("table")
         if sql:
@@ -166,20 +204,15 @@ class SqlResource(Resource):
             raise ValueError("table or sql")
 
         data = df.to_dict(orient="records")
+
         return data
 
-    def write_bytes(self, byte_data: bytes, overwrite=False):
-        data = json_loadb(byte_data)
-        return self.write_json(data, overwrite=overwrite)
-
-    def write_text(self, text_data: str, overwrite=False):
-        data = json_loads(text_data)
-        return self.write_json(data, overwrite=overwrite)
-
-    def write_json(self, data: object, overwrite=False):
+    def _write(self, data: bytes | object, overwrite=False) -> bytes:
         table = self.query_get_single("table")
         assert table
         schema = self.query_get_single("schema")
+        data_bytes = to_bytes(data)
+        data = to_json(data)
         df = pd.DataFrame(data)
         if_exists = "append" if overwrite else "fail"  # TODO: replace?
         df.to_sql(
@@ -190,6 +223,7 @@ class SqlResource(Resource):
             if_exists=if_exists,
             method="multi",
         )
+        return data_bytes
 
 
 class HttpResource(Resource):
@@ -200,17 +234,118 @@ class HttpResource(Resource):
     def uri(self):
         return self.__uri
 
-    def read_bytes(self):
+    def _read(self) -> bytes | object:
         resp = requests.get(self.uri)
         resp.raise_for_status()
         return resp.content
 
-    def write_bytes(self, byte_data: bytes, overwrite=False):
+    def _write(self, data: bytes | object, overwrite=False) -> bytes:
         if not overwrite:
             raise NotImplementedError("overwrite not yet defined for http")
         # todo: content type header?
-        resp = requests.post(self.uri, byte_data)
+        data = to_bytes(data)
+        resp = requests.post(self.uri, data)
         resp.raise_for_status()
+        return data
+
+
+class DatapackageResource(Resource):
+    __slots__ = ["__base_path", "__name"]
+
+    def __init__(self, path):
+        # __resource_name is like fragment
+        base_path, resource_name = path.split("#")
+        self.__base_path = base_path.replace("\\", "/").rstrip("/")
+        self.__name = resource_name
+
+    @property
+    def base_path(self):
+        return self.__base_path
+
+    @property
+    def name(self):
+        return self.__name
+
+    @property
+    def datapackage_json_path(self):
+        return self.__base_path + "/datapackage.json"
+
+    def get_path(self, resource: dict) -> str:
+        path = resource["path"]
+        assert path.startswith("data/")
+        path = self.__base_path + "/" + path
+        return path
+
+    def _read(self) -> bytes | object:
+        package = self.__load_datapackage_json()
+        idx = self.__get_resource_index_by_name(package, self.name)
+        resource = package["resources"][idx]
+        if "data" in resource:
+            return resource["data"]
+        else:
+            path = self.get_path(resource)
+            return FileResource(path).read()
+
+    def _write(self, data: bytes | object, overwrite=False) -> Report:
+        package = self.__load_datapackage_json()
+        resources = package["resources"]
+        err_on_exist = not overwrite
+        resource_idx = self.__get_resource_index_by_name(
+            package, self.name, err_on_exist=err_on_exist
+        )
+        if resource_idx is None:
+            resource_idx = len(resources)
+            resources.append({})  # add dummy, will be filled later
+        else:  # existing and overwrite is ok
+            resource = resources[resource_idx]
+            # if path exists: delete
+            if "path" in resource:
+                path = self.get_path(resource)
+                if not os.path.isfile(path):
+                    logging.warning("referenced file does not exist: %s", path)
+                else:
+                    os.remove(path)
+        resource = {"name": self.name, "path": "data/" + self.name}
+        resources[resource_idx] = resource
+        path = self.get_path(resource)
+        report = FileResource(path).write(data, overwrite=False)
+        resource["hash"] = report["hash"]
+        resource["size"] = report["size"]
+        resource["changed"] = {"user": report["user"], "timestamp": report["timestamp"]}
+
+        # update new id of package: hash over name + hash of resources
+        # TODO: what if has doed not exist
+        package_hash_data = [{"name": r["name"], "hash": r["hash"]} for r in resources]
+        package_hash_data = to_bytes(package_hash_data)
+        package_report = Report(package_hash_data)
+        package["hash"] = package_report["hash"]
+        package["changed"] = {"user": report["user"], "timestamp": report["timestamp"]}
+
+        # write index
+        FileResource(self.datapackage_json_path).write(package, overwrite=True)
+
+        return report
+
+    def __load_datapackage_json(self):
+        # ensure base_dir exists
+        if not os.path.exists(self.base_path):
+            os.makedirs(self.base_path)
+        if not os.path.exists(self.datapackage_json_path):
+            name = os.path.basename(self.base_path)
+            data = {"name": name, "resources": []}
+        else:
+            data = json_load(self.datapackage_json_path)
+        return data
+
+    def __get_resource_index_by_name(self, package, name, err_on_exist=False) -> int:
+        for idx, res in enumerate(package["resources"]):
+            if res["name"] == name:
+                if err_on_exist:
+                    raise KeyError(name)
+                return idx
+        if not err_on_exist:
+            raise KeyError(name)
+        return None
 
 
 def resource(uri_or_path: str) -> Resource:
@@ -222,6 +357,10 @@ def resource(uri_or_path: str) -> Resource:
 
     if scheme == "file":
         cls = FileResource
+
+    # elif scheme == "dpr": # FIXME: for fiel and dpr: parse uri
+    #    cls = DatapackageResource
+
     elif scheme.startswith("http"):
         cls = HttpResource
     elif "sql" in scheme:
