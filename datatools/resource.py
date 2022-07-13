@@ -136,7 +136,26 @@ class Resource(ABC):
 
         return data
 
-    def write(self, data: bytes | object, overwrite=False) -> Report:
+    def write(
+        self,
+        data: bytes | object,
+        overwrite=False,
+        validate_bytes_hash: str = None,
+        validate_json_schema: str | dict | bool = None,
+        validate_data_schema: dict = None,
+    ) -> Report:
+
+        if validate_bytes_hash is not None:
+            data_bytes = to_bytes(data)
+            validate_hash(data_bytes, validate_bytes_hash)
+
+        if validate_json_schema or validate_data_schema:
+            data_json = to_json(data)
+            if validate_json_schema is not None:
+                validate_jsonschema(data_json, validate_json_schema)
+            if validate_data_schema is not None:
+                validate_dataschema(data_json, validate_data_schema)
+
         result = self._write(data, overwrite=overwrite)
         if isinstance(result, Report):
             return result

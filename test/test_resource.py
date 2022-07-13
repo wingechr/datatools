@@ -29,18 +29,11 @@ class TestResource(TestCase):
         # in file (absolute path)
         with NamedClosedTemporaryFile(suffix=".sqlite3") as tempfilepath:
             res = resource(f"sqlite:///{tempfilepath}?sql={sql}")
-            data = res.read(as_json=True)
-        self.assertEqual(data[0]["one"], 1)
-        self.assertEqual(data[0]["na"], None)
-
-        # in file (absolute path)
-        with NamedClosedTemporaryFile(suffix=".sqlite3", dir=".") as tempfilepath:
-            res = resource(f"sqlite:///{tempfilepath}?sql={sql}")
             # also check hash validation
             data = res.read(
                 as_json=True,
                 validate_bytes_hash="sha256:95a6249e7b6320a180257f4834fd274154f4272a38c51d2e6675ccdbabe42852",  # noqa
-            )  # noqa
+            )
         self.assertEqual(data[0]["one"], 1)
         self.assertEqual(data[0]["na"], None)
 
