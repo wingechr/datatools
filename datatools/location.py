@@ -6,6 +6,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 import pandas as pd
 import requests
+import requests_cache
 
 from datatools.utils.byte import hash, validate_hash
 from datatools.utils.collection import FrozenUniqueMap
@@ -15,13 +16,9 @@ from datatools.utils.json import dumpb as json_dumpb
 from datatools.utils.json import dumps as json_dumps
 from datatools.utils.json import load as json_load
 from datatools.utils.json import loadb as json_loadb
-from datatools.utils.json import validate_dataschema, validate_jsonschema
+from datatools.utils.json import validate_json_schema, validate_resource_schema
 
-logging.basicConfig(
-    format="[%(asctime)s %(levelname)7s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    level=logging.DEBUG,
-)
+requests_cache.install_cache("datatools_schema_cache", backend="sqlite", use_temp=True)
 
 
 def is_uri(uri_or_path: str) -> bool:
@@ -73,7 +70,7 @@ def uri_to_path(uri):
 def to_json(x):
     if isinstance(x, bytes):
         return json_loadb(x)
-    elif isinstance(x, Resource):
+    elif isinstance(x, Location):
         return to_json(x.read())
     return x
 
@@ -81,7 +78,7 @@ def to_json(x):
 def to_bytes(x):
     if isinstance(x, bytes):
         return x
-    elif isinstance(x, Resource):
+    elif isinstance(x, Location):
         return to_bytes(x.read())
     return json_dumpb(x)
 
@@ -104,33 +101,33 @@ class Report(FrozenUniqueMap):
         return json_dumps(self.to_dict())
 
 
-class Resource(ABC):
+class Location(ABC):
     def read(
         self,
         as_json=False,
-        validate_bytes_hash: str = None,
-        validate_json_schema: str | dict | bool = None,
-        validate_data_schema: dict = None,
+        bytes_hash: str = None,
+        json_schema: str | dict | bool = None,
+        data_schema: dict = None,
     ) -> bytes | object:
         data = self._read()
-        if not as_json or validate_bytes_hash:
+        if not as_json or bytes_hash:
             data_bytes = to_bytes(data)
 
-        if validate_bytes_hash is not None:
-            validate_hash(data_bytes, validate_bytes_hash)
+        if bytes_hash is not None:
+            validate_hash(data_bytes, bytes_hash)
 
         if as_json:
             data = to_json(data)
 
-            if validate_json_schema is not None:
-                validate_jsonschema(data, validate_json_schema)
-            if validate_data_schema is not None:
-                validate_dataschema(data, validate_data_schema)
+            if json_schema is not None:
+                validate_json_schema(data, json_schema)
+            if data_schema is not None:
+                validate_resource_schema(data, data_schema)
 
         else:
-            if validate_json_schema:
+            if json_schema:
                 raise Exception("cannot use json validate on bytes")
-            if validate_data_schema:
+            if data_schema:
                 raise Exception("cannot use data validate on bytes")
             data = data_bytes
 
@@ -140,21 +137,21 @@ class Resource(ABC):
         self,
         data: bytes | object,
         overwrite=False,
-        validate_bytes_hash: str = None,
-        validate_json_schema: str | dict | bool = None,
-        validate_data_schema: dict = None,
+        bytes_hash: str = None,
+        json_schema: str | dict | bool = None,
+        data_schema: dict = None,
     ) -> Report:
 
-        if validate_bytes_hash is not None:
+        if bytes_hash is not None:
             data_bytes = to_bytes(data)
-            validate_hash(data_bytes, validate_bytes_hash)
+            validate_hash(data_bytes, bytes_hash)
 
-        if validate_json_schema or validate_data_schema:
+        if json_schema or data_schema:
             data_json = to_json(data)
-            if validate_json_schema is not None:
-                validate_jsonschema(data_json, validate_json_schema)
-            if validate_data_schema is not None:
-                validate_dataschema(data_json, validate_data_schema)
+            if json_schema is not None:
+                validate_json_schema(data_json, json_schema)
+            if data_schema is not None:
+                validate_resource_schema(data_json, data_schema)
 
         result = self._write(data, overwrite=overwrite)
         if isinstance(result, Report):
@@ -171,7 +168,7 @@ class Resource(ABC):
         raise NotImplementedError()
 
 
-class FileResource(Resource):
+class FileLocation(Location):
     __slots__ = ["__path"]
 
     def __init__(self, path):
@@ -217,7 +214,7 @@ class FileResource(Resource):
         return data
 
 
-class SqlResource(Resource):
+class SqlLocation(Location):
     __slots__ = ["__query", "__uri"]
 
     def __init__(self, uri):
@@ -267,7 +264,7 @@ class SqlResource(Resource):
         return data_bytes
 
 
-class HttpResource(Resource):
+class HttpLocation(Location):
     def __init__(self, uri):
         self.__uri = uri
 
@@ -290,7 +287,7 @@ class HttpResource(Resource):
         return data
 
 
-class DatapackageResource(Resource):
+class DatapackageResourceLocation(Location):
     __slots__ = ["__base_path", "__name"]
 
     def __init__(self, path):
@@ -325,7 +322,7 @@ class DatapackageResource(Resource):
             return resource["data"]
         else:
             path = self.get_path(resource)
-            return FileResource(path).read()
+            return FileLocation(path).read()
 
     def _write(self, data: bytes | object, overwrite=False) -> Report:
         package = self.__load_datapackage_json()
@@ -349,7 +346,7 @@ class DatapackageResource(Resource):
         resource = {"name": self.name, "path": "data/" + self.name}
         resources[resource_idx] = resource
         path = self.get_path(resource)
-        report = FileResource(path).write(data, overwrite=False)
+        report = FileLocation(path).write(data, overwrite=False)
         resource["hash"] = report["hash"]
         resource["size"] = report["size"]
         resource["changed"] = {"user": report["user"], "timestamp": report["timestamp"]}
@@ -363,7 +360,7 @@ class DatapackageResource(Resource):
         package["changed"] = {"user": report["user"], "timestamp": report["timestamp"]}
 
         # write index
-        FileResource(self.datapackage_json_path).write(package, overwrite=True)
+        FileLocation(self.datapackage_json_path).write(package, overwrite=True)
 
         return report
 
@@ -389,7 +386,7 @@ class DatapackageResource(Resource):
         return None
 
 
-class MemoryResource(Resource):
+class MemoryLocation(Location):
     __slots__ = ["__data"]
 
     def __init__(self, data=None):
@@ -405,7 +402,7 @@ class MemoryResource(Resource):
         return self.__data
 
 
-def resource(uri_or_path: str) -> Resource:
+def location(uri_or_path: str) -> Location:
     if not is_uri(uri_or_path):
         # it's a path
         if "#" in uri_or_path:
@@ -416,14 +413,14 @@ def resource(uri_or_path: str) -> Resource:
         scheme = get_scheme(uri_or_path)
 
     if scheme == "file":
-        cls = FileResource
+        cls = FileLocation
 
     elif scheme == "dpr":  # FIXME: for file and dpr: parse uri
-        cls = DatapackageResource
+        cls = DatapackageResourceLocation
     elif scheme.startswith("http"):
-        cls = HttpResource
+        cls = HttpLocation
     elif "sql" in scheme:
-        cls = SqlResource
+        cls = SqlLocation
     else:
         raise NotImplementedError(scheme)
 

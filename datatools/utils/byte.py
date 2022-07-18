@@ -47,12 +47,12 @@ class Iterator:
 
         self.iter_buffer = None
 
-        logging.debug("%s", type(data_stream))
+        # logging.debug("%s", type(data_stream))
         if isinstance(data_stream, str):
-            logging.debug("opening file: %s", data_stream)
+            # logging.debug("opening file: %s", data_stream)
             self.data_stream = open(data_stream, "rb")
         elif isinstance(data_stream, bytes):
-            logging.debug("buffer data: %s")
+            # logging.debug("buffer data: %s")
             self.data_stream = BytesIO(data_stream)
         elif isinstance(data_stream, (BytesIO, BufferedReader)):
             self.data_stream = data_stream
@@ -96,7 +96,7 @@ class Iterator:
                 self.iter_buffer = b""
 
         self.size += len(chunk)
-        logging.debug("read %d bytes (max_size=%d)", len(chunk), size)
+        # logging.debug("read %d bytes (max_size=%d)", len(chunk), size)
         if self.hasher:
             self.hasher.update(chunk)
         return chunk

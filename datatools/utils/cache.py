@@ -19,7 +19,7 @@ class FileCache:
         if not base_dir:
             base_dir = mkdtemp(prefix="datatools.cache.")
         self.base_dir = abspath(base_dir)
-        logging.debug("cache dir: %s", self.base_dir)
+        # logging.debug("cache dir: %s", self.base_dir)
         makedirs(self.base_dir)
 
     def _get_path_from_id(

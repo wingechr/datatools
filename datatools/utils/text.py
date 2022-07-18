@@ -6,7 +6,7 @@ import inflection
 import unidecode
 
 
-def normalize(name):
+def normalize(name, allowed_chars="a-z0-9", sep="_"):
 
     name = unquote_plus(name)
 
@@ -29,7 +29,7 @@ def normalize(name):
 
     # lower case and remove all blocks of invalid characters
     name = name.lower()
-    name = re.sub("[^a-z0-9]+", "_", name)
-    name = name.rstrip("_")
+    name = re.sub("[^" + allowed_chars + "]+", sep, name)
+    name = name.rstrip(sep)
 
     return name
