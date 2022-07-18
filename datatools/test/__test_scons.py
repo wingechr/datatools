@@ -2,7 +2,8 @@ import os
 import subprocess as sp
 import tempfile
 from os.path import abspath
-from test import TestCase
+
+from datatools.test import TestCase
 
 
 class __TODO__TestScons(TestCase):

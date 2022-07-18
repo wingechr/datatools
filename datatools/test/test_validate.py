@@ -1,8 +1,8 @@
 from functools import partial
-from test import TestCase
 
 from jsonschema.exceptions import SchemaError
 
+from datatools.test import TestCase
 from datatools.utils.json import SchemaValidator, validate_resource
 
 

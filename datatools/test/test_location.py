@@ -1,9 +1,9 @@
 import os
 from functools import partial
 from tempfile import TemporaryDirectory
-from test import TestCase
 
 from datatools.location import MemoryLocation, location
+from datatools.test import TestCase
 from datatools.utils.json import dumpb, guess_data_schema
 from datatools.utils.temp import NamedClosedTemporaryFile
 

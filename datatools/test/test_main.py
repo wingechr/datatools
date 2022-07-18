@@ -1,6 +1,6 @@
 import os
-from test import JSONSCHEMA_JSON, SCHEMA_DIR, TestCase
 
+from datatools.test import JSONSCHEMA_JSON, SCHEMA_DIR, TestCase
 from datatools.utils.temp import NamedClosedTemporaryFile
 
 

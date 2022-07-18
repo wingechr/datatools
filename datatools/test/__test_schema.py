@@ -1,8 +1,8 @@
 """Test all schemata"""
 import os
 from functools import partial
-from test import JSONSCHEMA_JSON, SCHEMA_DIR, TestCase
 
+from datatools.test import JSONSCHEMA_JSON, SCHEMA_DIR, TestCase
 from datatools.utils.json import (
     SCHEMA_SUFFIX,
     SchemaValidator,

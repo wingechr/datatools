@@ -2,9 +2,9 @@ import datetime
 import os
 from functools import partial
 from os.path import getsize
-from test import TestCase
 
 from datatools import utils
+from datatools.test import TestCase
 
 
 class TestHash(TestCase):
