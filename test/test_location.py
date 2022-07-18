@@ -3,44 +3,44 @@ from functools import partial
 from tempfile import TemporaryDirectory
 from test import TestCase
 
-from datatools.resource import MemoryResource, resource
-from datatools.utils.json import dumpb, guess_dataschema
+from datatools.location import MemoryLocation, location
+from datatools.utils.json import dumpb, guess_data_schema
 from datatools.utils.temp import NamedClosedTemporaryFile
 
 
 class TestResource(TestCase):
     def test_read(self):
-        res = resource(__file__)
+        res = location(__file__)
         bytes = res.read()
         self.assertEqual(len(bytes), os.path.getsize(__file__))
 
-        res = resource("http://example.com")
+        res = location("http://example.com")
         text = res.read()
         self.assertTrue(len(text) > 0)
 
         sql = "select 1 as one, null as na"
 
         # in memory
-        res = resource(f"sqlite://?sql={sql}")
+        res = location(f"sqlite://?sql={sql}")
         data = res.read(as_json=True)
         self.assertEqual(data[0]["one"], 1)
         self.assertEqual(data[0]["na"], None)
 
         # in file (absolute path)
         with NamedClosedTemporaryFile(suffix=".sqlite3") as tempfilepath:
-            res = resource(f"sqlite:///{tempfilepath}?sql={sql}")
+            res = location(f"sqlite:///{tempfilepath}?sql={sql}")
             # also check hash validation
             data = res.read(
                 as_json=True,
-                validate_bytes_hash="sha256:95a6249e7b6320a180257f4834fd274154f4272a38c51d2e6675ccdbabe42852",  # noqa
+                bytes_hash="sha256:95a6249e7b6320a180257f4834fd274154f4272a38c51d2e6675ccdbabe42852",  # noqa
             )
         self.assertEqual(data[0]["one"], 1)
         self.assertEqual(data[0]["na"], None)
 
     def test_write(self):
         with NamedClosedTemporaryFile() as tempfilepath:
-            res_src = resource(__file__)
-            res_tgt = resource(tempfilepath)
+            res_src = location(__file__)
+            res_tgt = location(tempfilepath)
             self.assertRaises(
                 FileExistsError, partial(res_tgt.write, b"", overwrite=False)
             )
@@ -52,7 +52,7 @@ class TestResource(TestCase):
 
         with NamedClosedTemporaryFile(suffix=".sqlite3", dir=".") as tempfilepath:
             data_in = [{"i": 1, "s": "s1"}, {"s": None, "i": 2}]
-            res = resource(f"sqlite:///{tempfilepath}?table=test")
+            res = location(f"sqlite:///{tempfilepath}?table=test")
             report = res.write(data_in, overwrite=False)
             self.assertEqual(
                 report["hash"],
@@ -65,7 +65,7 @@ class TestResource(TestCase):
     def test_dpg(self):
         data_in = [{"i": 1, "s": "s1"}, {"s": None, "i": 2}]
         with TemporaryDirectory() as tempdir:
-            res = resource(tempdir + "#test.json")
+            res = location(tempdir + "#test.json")
             report = res.write(data_in)
             self.assertTrue(os.path.isfile(tempdir + "/datapackage.json"))
             self.assertEqual(
@@ -77,7 +77,7 @@ class TestResource(TestCase):
             self.assertRaises(Exception, res.write, data_in)
             res.write(data_in, overwrite=True)  # works now
 
-            report = resource(tempdir + "#test2.json").write(data_in)
+            report = location(tempdir + "#test2.json").write(data_in)
             self.assertTrue(os.path.isfile(tempdir + "/data/test2.json"))
             # same hash, but different name (only data is hashed)
             self.assertEqual(
@@ -86,19 +86,19 @@ class TestResource(TestCase):
             )
 
             # check if global hash is updated
-            hash = resource(tempdir + "/datapackage.json").read(as_json=True)["hash"]
+            hash = location(tempdir + "/datapackage.json").read(as_json=True)["hash"]
             self.assertEqual(
                 hash,
                 "sha256:0730b410d31df039f3c284ea0ac28cd27eb417bf13d078c98e854a8cf008c519",  # noqa
             )
 
             # load dp
-            data = resource(tempdir + "#test.json").read()
+            data = location(tempdir + "#test.json").read()
             self.assertEqual(data, dumpb(data_in))
 
     def test_validate_json_schema(self):
         # use in memory resource
-        res = MemoryResource({"key": 9})
+        res = MemoryLocation({"key": 9})
 
         # this should fail (wrong type)
         self.assertRaises(
@@ -112,7 +112,7 @@ class TestResource(TestCase):
         )
 
         # this should work
-        res.read(as_json=True, validate_json_schema={"type": "object"})
+        res.read(as_json=True, json_schema={"type": "object"})
 
     def test_validate_data_schema(self):
         data = [{"i": 1, "s": "s1"}, {"s": None, "i": 2}]
@@ -123,7 +123,7 @@ class TestResource(TestCase):
             ]
         }
 
-        res = MemoryResource(data)
+        res = MemoryLocation(data)
 
         # fail: no schema
         self.assertRaises(
@@ -152,7 +152,7 @@ class TestResource(TestCase):
         )
 
         # works
-        res.read(as_json=True, validate_data_schema=schema)
+        res.read(as_json=True, data_schema=schema)
 
     def test_guess_dataschema(self):
         data = [{"i": 1, "s": "s1"}, {"s": None, "i": 2}]
@@ -162,5 +162,5 @@ class TestResource(TestCase):
                 {"type": "string", "name": "s"},
             ]
         }
-        guessed_schema = guess_dataschema(data)
+        guessed_schema = guess_data_schema(data)
         self.assertEqual(dumpb(schema), dumpb(guessed_schema))

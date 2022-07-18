@@ -10,7 +10,7 @@ JSONSCHEMA_JSON = "jsonschema.schema.json"
 
 
 logging.basicConfig(
-    format="[%(asctime)s %(levelname)7s] %(message)s", level=logging.INFO
+    format="[%(asctime)s %(levelname)7s] %(message)s", level=logging.DEBUG
 )
 
 

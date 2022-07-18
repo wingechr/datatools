@@ -8,7 +8,7 @@ from datatools.utils.json import (
     SchemaValidator,
     load,
     load_schema,
-    validate_jsonschema,
+    validate_json_schema,
 )
 
 
@@ -24,12 +24,12 @@ class TestSchema(TestCase):
         self.assertTrue(file_paths)  # must have at least one
         for fp in file_paths:
             json = load(fp)
-            validate_jsonschema(json)
+            validate_json_schema(json)
 
     def test_load_schema_file(self):
         file_uri = f"{SCHEMA_DIR}/{JSONSCHEMA_JSON}"
         schema = load_schema(file_uri)
-        validate_jsonschema(schema, schema)
+        validate_json_schema(schema, schema)
 
 
 class TestValidate(TestCase):
