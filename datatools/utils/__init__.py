@@ -1,4 +1,15 @@
-from . import byte, cache, collection, datetime, env, filepath, json, temp, text
+from . import (
+    byte,
+    cache,
+    collection,
+    database,
+    datetime,
+    env,
+    filepath,
+    json,
+    temp,
+    text,
+)
 
 __all__ = [
     "json",
@@ -11,4 +22,5 @@ __all__ = [
     "collection",
     "text",
     "temp",
+    "database",
 ]

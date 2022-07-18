@@ -22,6 +22,8 @@ if __name__ == "__main__":
             "frictionless",
             "lxml",
             "openpyxl",
+            "pyodbc",
+            "geopandas",
         ],
         name="datatools",
         description="",  # should be one line

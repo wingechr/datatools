@@ -137,3 +137,20 @@ class TestTemp(TestCase):
         with utils.temp.NamedClosedTemporaryFile() as filepath:
             self.assertTrue(os.path.isfile(filepath))
         self.assertFalse(os.path.isfile(filepath))
+
+
+class TestDatabase(TestCase):
+    def test_database_uri(self):
+        self.assertEqual(utils.database.get_uri_sqlite(), "sqlite://")
+        self.assertEqual(
+            utils.database.get_uri_sqlite("/tmp/test.db"),
+            "sqlite:///tmp/test.db",  # noqa
+        )
+        self.assertEqual(
+            utils.database.get_uri_odbc_sqlite("/tmp/test.db"),
+            "sqlite+pyodbc:///?odbc_connect=driver=sqlite3 odbc driver;database=/tmp/test.db",  # noqa
+        )
+        self.assertEqual(
+            utils.database.get_uri_odbc_sqlserver("server", database="master"),
+            "mssql+pyodbc:///?odbc_connect=driver=sql server;server=server;database=master",  # noqa
+        )
