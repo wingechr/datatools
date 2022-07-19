@@ -24,6 +24,7 @@ if __name__ == "__main__":
             "openpyxl",
             "pyodbc",
             "geopandas",
+            "networkx",
         ],
         name="datatools",
         description="",  # should be one line

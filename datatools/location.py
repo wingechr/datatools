@@ -9,7 +9,7 @@ import requests
 import requests_cache
 
 from datatools.utils.byte import hash, validate_hash
-from datatools.utils.collection import FrozenUniqueMap
+from datatools.utils.collection import FrozenUniqueMap, UniqueMap
 from datatools.utils.datetime import fmt_datetime_tz, now
 from datatools.utils.env import get_user
 from datatools.utils.json import dumpb as json_dumpb
@@ -102,12 +102,25 @@ class Report(FrozenUniqueMap):
 
 
 class Location(ABC):
+    __slots__ = ["__uri"]
+
+    def __init__(self, uri):
+        self.__uri = uri
+
+    @property
+    def uri(self):
+        return self.__uri
+
+    @property
+    def supports_metadata(self):
+        return False
+
     def read(
         self,
         as_json=False,
         bytes_hash: str = None,
         json_schema: str | dict | bool = None,
-        data_schema: dict = None,
+        table_schema: dict = None,
     ) -> bytes | object:
         data = self._read()
         if not as_json or bytes_hash:
@@ -116,18 +129,21 @@ class Location(ABC):
         if bytes_hash is not None:
             validate_hash(data_bytes, bytes_hash)
 
+        if (json_schema or table_schema) and not as_json:
+            raise Exception("json_schema or table_schema require as_json")
+
         if as_json:
             data = to_json(data)
 
             if json_schema is not None:
                 validate_json_schema(data, json_schema)
-            if data_schema is not None:
-                validate_resource_schema(data, data_schema)
+            if table_schema is not None:
+                validate_resource_schema(data, table_schema)
 
         else:
             if json_schema:
                 raise Exception("cannot use json validate on bytes")
-            if data_schema:
+            if table_schema:
                 raise Exception("cannot use data validate on bytes")
             data = data_bytes
 
@@ -139,21 +155,29 @@ class Location(ABC):
         overwrite=False,
         bytes_hash: str = None,
         json_schema: str | dict | bool = None,
-        data_schema: dict = None,
+        table_schema: dict = None,
+        metadata: dict = None,
     ) -> Report:
+        if metadata and not self.supports_metadata:
+            raise NotImplementedError("Location does not support writing of metadata")
 
         if bytes_hash is not None:
             data_bytes = to_bytes(data)
             validate_hash(data_bytes, bytes_hash)
 
-        if json_schema or data_schema:
+        if json_schema or table_schema:
             data_json = to_json(data)
             if json_schema is not None:
                 validate_json_schema(data_json, json_schema)
-            if data_schema is not None:
-                validate_resource_schema(data_json, data_schema)
+            if table_schema is not None:
+                validate_resource_schema(data_json, table_schema)
 
-        result = self._write(data, overwrite=overwrite)
+        kwargs = {}
+        if metadata:
+            kwargs["metadata"] = metadata
+
+        result = self._write(data, overwrite=overwrite, **kwargs)
+
         if isinstance(result, Report):
             return result
         result = to_bytes(result)
@@ -167,12 +191,18 @@ class Location(ABC):
     def _write(self, data: bytes | object, overwrite=False) -> bytes | Report:
         raise NotImplementedError()
 
+    def __str__(self):
+        return self.uri
+
 
 class FileLocation(Location):
     __slots__ = ["__path"]
 
     def __init__(self, path):
         path = path.replace("\\", "/")
+        # TODO: relative uri
+        uri = f"file:///{path}"
+        super().__init__(uri=uri)
         self.__path = path
 
     @property
@@ -215,21 +245,17 @@ class FileLocation(Location):
 
 
 class SqlLocation(Location):
-    __slots__ = ["__query", "__uri"]
+    __slots__ = ["__query"]
 
     def __init__(self, uri):
         # remove query
         uri, query = uri.split("?")
+        super().__init__(uri=uri)
         query = parse_query(query)
         self.__query = query
-        self.__uri = uri
 
     def query_get_single(self, key):
         return get_single(self.__query, key)
-
-    @property
-    def uri(self):
-        return self.__uri
 
     def _read(self) -> bytes | object:
         sql = self.query_get_single("sql")
@@ -266,11 +292,7 @@ class SqlLocation(Location):
 
 class HttpLocation(Location):
     def __init__(self, uri):
-        self.__uri = uri
-
-    @property
-    def uri(self):
-        return self.__uri
+        super().__init__(uri=uri)
 
     def _read(self) -> bytes | object:
         resp = requests.get(self.uri)
@@ -293,8 +315,16 @@ class DatapackageResourceLocation(Location):
     def __init__(self, path):
         # __resource_name is like fragment
         base_path, resource_name = path.split("#")
-        self.__base_path = base_path.replace("\\", "/").rstrip("/")
+        base_path.replace("\\", "/").rstrip("/")
+        uri = f"dpr://{base_path}#{resource_name}"  # TODO
+        super().__init__(uri=uri)
+
+        self.__base_path = base_path
         self.__name = resource_name
+
+    @property
+    def supports_metadata(self):
+        return True
 
     @property
     def base_path(self):
@@ -324,17 +354,22 @@ class DatapackageResourceLocation(Location):
             path = self.get_path(resource)
             return FileLocation(path).read()
 
-    def _write(self, data: bytes | object, overwrite=False) -> Report:
+    def _write(self, data: bytes | object, overwrite=False, metadata=None) -> Report:
+
         package = self.__load_datapackage_json()
         resources = package["resources"]
-        err_on_exist = not overwrite
-        resource_idx = self.__get_resource_index_by_name(
-            package, self.name, err_on_exist=err_on_exist
-        )
+
+        try:
+            resource_idx = self.__get_resource_index_by_name(package, self.name)
+        except KeyError:
+            resource_idx = None
+
         if resource_idx is None:
             resource_idx = len(resources)
             resources.append({})  # add dummy, will be filled later
-        else:  # existing and overwrite is ok
+        else:  # existing
+            if not overwrite:
+                raise FileExistsError(str(self))
             resource = resources[resource_idx]
             # if path exists: delete
             if "path" in resource:
@@ -343,13 +378,19 @@ class DatapackageResourceLocation(Location):
                     logging.warning("referenced file does not exist: %s", path)
                 else:
                     os.remove(path)
-        resource = {"name": self.name, "path": "data/" + self.name}
-        resources[resource_idx] = resource
+        resource = UniqueMap([("name", self.name), ("path", "data/" + self.name)])
+
         path = self.get_path(resource)
         report = FileLocation(path).write(data, overwrite=False)
         resource["hash"] = report["hash"]
         resource["size"] = report["size"]
         resource["changed"] = {"user": report["user"], "timestamp": report["timestamp"]}
+
+        if metadata:
+            for k, v in metadata.items():
+                resource[k] = v
+
+        resources[resource_idx] = dict(resource.items())
 
         # update new id of package: hash over name + hash of resources
         # TODO: what if has doed not exist
@@ -375,15 +416,11 @@ class DatapackageResourceLocation(Location):
             data = json_load(self.datapackage_json_path)
         return data
 
-    def __get_resource_index_by_name(self, package, name, err_on_exist=False) -> int:
+    def __get_resource_index_by_name(self, package, name) -> int:
         for idx, res in enumerate(package["resources"]):
             if res["name"] == name:
-                if err_on_exist:
-                    raise KeyError(name)
                 return idx
-        if not err_on_exist:
-            raise KeyError(name)
-        return None
+        raise KeyError(name)
 
 
 class MemoryLocation(Location):

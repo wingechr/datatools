@@ -22,6 +22,7 @@ def validate_json_schema(data, schema: str | dict | bool = True) -> object:
         schema = load_schema(schema)
 
     jsonschema.validate(data, schema)
+    logging.debug("Validation ok")
 
     return data
 

@@ -152,7 +152,7 @@ class TestResource(TestCase):
         )
 
         # works
-        res.read(as_json=True, data_schema=schema)
+        res.read(as_json=True, table_schema=schema)
 
     def test_guess_dataschema(self):
         data = [{"i": 1, "s": "s1"}, {"s": None, "i": 2}]

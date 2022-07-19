@@ -1,73 +1,55 @@
 #!/usr/bin/env python3
 
-import logging
-
-import click
-import coloredlogs
+import logging  # noqa
+import sys
 
 import datatools
 from datatools.location import location
+from datatools.utils.cli import click, create_main
 
-coloredlogs.DEFAULT_LOG_FORMAT = "[%(asctime)s %(levelname)7s] %(message)s"
-coloredlogs.DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
-coloredlogs.DEFAULT_FIELD_STYLES = {
-    "asctime": {"color": "black", "bold": True},  # gray
-    "levelname": {"color": "black", "bold": True},  # gray
-}
-coloredlogs.DEFAULT_LEVEL_STYLES = {
-    "debug": {"color": "black", "bold": True},  # gray
-    "info": {"color": "white"},
-    "warning": {"color": "yellow"},
-    "error": {"color": "red", "bold": 10},
-}
+main = create_main(version=datatools.__version__, name="test")
 
 
-@click.group()
-@click.pass_context
-@click.version_option(datatools.__version__)
-@click.option(
-    "--loglevel",
-    "-l",
-    type=click.Choice(["debug", "info", "warning", "error"]),
-    default="info",
-)
-def main(ctx, loglevel):
-    """Script entry point."""
-    if isinstance(loglevel, str):
-        loglevel = getattr(logging, loglevel.upper())
-    coloredlogs.install(level=loglevel)
-    ctx.ensure_object(dict)
+@main.command()
+@click.argument("source")
+@click.argument("target")
+@click.option("--bytes-hash", "-h")
+@click.option("--json-schema", "-j")
+@click.option("--table-schema", "-t")
+@click.option("--json-self-validate", "-a", is_flag=True)
+@click.option("--overwrite", "-w", is_flag=True)
+def load(
+    source,
+    target,
+    bytes_hash=None,
+    json_schema=None,
+    table_schema=None,
+    json_self_validate=False,
+    overwrite=False,
+):
+    if json_self_validate:
+        if json_schema:
+            raise Exception("Mutual exclusive: json-schema and json-self-validate")
+        json_schema = True
+    source = location(source)
+    target = location(target)
 
-
-@main.group(name="validate")
-@click.pass_context
-def validate(ctx):
-    pass
-
-
-@validate.command(name="jsonschema")
-@click.pass_context
-@click.argument("json-file", type=click.types.Path(exists=True))
-@click.argument("schema", required=False)
-def validate_jsonschema(ctx, json_file: object, schema=None):
-    if schema:
-        schema = location(schema).read(as_json=True)
+    if target.supports_metadata:
+        metadata = {"source": str(source)}
     else:
-        schema = True  # get from json_file $schema
-    location(json_file).read(as_json=True, json_schema=schema)
+        metadata = None
 
-
-@main.command(name="download")
-@click.pass_context
-@click.argument("source-uri")
-@click.argument("target-file-path", type=click.types.Path(exists=False))
-@click.option("--overwrite", "-o", is_flag=True)
-def download(ctx, source_uri, target_file_path, overwrite=False):
-    report = location(target_file_path).write(
-        location(source_uri).read(), overwrite=overwrite
+    rep = target.write(
+        source.read(),
+        bytes_hash=bytes_hash,
+        json_schema=json_schema,
+        table_schema=table_schema,
+        overwrite=overwrite,
+        metadata=metadata,
     )
-    print(report)
+    rep_bytes = str(rep).encode()
+    sys.stdout.buffer.write(rep_bytes)
 
 
 if __name__ == "__main__":
-    main(prog_name="datatools")
+    main()
