@@ -258,25 +258,49 @@ class FileLocation(Location):
 
 
 class SqlLocation(Location):
-    __slots__ = ["__query"]
+    __slots__ = ["__table", "__sql", "__schema"]
 
     def __init__(self, uri):
         # remove query
-        uri, query = uri.split("?")
-        super().__init__(uri=uri)
-        query = parse_query(query)
-        self.__query = query
 
-    def query_get_single(self, key):
-        return get_single(self.__query, key)
+        if "?" in uri:
+            uri, query = uri.split("?")
+        else:
+            query = ""
+
+        query = parse_query(query)
+        if "table" in query:
+            self.__table = get_single(query, "table")
+            self.__sql = None
+            del query["table"]
+        elif "sql" in query:
+            self.__sql = get_single(query, "sql")
+            self.__table = None
+            del query["sql"]
+        else:
+            raise ValueError("table or sql")
+
+        if "schema" in query:
+            self.__schema = get_single(query, "schema")
+            del query["schema"]
+        else:
+            self.__schema = None
+
+        # sepcial case: odbc_connect is also a query
+        if "odbc_connect" in query:
+            uri += "?odbc_connect=" + get_single(query, "odbc_connect")
+            del query["odbc_connect"]
+
+        if query:
+            raise KeyError("Unrecognized query arguments: %s" % str(query.keys()))
+
+        super().__init__(uri=uri)
 
     def _read(self) -> bytes | object:
-        sql = self.query_get_single("sql")
-        table = self.query_get_single("table")
-        if sql:
-            df = pd.read_sql(sql, self.uri)
-        elif table:
-            df = pd.read_sql(table, self.uri)
+        if self.__sql:
+            df = pd.read_sql(self.__sql, self.uri)
+        elif self.__table:
+            df = pd.read_sql(self.__table, self.uri)
         else:
             raise ValueError("table or sql")
 
@@ -285,9 +309,9 @@ class SqlLocation(Location):
         return data
 
     def _write(self, data: bytes | object, overwrite=False) -> bytes:
-        table = self.query_get_single("table")
+        table = self.__table
         assert table
-        schema = self.query_get_single("schema")
+        schema = self.__schema
         data_bytes = to_bytes(data)  # check if it can be serialized
         data = to_json(data)
         df = pd.DataFrame(data)
