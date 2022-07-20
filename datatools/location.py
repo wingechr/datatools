@@ -24,7 +24,7 @@ requests_cache.install_cache("datatools_schema_cache", backend="sqlite", use_tem
 
 def is_uri(uri_or_path: str) -> bool:
     """at least two lowercase characters before ':'"""
-    return re.match("^([a-z]{2,}):", uri_or_path)
+    return re.match("^([a-z+]{2,}):", uri_or_path)
 
 
 def get_scheme(uri: str) -> str:
