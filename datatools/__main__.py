@@ -14,9 +14,14 @@ main = create_main(version=datatools.__version__, name="test")
 @click.argument("source")
 @click.argument("target")
 @click.option("--bytes-hash", "-h")
-@click.option("--json-schema", "-j")
-@click.option("--table-schema", "-t")
-@click.option("--json-self-validate", "-a", is_flag=True)
+@click.option(
+    "--json-schema", "-j", help="location of schema or `auto` to load from $schema"
+)
+@click.option(
+    "--table-schema",
+    "-t",
+    help="location of schema or `auto` to load from reousrce.schema",
+)
 @click.option("--overwrite", "-w", is_flag=True)
 def load(
     source,
@@ -24,13 +29,13 @@ def load(
     bytes_hash=None,
     json_schema=None,
     table_schema=None,
-    json_self_validate=False,
     overwrite=False,
 ):
-    if json_self_validate:
-        if json_schema:
-            raise Exception("Mutual exclusive: json-schema and json-self-validate")
+    if json_schema == "auto":
         json_schema = True
+    if table_schema == "auto":
+        table_schema = True
+
     source = location(source)
     target = location(target)
 

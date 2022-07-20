@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 
 from datatools.location import MemoryLocation, location
 from datatools.test import TestCase
-from datatools.utils.json import dumpb, guess_data_schema
+from datatools.utils.json import dumpb, infer_table_schema
 from datatools.utils.temp import NamedClosedTemporaryFile
 
 
@@ -162,5 +162,5 @@ class TestResource(TestCase):
                 {"type": "string", "name": "s"},
             ]
         }
-        guessed_schema = guess_data_schema(data)
+        guessed_schema = infer_table_schema(data)
         self.assertEqual(dumpb(schema), dumpb(guessed_schema))

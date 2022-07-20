@@ -9,45 +9,47 @@ import datatools
 from ..utils.byte import hash as byte_hash
 
 SCHEMA_SUFFIX = ".schema.json"
+RESOURCE_TMP_NAME = "_name"
 
 
 def load_schema(uri):
     return datatools.location.location(uri).read(as_json=True)
 
 
-def validate_json_schema(data, schema: str | dict | bool = True) -> object:
-    if schema is True:
-        schema = data["$schema"]
-    if isinstance(schema, str):
-        schema = load_schema(schema)
+def validate_json_schema(data, json_schema: str | dict | bool = True) -> object:
+    if json_schema is True:
+        json_schema = data["$schema"]
+    if isinstance(json_schema, str):
+        json_schema = load_schema(json_schema)
 
-    jsonschema.validate(data, schema)
+    jsonschema.validate(data, json_schema)
     logging.debug("Validation ok")
 
     return data
 
 
-def validate_resource_schema(data, schema):
-    if not schema:
-        raise Exception("no schema")
-    validate_resource({"data": data, "schema": schema})
+def validate_table_schema(data, table_schema):
+    if isinstance(table_schema, str):
+        table_schema = load_schema(table_schema)
+    validate_resource({"data": data, "schema": table_schema, "name": RESOURCE_TMP_NAME})
+
     return data
 
 
-def guess_data_schema(data):
-    res = validate_resource({"data": data})
+def infer_table_schema(data):
+    res = validate_resource({"data": data, "name": RESOURCE_TMP_NAME})
     tasks = res["tasks"]
     assert len(tasks) == 1
     schema = tasks[0]["resource"]["schema"]
     return schema
 
 
-def validate_resource(resource):
-    frictionless.Resource(descriptor=resource)
-    res = frictionless.validate_resource(resource)
-    if not res["valid"]:
-        raise Exception(res)
-    return res
+def validate_resource(resource_descriptor):
+    frictionless.Resource(descriptor=resource_descriptor, onerror="raise")
+    rep = frictionless.validate_resource(descriptor=resource_descriptor)
+    if not rep["valid"]:
+        raise Exception(rep)
+    return rep
 
 
 class SchemaValidator:

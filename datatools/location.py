@@ -14,9 +14,10 @@ from datatools.utils.datetime import fmt_datetime_tz, now
 from datatools.utils.env import get_user
 from datatools.utils.json import dumpb as json_dumpb
 from datatools.utils.json import dumps as json_dumps
+from datatools.utils.json import infer_table_schema
 from datatools.utils.json import load as json_load
 from datatools.utils.json import loadb as json_loadb
-from datatools.utils.json import validate_json_schema, validate_resource_schema
+from datatools.utils.json import validate_json_schema, validate_table_schema
 
 requests_cache.install_cache("datatools_schema_cache", backend="sqlite", use_temp=True)
 
@@ -138,7 +139,7 @@ class Location(ABC):
             if json_schema is not None:
                 validate_json_schema(data, json_schema)
             if table_schema is not None:
-                validate_resource_schema(data, table_schema)
+                validate_table_schema(data, table_schema)
 
         else:
             if json_schema:
@@ -155,7 +156,7 @@ class Location(ABC):
         overwrite=False,
         bytes_hash: str = None,
         json_schema: str | dict | bool = None,
-        table_schema: dict = None,
+        table_schema: str | dict | bool = None,
         metadata: dict = None,
     ) -> Report:
         if metadata and not self.supports_metadata:
@@ -170,9 +171,15 @@ class Location(ABC):
             if json_schema is not None:
                 validate_json_schema(data_json, json_schema)
             if table_schema is not None:
-                validate_resource_schema(data_json, table_schema)
+                if table_schema is True:
+                    table_schema = infer_table_schema(data_json)
+                else:
+                    validate_table_schema(data_json, table_schema)
 
         kwargs = {}
+
+        if table_schema:
+            kwargs["schema"] = table_schema
         if metadata:
             kwargs["metadata"] = metadata
 
