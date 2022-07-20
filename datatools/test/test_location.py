@@ -2,7 +2,7 @@ import os
 from functools import partial
 from tempfile import TemporaryDirectory
 
-from datatools.location import MemoryLocation, location
+from datatools.location import DatapackageResourceLocation, MemoryLocation, location
 from datatools.test import TestCase
 from datatools.utils.json import dumpb, infer_table_schema
 from datatools.utils.temp import NamedClosedTemporaryFile
@@ -164,3 +164,13 @@ class TestResource(TestCase):
         }
         guessed_schema = infer_table_schema(data)
         self.assertEqual(dumpb(schema), dumpb(guessed_schema))
+
+    def test_guess_dataschema_in_validation(self):
+        data = [{"i": 1, "s": "s1"}, {"s": None, "i": 2}]
+        src = MemoryLocation(data)
+        res_name = "test"
+        with TemporaryDirectory() as pkg_path:
+            tgt = DatapackageResourceLocation(f"{pkg_path}#{res_name}")
+            tgt.write(src.read(), table_schema=True)
+            metadata = tgt.read_metadata()
+        self.assertTrue("schema" in metadata)

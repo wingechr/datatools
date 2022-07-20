@@ -135,11 +135,15 @@ class Location(ABC):
 
         if as_json:
             data = to_json(data)
+            data_json = data
 
             if json_schema is not None:
-                validate_json_schema(data, json_schema)
+                validate_json_schema(data_json, json_schema)
             if table_schema is not None:
-                validate_table_schema(data, table_schema)
+                if table_schema is True:
+                    table_schema = infer_table_schema(data_json)
+                else:
+                    validate_table_schema(data_json, table_schema)
 
         else:
             if json_schema:
@@ -161,6 +165,8 @@ class Location(ABC):
     ) -> Report:
         if metadata and not self.supports_metadata:
             raise NotImplementedError("Location does not support writing of metadata")
+        if not metadata and self.supports_metadata:
+            metadata = {}
 
         if bytes_hash is not None:
             data_bytes = to_bytes(data)
@@ -178,10 +184,10 @@ class Location(ABC):
 
         kwargs = {}
 
-        if table_schema:
-            kwargs["schema"] = table_schema
-        if metadata:
+        if metadata is not None:
             kwargs["metadata"] = metadata
+            if table_schema:
+                metadata["schema"] = table_schema
 
         result = self._write(data, overwrite=overwrite, **kwargs)
 
@@ -352,6 +358,7 @@ class DatapackageResourceLocation(Location):
         return path
 
     def _read(self) -> bytes | object:
+        # TODO: read metadata as well?
         package = self.__load_datapackage_json()
         idx = self.__get_resource_index_by_name(package, self.name)
         resource = package["resources"][idx]
@@ -360,6 +367,13 @@ class DatapackageResourceLocation(Location):
         else:
             path = self.get_path(resource)
             return FileLocation(path).read()
+
+    def read_metadata(self) -> object:
+        package = self.__load_datapackage_json()
+        idx = self.__get_resource_index_by_name(package, self.name)
+        resource = package["resources"][idx]
+        # TODO: remove data/path?
+        return resource
 
     def _write(self, data: bytes | object, overwrite=False, metadata=None) -> Report:
 
