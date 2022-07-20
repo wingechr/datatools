@@ -30,7 +30,7 @@ if __name__ == "__main__":
         description="",  # should be one line
         long_description="",
         long_description_content_type="text/markdown",
-        version="0.0.0",
+        version="0.0.1",
         # author=pkg.__author__,
         # author_email=pkg.__email__,
         # maintainer=pkg.__author__,
