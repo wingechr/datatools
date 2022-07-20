@@ -1,9 +1,9 @@
-from setuptools import setup
+from setuptools import find_packages, setup
 
 if __name__ == "__main__":
 
     setup(
-        packages=["datatools"],
+        packages=find_packages(),
         keywords=[],
         install_requires=[
             "jsonschema",
@@ -46,5 +46,5 @@ if __name__ == "__main__":
             "Operating System :: OS Independent",
         ],
         entry_points={"console_scripts": ["dt = datatools.__main__:main"]},
-        package_data={"datapackage.schema": ["**.schema.json"]},
+        package_data={"datatools.schema": ["**.schema.json"]},
     )

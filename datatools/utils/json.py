@@ -6,7 +6,7 @@ import jsonschema
 
 import datatools
 
-from ..utils.byte import hash as byte_hash
+from .byte import hash as byte_hash
 
 SCHEMA_SUFFIX = ".schema.json"
 RESOURCE_TMP_NAME = "_name"

@@ -8,16 +8,16 @@ import pandas as pd
 import requests
 import requests_cache
 
-from datatools.utils.byte import hash, validate_hash
-from datatools.utils.collection import FrozenUniqueMap, UniqueMap
-from datatools.utils.datetime import fmt_datetime_tz, now
-from datatools.utils.env import get_user
-from datatools.utils.json import dumpb as json_dumpb
-from datatools.utils.json import dumps as json_dumps
-from datatools.utils.json import infer_table_schema
-from datatools.utils.json import load as json_load
-from datatools.utils.json import loadb as json_loadb
-from datatools.utils.json import validate_json_schema, validate_table_schema
+from .utils.byte import hash, validate_hash
+from .utils.collection import FrozenUniqueMap, UniqueMap
+from .utils.datetime import fmt_datetime_tz, now
+from .utils.env import get_user
+from .utils.json import dumpb as json_dumpb
+from .utils.json import dumps as json_dumps
+from .utils.json import infer_table_schema
+from .utils.json import load as json_load
+from .utils.json import loadb as json_loadb
+from .utils.json import validate_json_schema, validate_table_schema
 
 requests_cache.install_cache("datatools_schema_cache", backend="sqlite", use_temp=True)
 

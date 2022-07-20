@@ -3,11 +3,13 @@
 import logging  # noqa
 import sys
 
-import datatools
-from datatools.location import location
-from datatools.utils.cli import click, create_main
+import click
 
-main = create_main(version=datatools.__version__, name="test")
+from datatools import __version__
+from datatools.location import location
+from datatools.utils.cli import create_main
+
+main = create_main(version=__version__, name="test")
 
 
 @main.command()

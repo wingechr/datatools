@@ -4,10 +4,8 @@ from tempfile import mkdtemp
 
 from genericpath import isdir
 
-from ..utils.byte import Iterator
-from ..utils.filepath import make_file_readlonly, makedirs
-
-# from ..utils.filepath import make_file_writable
+from .byte import Iterator
+from .filepath import make_file_readlonly, makedirs
 
 
 class FileCache:
