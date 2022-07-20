@@ -4,7 +4,8 @@ from tempfile import TemporaryDirectory
 
 from datatools.location import DatapackageResourceLocation, MemoryLocation, location
 from datatools.test import TestCase
-from datatools.utils.json import dumpb, infer_table_schema
+from datatools.utils.database import get_uri_odbc_sqlserver, get_uri_sqlserver
+from datatools.utils.json import dumpb, dumps, infer_table_schema
 from datatools.utils.temp import NamedClosedTemporaryFile
 
 
@@ -21,14 +22,14 @@ class TestResource(TestCase):
         sql = "select 1 as one, null as na"
 
         # in memory
-        res = location(f"sqlite://?sql={sql}")
+        res = location(f"sqlite://#{sql}")
         data = res.read(as_json=True)
         self.assertEqual(data[0]["one"], 1)
         self.assertEqual(data[0]["na"], None)
 
         # in file (absolute path)
         with NamedClosedTemporaryFile(suffix=".sqlite3") as tempfilepath:
-            res = location(f"sqlite:///{tempfilepath}?sql={sql}")
+            res = location(f"sqlite:///{tempfilepath}#{sql}")
             # also check hash validation
             data = res.read(
                 as_json=True,
@@ -52,15 +53,29 @@ class TestResource(TestCase):
 
         with NamedClosedTemporaryFile(suffix=".sqlite3", dir=".") as tempfilepath:
             data_in = [{"i": 1, "s": "s1"}, {"s": None, "i": 2}]
-            res = location(f"sqlite:///{tempfilepath}?table=test")
+            res = location(f"sqlite:///{tempfilepath}#test")
             report = res.write(data_in, overwrite=False)
             self.assertEqual(
                 report["hash"],
                 "sha256:deaa5af2ea765ed64dc21cbd06baf69462c5d5ae7818fac0966a52e77bea7aff",  # noqa
             )
+            # read metadata
+
+            metadata = res.read_metadata()
+            expected_metadata = {
+                "schema": {
+                    "fields": [
+                        {"name": "i", "type": "BIGINT"},
+                        {"name": "s", "type": "TEXT"},
+                    ]
+                }
+            }
+
+            self.assertEqual(dumps(metadata), dumps(expected_metadata))
+
             self.assertRaises(Exception, partial(res.write, data_in, overwrite=False))
             data_out = res.read(as_json=True)
-            self.assertEqual(dumpb(data_in), dumpb(data_out))
+            self.assertEqual(dumps(data_in), dumps(data_out))
 
     def test_dpg(self):
         data_in = [{"i": 1, "s": "s1"}, {"s": None, "i": 2}]
@@ -163,7 +178,7 @@ class TestResource(TestCase):
             ]
         }
         guessed_schema = infer_table_schema(data)
-        self.assertEqual(dumpb(schema), dumpb(guessed_schema))
+        self.assertEqual(dumps(schema), dumps(guessed_schema))
 
     def test_guess_dataschema_in_validation(self):
         data = [{"i": 1, "s": "s1"}, {"s": None, "i": 2}]
@@ -174,3 +189,37 @@ class TestResource(TestCase):
             tgt.write(src.read(), table_schema=True)
             metadata = tgt.read_metadata()
         self.assertTrue("schema" in metadata)
+
+    def test_database(self):
+        uri = get_uri_sqlserver(server="test_srv", database="test_db")
+        loc = location(uri + "#test_scm.test_tab")
+        self.assertEqual(loc.database, "test_db")
+        self.assertEqual(loc.schema, "test_scm")
+        self.assertEqual(loc.table, "test_tab")
+
+        uri = get_uri_odbc_sqlserver(server="test_srv", database="test_db")
+        loc = location(uri + "#test_scm.test_tab")
+        self.assertEqual(loc.database, "test_db")
+        self.assertEqual(loc.schema, "test_scm")
+        self.assertEqual(loc.table, "test_tab")
+
+    def test_transaction(self):
+        # in memory
+        loc = location("sqlite://#t")
+
+        # auto commit
+        with loc.connection() as con:
+            cur = con.execute("create table t2(f int)")
+            cur = con.execute("insert into t2 values(1)")
+
+        # rollback
+        try:
+            with loc.connection() as con:
+                cur = con.execute("insert into t2 values(2)")
+                raise Exception("break transaction")
+        except Exception:
+            pass
+
+        with loc.connection() as con:
+            cur = con.execute("select max(f) from t2")
+            self.assertEqual(len(cur.fetchall()), 1)

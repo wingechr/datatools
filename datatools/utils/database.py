@@ -42,6 +42,13 @@ def get_uri_odbc_sqlserver(server, database=None):
     )
 
 
+def get_uri_sqlserver(server, database=None):
+    path = f"{server}/"
+    if database:
+        path = path + database
+    return get_uri("mssql", path)
+
+
 def get_uri_sqlite(database=None):
     if not database:  # memory
         path = ""

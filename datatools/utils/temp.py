@@ -3,11 +3,12 @@ import tempfile
 
 
 class NamedClosedTemporaryFile:
-    def __init__(self, suffix=None, prefix=None, dir=None):
+    def __init__(self, suffix=None, prefix=None, dir=None, delete=True):
         self.suffix = suffix
         self.prefix = prefix
         self.dir = dir
         self.filepath = None
+        self.delete = delete
 
     def __enter__(self):
         file = tempfile.NamedTemporaryFile(
@@ -19,4 +20,5 @@ class NamedClosedTemporaryFile:
         return self.filepath
 
     def __exit__(self, *args):
-        os.remove(self.filepath)
+        if self.delete:
+            os.remove(self.filepath)

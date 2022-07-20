@@ -2,11 +2,12 @@ import logging
 import os
 import re
 from abc import ABC, abstractmethod
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse, urlsplit
 
 import pandas as pd
 import requests
 import requests_cache
+from sqlalchemy import create_engine, inspect
 
 from .utils.byte import hash, validate_hash
 from .utils.collection import FrozenUniqueMap, UniqueMap
@@ -68,32 +69,17 @@ def uri_to_path(uri):
     return path
 
 
-def to_json(x):
-    if isinstance(x, bytes):
-        return json_loadb(x)
-    elif isinstance(x, Location):
-        return to_json(x.read())
-    return x
-
-
-def to_bytes(x):
-    if isinstance(x, bytes):
-        return x
-    elif isinstance(x, Location):
-        return to_bytes(x.read())
-    return json_dumpb(x)
-
-
 class Report(FrozenUniqueMap):
-    def __init__(self, data_bytes, hash_method="sha256"):
+    def __init__(self, data_bytes, hash_method="sha256", metadata=None):
         hashsum = hash(data_bytes, method=hash_method)
+        metadata = metadata or {}
         data = {
             "hash": f"{hash_method}:{hashsum}",
             "size": len(data_bytes),
             "user": get_user(),
             "timestamp": fmt_datetime_tz(now()),
         }
-        super().__init__(data.items())
+        super().__init__(list(data.items()) + list(metadata.items()))
 
     def to_dict(self):
         return dict(self.items())
@@ -107,6 +93,22 @@ class Location(ABC):
 
     def __init__(self, uri):
         self.__uri = uri
+
+    @classmethod
+    def _to_json(cls, x):
+        if isinstance(x, bytes):
+            return json_loadb(x)
+        elif isinstance(x, Location):
+            return cls._to_json(x.read())
+        return x
+
+    @classmethod
+    def _to_bytes(cls, x):
+        if isinstance(x, bytes):
+            return x
+        elif isinstance(x, Location):
+            return cls._to_bytes(x.read())
+        return json_dumpb(x)
 
     @property
     def uri(self):
@@ -125,7 +127,7 @@ class Location(ABC):
     ) -> bytes | object:
         data = self._read()
         if not as_json or bytes_hash:
-            data_bytes = to_bytes(data)
+            data_bytes = self._to_bytes(data)
 
         if bytes_hash is not None:
             validate_hash(data_bytes, bytes_hash)
@@ -134,7 +136,7 @@ class Location(ABC):
             raise Exception("json_schema or table_schema require as_json")
 
         if as_json:
-            data = to_json(data)
+            data = self._to_json(data)
             data_json = data
 
             if json_schema is not None:
@@ -169,11 +171,11 @@ class Location(ABC):
             metadata = {}
 
         if bytes_hash is not None:
-            data_bytes = to_bytes(data)
+            data_bytes = self._to_bytes(data)
             validate_hash(data_bytes, bytes_hash)
 
         if json_schema or table_schema:
-            data_json = to_json(data)
+            data_json = self._to_json(data)
             if json_schema is not None:
                 validate_json_schema(data_json, json_schema)
             if table_schema is not None:
@@ -193,7 +195,7 @@ class Location(ABC):
 
         if isinstance(result, Report):
             return result
-        result = to_bytes(result)
+        result = self._to_bytes(result)
         return Report(result)
 
     @abstractmethod
@@ -240,7 +242,7 @@ class FileLocation(Location):
             raise FileExistsError(self.filepath)
         os.makedirs(os.path.dirname(self.filepath), exist_ok=True)
 
-        data = to_bytes(data)
+        data = self._to_bytes(data)
 
         try:
             with open(self.filepath, "wb") as file:
@@ -258,73 +260,107 @@ class FileLocation(Location):
 
 
 class SqlLocation(Location):
-    __slots__ = ["__table", "__sql", "__schema"]
+    __slots__ = ["__sql", "__engine"]
 
     def __init__(self, uri):
         # remove query
-
-        if "?" in uri:
-            uri, query = uri.split("?")
-        else:
-            query = ""
-
-        query = parse_query(query)
-        if "table" in query:
-            self.__table = get_single(query, "table")
-            self.__sql = None
-            del query["table"]
-        elif "sql" in query:
-            self.__sql = get_single(query, "sql")
-            self.__table = None
-            del query["sql"]
-        else:
-            raise ValueError("table or sql")
-
-        if "schema" in query:
-            self.__schema = get_single(query, "schema")
-            del query["schema"]
-        else:
-            self.__schema = None
-
-        # sepcial case: odbc_connect is also a query
-        if "odbc_connect" in query:
-            uri += "?odbc_connect=" + get_single(query, "odbc_connect")
-            del query["odbc_connect"]
-
-        if query:
-            raise KeyError("Unrecognized query arguments: %s" % str(query.keys()))
-
+        uri, sql = uri.split("#")
+        sql = unquote(sql)
         super().__init__(uri=uri)
+        self.__sql = sql
+        self.__engine = create_engine(uri)
+
+    @property
+    def table(self):
+        if "." in self.__sql:
+            _, table = self.__sql.split(".")
+            return table
+        else:
+            return self.__sql
+
+    @property
+    def schema(self):
+        if "." in self.__sql:
+            schema, _ = self.__sql.split(".")
+            return schema
+        else:
+            return None
+
+    @property
+    def database(self):
+        # TODO: not working on pyodbc
+        database = self.__engine.url.database
+
+        if not database and "?odbc_connect=" in self.uri:
+            # TODO: global functions to parse uri
+            uri = urlsplit(self.uri)
+            query = parse_qs(uri.query)
+            odbc = query["odbc_connect"][0]
+            odbc_kwargs = {}
+            for kv in odbc.split(";"):
+                k, v = kv.split("=")
+                odbc_kwargs[k.lower().strip()] = v.strip()
+            database = odbc_kwargs.get("database")
+
+        return database
 
     def _read(self) -> bytes | object:
-        if self.__sql:
-            df = pd.read_sql(self.__sql, self.uri)
-        elif self.__table:
-            df = pd.read_sql(self.__table, self.uri)
-        else:
-            raise ValueError("table or sql")
-
+        logging.debug(self.__sql)
+        df = pd.read_sql(self.__sql, self.__engine)
         data = df.to_dict(orient="records")
-
         return data
 
     def _write(self, data: bytes | object, overwrite=False) -> bytes:
-        table = self.__table
-        assert table
-        schema = self.__schema
-        data_bytes = to_bytes(data)  # check if it can be serialized
-        data = to_json(data)
+        table = self.table
+        schema = self.schema
+        data_bytes = self._to_bytes(data)
+        data = self._to_json(data)
         df = pd.DataFrame(data)
         if_exists = "append" if overwrite else "fail"  # TODO: replace?
+
+        if schema:
+            logging.debug(f"upload to {schema}.{table}, if_exists={if_exists}")
+        else:
+            logging.debug(f"upload to {table}, if_exists={if_exists}")
+
+        # method = "multi" # TODO: check if this works
+        method = None
+
         df.to_sql(
             table,
-            self.uri,
+            self.__engine,
             schema=schema,
             index=False,
             if_exists=if_exists,
-            method="multi",
+            method=method,
         )
-        return data_bytes
+        metadata = {"rows": len(df)}
+
+        return Report(data_bytes, metadata=metadata)
+
+    def connection(self):
+        return self.__engine.begin()
+
+    @property
+    def column_names(self):
+        meta = self.read_metadata()
+        return [f["name"] for f in meta["schema"]["fields"]]
+
+    def read_metadata(self) -> object:
+        # TODO: check if i's table
+        # TODO: get other metadata
+        table = self.table
+        schema = self.schema
+
+        insp = inspect(self.__engine)
+        columns = insp.get_columns(table, schema=schema)
+
+        metadata = {
+            "schema": {
+                "fields": [{"name": c["name"], "type": str(c["type"])} for c in columns]
+            }
+        }
+        return metadata
 
 
 class HttpLocation(Location):
@@ -340,7 +376,7 @@ class HttpLocation(Location):
         if not overwrite:
             raise NotImplementedError("check existence not yet defined for http")
         # todo: content type header?
-        data = to_bytes(data)
+        data = self._to_bytes(data)
         resp = requests.post(self.uri, data)
         resp.raise_for_status()
         return data
@@ -440,7 +476,7 @@ class DatapackageResourceLocation(Location):
         # update new id of package: hash over name + hash of resources
         # TODO: what if has doed not exist
         package_hash_data = [{"name": r["name"], "hash": r["hash"]} for r in resources]
-        package_hash_data = to_bytes(package_hash_data)
+        package_hash_data = self._to_bytes(package_hash_data)
         package_report = Report(package_hash_data)
         package["hash"] = package_report["hash"]
         package["changed"] = {"user": report["user"], "timestamp": report["timestamp"]}
