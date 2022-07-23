@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://raw.githubusercontent.com/wingechr/datatools/main/schema/jsonschema.schema.json#",
+  "$id": "https://raw.githubusercontent.com/wingechr/datatools/main/datatools/schema/jsonschema.schema.json#",
   "title": "Core schema meta-schema",
   "definitions": {
     "schemaArray": {

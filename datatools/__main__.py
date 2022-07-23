@@ -1,45 +1,62 @@
 #!/usr/bin/env python3
 
-import logging
+import logging  # noqa
+import sys
 
 import click
-import coloredlogs
 
-__version__ = "0.0.0"
+from datatools import __version__
+from datatools.location import location
+from datatools.utils.cli import create_main
 
-# https://coloredlogs.readthedocs.io/en/latest/api.html#changing-the-date-time-format
-coloredlogs.DEFAULT_LOG_FORMAT = "[%(asctime)s %(levelname)7s] %(message)s"
-coloredlogs.DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
-coloredlogs.DEFAULT_FIELD_STYLES = {
-    "asctime": {"color": "black", "bold": True},  # gray
-    "levelname": {"color": "black", "bold": True},  # gray
-}
-coloredlogs.DEFAULT_LEVEL_STYLES = {
-    "debug": {"color": "black", "bold": True},  # gray
-    "info": {"color": "white"},
-    "warning": {"color": "yellow"},
-    "error": {"color": "red", "bold": 10},
-}
+main = create_main(version=__version__, name="test")
 
 
-@click.command()
-@click.pass_context
-@click.version_option(__version__)
+@main.command()
+@click.argument("source")
+@click.argument("target")
+@click.option("--bytes-hash", "-h")
 @click.option(
-    "--loglevel",
-    "-l",
-    type=click.Choice(["debug", "info", "warning", "error"]),
-    default="info",
+    "--json-schema", "-j", help="location of schema or `auto` to load from $schema"
 )
-def main(ctx, loglevel):
-    """Script entry point."""
-    if isinstance(loglevel, str):  # e.g. 'debug'/'DEBUG' -> logging.DEBUG
-        loglevel = getattr(logging, loglevel.upper())
-    coloredlogs.install(level=loglevel)
-    ctx.ensure_object(dict)
+@click.option(
+    "--table-schema",
+    "-t",
+    help="location of schema or `auto` to load from reousrce.schema",
+)
+@click.option("--overwrite", "-w", is_flag=True)
+def load(
+    source,
+    target,
+    bytes_hash=None,
+    json_schema=None,
+    table_schema=None,
+    overwrite=False,
+):
+    if json_schema == "auto":
+        json_schema = True
+    if table_schema == "auto":
+        table_schema = True
+
+    source = location(source)
+    target = location(target)
+
+    if target.supports_metadata:
+        metadata = {"source": str(source)}
+    else:
+        metadata = None
+
+    rep = target.write(
+        source.read(),
+        bytes_hash=bytes_hash,
+        json_schema=json_schema,
+        table_schema=table_schema,
+        overwrite=overwrite,
+        metadata=metadata,
+    )
+    rep_bytes = str(rep).encode()
+    sys.stdout.buffer.write(rep_bytes)
 
 
 if __name__ == "__main__":
-    main(
-        prog_name="datatools"
-    )  # pylint: disable=no-value-for-parameter # (because it's click decorated)
+    main()

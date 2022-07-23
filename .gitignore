@@ -1,16 +1,33 @@
 # Byte-compiled / optimized / DLL files
-**/__pycache__/
-**/*.py[cod]
-**/*$py.class
+__pycache__
+*.py[cod]
+*$py.class
 
 # Python
-**/*.egg-info
+*.egg-info
 
 # IDE
-**/.idea
-**/.vscode
-**/.spyderproject
-**/.spyproject
+.idea
+.vscode
+.spyderproject
+.spyproject
+*.code-workspace
 
+# Scons
+.sconsign.dblite
+
+# Environments
+env
+.env
+venv
+.venv
+node_modules
+.tox
+
+# Excel
+~*
+
+# build dirs
+temp
 build
 dist

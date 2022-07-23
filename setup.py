@@ -1,28 +1,36 @@
-from setuptools import setup
+from setuptools import find_packages, setup
 
 if __name__ == "__main__":
 
     setup(
-        packages=["datatools"],
+        packages=find_packages(),
         keywords=[],
         install_requires=[
-            "unidecode",
+            "jsonschema",
             "click",
             "coloredlogs",
-            "networkx",
-            "chardet",
-            "pandas",
-            "numpy",
-            "scipy",
             "requests",
-            "sqlalchemy",
-            "datapackage",
+            "requests_cache",
+            "scons",
+            "tzlocal",
+            "pytz",
+            "pandas",
+            "sqlalchemy>=1.4.0",
+            "unidecode",
+            "inflection",
+            "chardet",
+            "frictionless",
+            "lxml",
+            "openpyxl",
+            "pyodbc",
+            "geopandas",
+            "networkx",
         ],
         name="datatools",
         description="",  # should be one line
         long_description="",
         long_description_content_type="text/markdown",
-        version="0.0.0",
+        version="0.0.1",
         # author=pkg.__author__,
         # author_email=pkg.__email__,
         # maintainer=pkg.__author__,
@@ -37,8 +45,6 @@ if __name__ == "__main__":
             "License :: CC0 1.0 Universal (CC0 1.0) Public Domain Dedication",
             "Operating System :: OS Independent",
         ],
-        entry_points={"console_scripts": ["datatools = datatools.__main__:main"]},
-        package_data={
-            # "package.module": [file_patterns]
-        },
+        entry_points={"console_scripts": ["dt = datatools.__main__:main"]},
+        package_data={"datatools.schema": ["**.schema.json"]},
     )

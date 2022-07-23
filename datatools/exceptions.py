@@ -1,22 +1,13 @@
-class DatatoolsException(Exception):
-    pass
+import logging
+import traceback
 
 
-class ObjectNotFoundException(DatatoolsException):
-    pass
+def show_trace(func):
+    def decorator(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception:
+            logging.error(traceback.format_exc())
+            raise
 
-
-class InvalidValueException(DatatoolsException):
-    pass
-
-
-class IntegrityException(DatatoolsException):
-    pass
-
-
-class DuplicateKeyException(DatatoolsException):
-    pass
-
-
-class ValidationException(DatatoolsException):
-    pass
+    return decorator
