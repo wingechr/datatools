@@ -11,3 +11,6 @@
 **/.vscode
 **/.spyderproject
 **/.spyproject
+
+build
+dist
