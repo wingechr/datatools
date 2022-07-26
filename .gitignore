@@ -29,6 +29,5 @@ node_modules
 
 # build dirs
 temp
-temp
 build
 dist
