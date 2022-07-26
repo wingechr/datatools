@@ -5,6 +5,7 @@ from os.path import getsize
 
 from datatools import utils
 from datatools.test import TestCase
+from datatools.utils.json import dumps
 
 
 class TestHash(TestCase):
@@ -121,6 +122,13 @@ class TestCollections(TestCase):
         dct = utils.collection.UniqueMap([(1, 2), (3, 4)])
         dct[2] = 1
         self.assertRaises(KeyError, partial(dct.__setitem__, 2, None))
+
+    def test_object2lists(self):
+        res = list(utils.collection.object2lists({"b": None, "a": 1}))
+        self.assertEqual(dumps(res), dumps([["a", 1], ["b", None]]))
+
+        res = list(utils.collection.object2lists({"b": ["b1", True], "a": 1}))
+        self.assertEqual(dumps(res), dumps([["a", 1], ["b", 0, "b1"], ["b", 1, True]]))
 
 
 class TestCache(TestCase):

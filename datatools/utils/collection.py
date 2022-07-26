@@ -51,3 +51,19 @@ class UniqueMap(FrozenUniqueMap):
 
     def __setitem__(self, key, val):
         return self._setitem(key, val)
+
+
+def object2lists(obj, path=None):
+    """convert between structured object and list of paths"""
+    path = path or []
+    if isinstance(obj, dict):
+        for k, v in sorted(obj.items()):
+            assert isinstance(k, str), "keys must be string"
+            yield from object2lists(v, path + [k])
+    elif isinstance(obj, list):
+        for k, v in enumerate(obj):
+            yield from object2lists(v, path + [k])
+    elif isinstance(obj, (str, int, float, bool)) or obj is None:
+        yield path + [obj]
+    else:
+        raise NotImplementedError(type(obj))
