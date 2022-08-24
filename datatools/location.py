@@ -2,11 +2,14 @@ import logging
 import os
 import re
 from abc import ABC, abstractmethod
+
+# from functools import cache
 from urllib.parse import parse_qs, unquote, urlparse, urlsplit
 
 import pandas as pd
 import requests
-import requests_cache
+
+# import requests_cache
 from sqlalchemy import create_engine, inspect
 
 from .utils.byte import hash, validate_hash
@@ -20,7 +23,7 @@ from .utils.json import load as json_load
 from .utils.json import loadb as json_loadb
 from .utils.json import validate_json_schema, validate_table_schema
 
-requests_cache.install_cache("datatools_schema_cache", backend="sqlite", use_temp=True)
+# requests_cache.install_cache("datatools_schema_cache", backend="sqlite", use_temp=True) # noqa
 
 
 def is_uri(uri_or_path: str) -> bool:
