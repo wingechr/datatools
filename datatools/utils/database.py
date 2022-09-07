@@ -13,7 +13,7 @@ def odbc_drivers() -> List[str]:
 def guess_odbc_driver(name):
     for dr in odbc_drivers():
         if name.lower() in dr.lower():
-            return name.lower()
+            return dr.lower()
     raise ValueError(name)
 
 
@@ -69,3 +69,11 @@ def create_mock_engine(dialect_name, executor):
         executor(str(sql.compile(dialect=dialect)))
 
     return sa.create_mock_engine(dialect_name + "://", _executor)
+
+
+def reflect_tables(uri):
+    eng = sa.create_engine(uri)
+    # eng.connect() # test
+    meta = sa.MetaData()
+    meta.reflect(eng)  # load all tables definitions
+    return meta
