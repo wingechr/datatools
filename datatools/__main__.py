@@ -1,55 +1,43 @@
-#!/usr/bin/env python3
-
-import logging  # noqa
+import logging
 import sys
 
+import click
+import coloredlogs
+
 import datatools
-from datatools.location import location
-from datatools.utils.cli import click, create_main
-
-main = create_main(version=datatools.__version__, name="test")
 
 
-@main.command()
-@click.argument("source")
-@click.argument("target")
-@click.option("--bytes-hash", "-h")
-@click.option("--json-schema", "-j")
-@click.option("--table-schema", "-t")
-@click.option("--json-self-validate", "-a", is_flag=True)
-@click.option("--overwrite", "-w", is_flag=True)
-def load(
-    source,
-    target,
-    bytes_hash=None,
-    json_schema=None,
-    table_schema=None,
-    json_self_validate=False,
-    overwrite=False,
-):
-    if json_self_validate:
-        if json_schema:
-            raise Exception("Mutual exclusive: json-schema and json-self-validate")
-        json_schema = True
-    source = location(source)
-    target = location(target)
+@click.group()
+@click.pass_context
+@click.version_option(datatools.__version__)
+@click.option(
+    "--loglevel",
+    "-l",
+    type=click.Choice(["debug", "info", "warning", "error"]),
+    default="info",
+)
+def main(ctx, loglevel):
+    """Script entry point."""
+    ctx.ensure_object(dict)
+    # setup logging
+    if isinstance(loglevel, str):
+        loglevel = getattr(logging, loglevel.upper())
+    coloredlogs.DEFAULT_LOG_FORMAT = "[%(asctime)s %(levelname)7s] %(message)s"
+    coloredlogs.DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+    coloredlogs.DEFAULT_FIELD_STYLES = {"asctime": {"color": None}}
+    coloredlogs.install(level=loglevel)
 
-    if target.supports_metadata:
-        metadata = {"source": str(source)}
-    else:
-        metadata = None
 
-    rep = target.write(
-        source.read(),
-        bytes_hash=bytes_hash,
-        json_schema=json_schema,
-        table_schema=table_schema,
-        overwrite=overwrite,
-        metadata=metadata,
-    )
-    rep_bytes = str(rep).encode()
-    sys.stdout.buffer.write(rep_bytes)
+@main.command
+@click.pass_context
+@click.argument("file_path")
+def validate(ctx, file_path):
+    datatools.cli_validate(file_path=file_path)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main(prog_name="datatools")
+    except Exception as exc:
+        logging.error(exc)
+        sys.exit(1)

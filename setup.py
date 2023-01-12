@@ -6,6 +6,7 @@ if __name__ == "__main__":
         packages=["datatools"],
         keywords=[],
         install_requires=[
+            "fsspec",
             "jsonschema",
             "click",
             "coloredlogs",
@@ -45,6 +46,6 @@ if __name__ == "__main__":
             "License :: CC0 1.0 Universal (CC0 1.0) Public Domain Dedication",
             "Operating System :: OS Independent",
         ],
-        entry_points={"console_scripts": ["dt = datatools.__main__:main"]},
-        package_data={"datapackage.schema": ["**.schema.json"]},
+        entry_points={"console_scripts": ["datatools = datatools.__main__:main"]},
+        package_data={"test.data": ["**.json"]},
     )
