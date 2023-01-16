@@ -1,0 +1,90 @@
+{
+  "$schema": "https://raw.githubusercontent.com/frictionlessdata/schemas/master/data-package.json",
+  "name": "datapackage1",
+  "resources": [
+    {
+      "name": "resource0",
+      "data": [
+        {
+          "col1": 123,
+          "col2": "xyz"
+        },
+        {
+          "col1": 456
+        }
+      ],
+      "schema": {
+        "fields": [
+          {
+            "name": "col1",
+            "type": "integer",
+            "required": true,
+            "minimum": 0,
+            "maximum": 100
+          },
+          {
+            "name": "col2",
+            "type": "string",
+            "required": true,
+            "minLength": 3,
+            "maxLength": 3,
+            "pattern": "[a-z]{3}"
+          }
+        ],
+        "primaryKey": ["col1"]
+      }
+    },
+    {
+      "name": "resource1",
+      "path": "resource1.csv",
+      "schema": {
+        "fields": [
+          {
+            "name": "col1",
+            "type": "integer",
+            "required": true,
+            "minimum": 0,
+            "maximum": 100
+          },
+          {
+            "name": "col2",
+            "type": "string",
+            "required": true,
+            "minLength": 3,
+            "maxLength": 3,
+            "pattern": "[a-z]{3}"
+          }
+        ],
+        "primaryKey": ["col1"]
+      }
+    },
+    {
+      "name": "resource2",
+      "path": "data/resource2.json",
+      "schema": {
+        "fields": [
+          {
+            "name": "col1",
+            "type": "integer",
+            "required": true,
+            "minimum": 0,
+            "maximum": 100
+          },
+          {
+            "name": "col2",
+            "type": "string",
+            "required": true,
+            "minLength": 3,
+            "maxLength": 3,
+            "pattern": "[a-z]{3}"
+          }
+        ],
+        "primaryKey": ["col1"]
+      }
+    },
+    {
+      "name": "resource3",
+      "path": "data/resource3.json"
+    }
+  ]
+}

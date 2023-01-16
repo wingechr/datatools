@@ -1,0 +1,5 @@
+{
+  "example1": {
+    "$ref": "../example2/example2.json#example2"
+  }
+}

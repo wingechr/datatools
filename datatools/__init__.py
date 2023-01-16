@@ -9,6 +9,7 @@ import socket
 import subprocess as sp
 import tempfile
 from abc import ABC, abstractmethod
+from copy import deepcopy
 from datetime import date, datetime, time, timezone
 from io import BufferedReader, BytesIO
 from os.path import (
@@ -26,11 +27,12 @@ from pathlib import Path
 from stat import S_IREAD, S_IRGRP, S_IROTH, S_IWRITE
 from tempfile import mkdtemp
 from typing import List
-from urllib.parse import parse_qs, unquote, unquote_plus, urlparse
+from urllib.parse import parse_qs, unquote, unquote_plus, urlparse, urlsplit
 
 import chardet
 import frictionless
 import inflection
+import jsonref
 import jsonschema
 import pandas as pd
 import pyodbc
@@ -39,6 +41,7 @@ import requests
 import sqlalchemy as sa
 import tzlocal
 import unidecode
+from appdirs import AppDirs
 
 # import requests_cache
 # requests_cache.install_cache("datatools_schema_cache", backend="sqlite", use_temp=True) # noqa
@@ -55,6 +58,9 @@ FMT_DATE = "%Y-%m-%d"
 FMT_TIME = "%H:%M:%S"
 
 dialects = ["sqlite", "postgresql", "mysql", "mssql"]
+
+
+app_dirs = AppDirs("datatools", "datatools")
 
 
 def bytes_hash(byte_data, method="sha256") -> str:
@@ -1024,20 +1030,54 @@ class SchemaValidator:
         return self.validator.validate(json)
 
 
-def json_dumps(data: object, serialize=None) -> str:
+def bytes_load(filepath: str) -> bytes:
+    with open(filepath, "rb") as file:
+        return file.read()
+
+
+def text_load(filepath: str, encoding="utf-8") -> str:
+    datab = bytes_load(filepath=filepath)
+    data = datab.decode(encoding=encoding)
+    return data
+
+
+def bytes_dump(filepath: str, data: bytes, overwrite=False):
+    if os.path.isfile(filepath):
+        if not overwrite:
+            raise FileExistsError(os.path.abspath(filepath))
+    else:
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    with open(filepath, "wb") as file:
+        return file.write(data)
+
+
+def text_dump(filepath: str, data: str, overwrite=False):
+    datab = data.encode()
+    return bytes_dump(filepath=filepath, data=datab, overwrite=overwrite)
+
+
+def json_loads(data: str):
+    return json.loads(data)
+
+
+def json_load(filepath: str, encoding="utf-8"):
+    data_text = text_load(filepath, encoding=encoding)
+    return json_loads(data_text)
+
+
+def json_dumps(data, indent=2, sort_keys=True, ensure_ascii=False) -> str:
     return json.dumps(
-        data, indent=2, sort_keys=True, ensure_ascii=False, default=serialize
+        data, indent=indent, sort_keys=sort_keys, ensure_ascii=ensure_ascii
     )
 
 
-def json_dump(data: object, file_path: str, serialize=None) -> None:
-    str_data = json_dumps(data, serialize=serialize)
-    with open(file_path, "w", encoding=DEFAULT_ENCODING) as file:
-        file.write(str_data)
-
-
-def json_loads(str_data: str) -> object:
-    return json.loads(str_data)
+def json_dump(
+    data, filepath: str, indent=2, sort_keys=True, ensure_ascii=False, overwrite=False
+):
+    data_text = json_dumps(
+        data, indent=indent, sort_keys=sort_keys, ensure_ascii=ensure_ascii
+    )
+    return text_dump(filepath, data_text, overwrite=overwrite)
 
 
 def json_loadb(bytes_data: bytes, encoding: str = DEFAULT_ENCODING) -> object:
@@ -1047,12 +1087,6 @@ def json_loadb(bytes_data: bytes, encoding: str = DEFAULT_ENCODING) -> object:
 
 def json_dumpb(data: object) -> bytes:
     return json_dumps(data).encode()
-
-
-def json_load(file_path: str) -> object:
-    with open(file_path, "r", encoding=DEFAULT_ENCODING) as file:
-        data_s = file.read()
-    return json_loads(data_s)
 
 
 class NamedClosedTemporaryFile:
@@ -1075,7 +1109,7 @@ class NamedClosedTemporaryFile:
         os.remove(self.filepath)
 
 
-def normalize(name, allowed_chars="a-z0-9", sep="_"):
+def text_normalize(name, allowed_chars="a-z0-9", sep="_"):
 
     name = unquote_plus(name)
 
@@ -1102,6 +1136,74 @@ def normalize(name, allowed_chars="a-z0-9", sep="_"):
     name = name.rstrip(sep)
 
     return name
+
+
+class JsonStore:
+    def __init__(self, cache_location=None):
+        cache_location = cache_location or app_dirs + "/jsonstore"
+        logging.debug(os.path.abspath(cache_location))
+        #: location for persitant storage
+        self._cache_location = cache_location
+        #: in memory cache
+        self._cache = {}
+
+    def __getitem__(self, key):
+        if key not in self._cache:
+            self._cache[key] = self._get(key)
+        data = self._cache[key]
+        data = deepcopy(data)
+        return data
+
+    def _get(self, key):
+        """load from"""
+        data = {"$ref": key}
+        data_s = json.dumps(data)
+        data = jsonref.loads(data_s, loader=self._load)
+        return data
+
+    def _load(self, path):
+        local_path = self._get_local_path(path)
+        logging.debug(f"loading from {local_path}")
+        if not os.path.isfile(local_path):
+            data = self._download(path)
+            json_dump(data, local_path)
+        data = json_load(local_path)
+        return data
+
+    def _download(self, url):
+        logging.debug(f"downloading from {url}")
+        schema = requests.get(url).json()
+        return schema
+
+    def _get_local_path(self, key):
+        path = urlsplit(key)
+        local_path = self._cache_location + "/" + (path.hostname or "") + path.path
+        local_path = os.path.realpath(local_path)
+        return local_path
+
+
+def json_recursion(modify_value, obj):
+    if isinstance(obj, dict):
+        return dict((k, json_recursion(modify_value, v)) for k, v in obj.items())
+    elif isinstance(obj, list):
+        return [json_recursion(modify_value, v) for v in obj]
+    else:
+        return modify_value(obj)
+
+
+class JsonSchemaValidator:
+    def __init__(self, schema):
+        validator_cls = jsonschema.validators.validator_for(schema)
+        validator_cls.check_schema(schema)
+        self.validator = validator_cls(schema)
+
+    def __call__(self, instance):
+        self.validator.validate(instance)
+
+
+class DatapackageDescriptor:
+    def __init__(self, path):
+        self.path = path
 
 
 # --------------------------------------------------------------------------------
