@@ -22,6 +22,7 @@ from . import __version__
 
 APP_NAME = "datatools"
 DATETIMETZ_FMT = "%Y-%m-%d %H:%M:%S%z"
+DATE_FMT = "%Y-%m-%d"
 
 
 def make_readonly(filepath):
@@ -35,6 +36,21 @@ def get_hash(filepath, method="sha256"):
     result = {}
     result[method] = hasher.hexdigest()
     return result
+
+
+def get_now():
+    tz_local = tzlocal.get_localzone()
+    now = datetime.datetime.now()
+    now_tz = now.replace(tzinfo=tz_local)
+    return now_tz
+
+
+def get_now_str():
+    get_now().strftime(DATETIMETZ_FMT)
+
+
+def get_today_str():
+    get_now().strftime(DATE_FMT)
 
 
 class DataIndex:
@@ -158,7 +174,7 @@ class DataIndex:
         return {
             "hash": get_hash(abspath),
             "download": {
-                "datetime": get_now().strftime(DATETIMETZ_FMT),
+                "datetime": get_now_str(),
                 "user": get_user_long(),
                 "source": source,
             },
@@ -297,13 +313,6 @@ def get_handler(uri):
         if handler_cls.can_handle_scheme(scheme):
             return handler_cls()
     raise NotImplementedError(scheme)
-
-
-def get_now():
-    tz_local = tzlocal.get_localzone()
-    now = datetime.datetime.now()
-    now_tz = now.replace(tzinfo=tz_local)
-    return now_tz
 
 
 def get_user_long():
