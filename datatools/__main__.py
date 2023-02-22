@@ -4,11 +4,12 @@ import hashlib
 import json
 import logging
 import os
+import re
 import shutil
 import socket
 import tempfile
 import urllib.parse
-import urllib.request
+from stat import S_IREAD, S_IRGRP, S_IROTH
 
 import appdirs
 import click
@@ -20,8 +21,20 @@ import tzlocal
 from . import __version__
 
 APP_NAME = "datatools"
-LOCAL_REPO_DIR = ".data"
 DATETIMETZ_FMT = "%Y-%m-%d %H:%M:%S%z"
+
+
+def make_readonly(filepath):
+    os.chmod(filepath, S_IREAD | S_IRGRP | S_IROTH)
+
+
+def get_hash(filepath, method="sha256"):
+    hasher = getattr(hashlib, method)()
+    with open(filepath, "rb") as file:
+        hasher.update(file.read())
+    result = {}
+    result[method] = hasher.hexdigest()
+    return result
 
 
 class DataIndex:
@@ -142,15 +155,8 @@ class DataIndex:
         self._changed = True
 
     def _get_metadata(self, abspath, source):
-        hash_method = "sha256"
-        hasher = getattr(hashlib, hash_method)()
-        with open(abspath, "rb") as file:
-            hasher.update(file.read())
-        hash_meta = {}
-        hash_meta[hash_method] = hasher.hexdigest()
-
         return {
-            "hash": hash_meta,
+            "hash": get_hash(abspath),
             "download": {
                 "datetime": get_now().strftime(DATETIMETZ_FMT),
                 "user": get_user_long(),
@@ -167,6 +173,7 @@ class DataIndex:
         handler = get_handler(uri)
         resource_id = handler.get_local_rel_path(uri)
         filepath = self.get_abs_path(resource_id)
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
 
         if os.path.exists(filepath):
             if not force:
@@ -176,8 +183,10 @@ class DataIndex:
                 logging.warning(f"overwriting exists: {resource_id}")
 
         tmp_path = get_temp_path()
+
         handler.handle(uri, tmp_path)
         shutil.move(tmp_path, filepath)
+        make_readonly(filepath)
 
         self.update(filepath, source=uri)
 
@@ -203,7 +212,42 @@ class DataIndex:
                 logging.warning(f"File does not exist: {f}")
 
         # TODO fix duplicates
-        # TODO check hashes
+
+        # TODO: check hash
+        if hash:
+            for res in self._data["resources"]:
+                assert res["path"] in files
+                path = self.get_abs_path(res["path"])
+                index_hash = res.get("hash")
+                if index_hash:
+                    for method, hashsum in index_hash.items():
+                        digest = get_hash(path, method)[method]
+                        if digest != hashsum:
+                            if fix:
+                                logging.warning(
+                                    f"Fixing Wrong {method} hashsum for {path}: "
+                                    f"{digest}, expected {hashsum}"
+                                )
+                                res["hash"][method] = get_hash(path, method)[method]
+                                self._changed = True
+                                # TODO
+                            else:
+                                logging.warning(
+                                    f"Wrong {method} hashsum for {path}: "
+                                    f"{digest}, expected {hashsum}"
+                                )
+                else:  # no hash
+                    if fix:
+                        logging.warning(f"Fixing No hashsum for {path}")
+                        res["hash"] = get_hash(path, method)
+                        self._changed = True
+                    else:
+                        logging.warning(f"No hashsum for {path}")
+
+        # readonly
+        for f in files:
+            path = self.get_abs_path(f)
+            make_readonly(path)
 
 
 class LoaderHttp:
@@ -304,7 +348,7 @@ def main(ctx, loglevel, is_global, data_location):
             )
             path += "/data"
         else:
-            path = LOCAL_REPO_DIR
+            path = "."
         return path
 
     data_location = data_location or get_data_location(is_global)
@@ -315,11 +359,15 @@ def main(ctx, loglevel, is_global, data_location):
 
 
 @main.command("list")
+@click.option("regexp", "-r", help="regexp pattern")
 @click.pass_obj
-def list(index: DataIndex):
+def list(index: DataIndex, regexp):
+    regexp = re.compile(regexp or ".*")
+
     for res in index._data["resources"]:
-        res = json.dumps(res, indent=2)
-        print(res)
+        if regexp.match(res["path"]):
+            res = json.dumps(res, indent=2)
+            print(res)
 
 
 @main.command("check")
@@ -340,4 +388,4 @@ def download(index: DataIndex, uri, force):
 
 
 if __name__ == "__main__":
-    main(prog_name=None)
+    main(prog_name=APP_NAME)
