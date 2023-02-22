@@ -7,7 +7,7 @@ import appdirs
 import click
 import coloredlogs
 
-from . import APP_NAME, __version__
+from . import __app_name__, __version__
 from .storage import DataIndex
 
 
@@ -36,7 +36,7 @@ def main(ctx, loglevel, is_global, data_location):
     def get_data_location(is_global):
         if is_global:
             path = appdirs.user_data_dir(
-                APP_NAME, appauthor=None, version=None, roaming=False
+                __app_name__, appauthor=None, version=None, roaming=False
             )
             path += "/data"
         else:
@@ -80,4 +80,4 @@ def download(index: DataIndex, uri, force):
 
 
 if __name__ == "__main__":
-    main(prog_name=APP_NAME)
+    main(prog_name=__app_name__)

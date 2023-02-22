@@ -8,7 +8,7 @@ import urllib.parse
 import filelock
 import requests
 
-from . import APP_NAME
+from . import __app_name__
 from .utils import get_hash, get_now_str, get_user_long, make_readonly
 
 
@@ -142,7 +142,7 @@ class DataIndex:
     def download(self, uri, force=False):
         def get_temp_path(suffix=""):
             """do not create the file"""
-            tf = tempfile.mktemp(prefix=f"{APP_NAME}_", suffix=suffix)
+            tf = tempfile.mktemp(prefix=f"{__app_name__}_", suffix=suffix)
             return tf
 
         handler = get_handler(uri)
