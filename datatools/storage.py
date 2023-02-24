@@ -358,6 +358,9 @@ class Index:
             logging.warning("updating existing path")
         self.resources_by_path[path] = res
 
+    def get_rel_path(self, file):
+        return Path(file).relative_to(self.base_path).as_posix()
+
     def append_resource(self, res):
         path = res.get("path")
         if not path:
@@ -462,7 +465,3 @@ class ZipFileIndex(Index):
         with ZipFile(self.zip_path, "w") as zip:
             with zip.open("datapackage.json", "w") as file:
                 file.write(data)
-
-
-with MultiIndex() as idx:
-    idx.get
