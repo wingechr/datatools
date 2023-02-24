@@ -1,12 +1,16 @@
 import json
 import logging
 import os
+import re
 import shutil
 import tempfile
 import urllib.parse
+from contextlib import ExitStack
+from pathlib import Path
+from zipfile import ZipFile
 
-import filelock
 import requests
+from filelock import FileLock, SoftFileLock
 
 from . import __app_name__
 from .utils import get_hash, get_now_str, get_user_long, make_readonly
@@ -17,7 +21,7 @@ class DataIndex:
         self._base_dir = os.path.abspath(base_dir)
         self._data_dir = os.path.join(self._base_dir, "data")
         self._index_json = os.path.join(self._base_dir, "datapackage.json")
-        self._index_json_lock = filelock.FileLock(self._index_json + ".lock")
+        self._index_json_lock = FileLock(self._index_json + ".lock")
         self._data = None
         self._encoding = "utf-8"
         self._changed = None
@@ -272,3 +276,193 @@ def get_handler(uri):
         if handler_cls.can_handle_scheme(scheme):
             return handler_cls()
     raise NotImplementedError(scheme)
+
+
+def get_index_instance(base_path: str):
+    if str(base_path).endswith(".zip"):
+        return ZipFileIndex(base_path)
+    return FolderIndex(base_path)
+
+
+def get_index_base_path(filepath: str) -> str:
+    """Find the path of the appropriate index location for a file path
+
+    NOTE: this does NOT include the name of the index (i.e. datapackage.json),
+    but the base dir it is located in
+
+    * if the file is in a zip file, the index will be /datapackage.json
+        inside the zip
+    * otherwise: find the first datapackage.json (going up)
+    * if none is found: use the same folder the file is in
+    """
+
+    filepath = Path(filepath)
+
+    if re.match(r".*\.zip/", filepath.as_posix()):
+        for p in filepath.parents:
+            if str(p).endswith(".zip"):
+                return p.as_posix()
+        raise ValueError(filepath)
+
+    for p in filepath.parents:
+        if p.joinpath("datapackage.json").exists():
+            return p.as_posix()
+    # return dir
+    return filepath.parent.as_posix()
+
+
+class MultiIndex:
+    def __init__(self):
+        self.exit_stack = None
+        self.indices = None
+
+    def _enter(self, res):
+        return self.exit_stack.enter_context(res)
+
+    def __enter__(self):
+        self.exit_stack = ExitStack().__enter__()
+        self.indices = {}
+
+    def __exit__(self, *error):
+        self.exit_stack.__exit__(*error)
+
+    def get_index(self, base_path):
+        base_path = str(Path(base_path).absolute().as_posix())
+        if base_path not in self.indices:
+            idx = get_index_instance(base_path)
+            self.indices[base_path] = self._enter(idx)
+
+        return self.indices[base_path]
+
+    def get_index_for_file(self, filepath):
+        base_path = get_index_base_path(filepath)
+        return self.get_index(base_path)
+
+
+class Index:
+    def __init__(self, base_path):
+        self.base_path = Path(base_path).absolute()
+        self.changed = True
+        self.data = None
+        self.resources_by_path = None
+        self.exit_stack = None
+
+    def _enter(self, res):
+        return self.exit_stack.enter_context(res)
+
+    def _index_resource(self, res):
+        path = res.get("path")
+        if not path:
+            logging.warning("no path")
+        if path in self.resources_by_path:
+            logging.warning("updating existing path")
+        self.resources_by_path[path] = res
+
+    def append_resource(self, res):
+        path = res.get("path")
+        if not path:
+            logging.warning("no path")
+        if path in self.resources_by_path:
+            logging.warning("updating existing path")
+            self.resources_by_path[path].update(res)
+        else:
+            self.data["resources"].append(res)
+            self.resources_by_path[path] = res
+
+    def __enter__(self):
+        self.exit_stack = ExitStack().__enter__()
+
+        Path(self._lockfile).parent.mkdir(parents=True, exist_ok=True)
+        self._enter(SoftFileLock(self._lockfile))
+
+        if self._exist():
+            self.data = self._load()
+        else:
+            logging.info("INIT")
+            self.data = {"resources": []}
+
+        self.resources_by_path = {}
+        for res in self.data["resources"]:
+            self._index_resource(res)
+
+        return self
+
+    def __exit__(self, *error):
+        if self.changed and not any(error):
+            self._write(self.data)
+        self.exit_stack.__exit__(*error)
+
+    def _load(self):
+        logging.info("READ")
+        data_b = self._load_b()
+        return json.loads(data_b.decode("utf-8"))
+
+    def _write(self, data):
+        logging.info("WRITE")
+        data_b = json.dumps(data, indent=2, ensure_ascii=False).encode("utf-8")
+        self._write_b(data_b)
+
+    def _load_b(self):
+        raise NotImplementedError()
+
+    def _write_b(self, data):
+        raise NotImplementedError()
+
+    @property
+    def _lockfile(self):
+        raise NotImplementedError()
+
+
+class FolderIndex(Index):
+    @property
+    def json_path(self):
+        return self.base_path.joinpath("datapackage.json")
+
+    @property
+    def _lockfile(self):
+        return str(self.json_path) + ".lock"
+
+    def _exist(self):
+        return self.json_path.exists()
+
+    def _load_b(self):
+        with open(self.json_path, "rb") as file:
+            return file.read()
+
+    def _write_b(self, data):
+        self.base_path.mkdir(parents=True, exist_ok=True)
+        with open(self.json_path, "wb") as file:
+            file.write(data)
+
+
+class ZipFileIndex(Index):
+    @property
+    def _lockfile(self):
+        return str(self.base_path) + ".lock"
+
+    @property
+    def zip_path(self):
+        return self.base_path
+
+    def _exist(self):
+        if not self.zip_path.exists():
+            return False
+
+        with ZipFile(self.zip_path, "r") as zip:
+            logging.info(zip.namelist())
+            return "datapackage.json" in zip.namelist()
+
+    def _load_b(self):
+        with ZipFile(self.zip_path, "r") as zip:
+            with zip.open("datapackage.json", "r") as file:
+                return file.read()
+
+    def _write_b(self, data):
+        self.zip_path.parent.mkdir(parents=True, exist_ok=True)
+        with ZipFile(self.zip_path, "w") as zip:
+            with zip.open("datapackage.json", "w") as file:
+                file.write(data)
+
+
+with MultiIndex() as idx:
+    idx.get

@@ -1,0 +1,8 @@
+click
+coloredlogs
+appdirs
+filelock
+requests
+tzlocal
+# dev
+pre-commit
