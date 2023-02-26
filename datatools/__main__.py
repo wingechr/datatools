@@ -6,13 +6,13 @@ import click
 import coloredlogs
 
 from datatools import __app_name__, __version__
-from datatools.classes import MainContext
+from datatools.classes import GlobalExitStack
 
 
-class Repository(MainContext):
+class Repository(GlobalExitStack):
     def __init__(self, base_dir):
         self.base_path = Path(base_dir).absolute()
-        logging.debug(f"base_dir: {self.base_path.as_posix()}")
+        # logging.debug(f"base_dir: {self.base_path.as_posix()}")
 
     def get_location(self, location):
         path = Path(location)
@@ -111,7 +111,7 @@ def main(ctx, loglevel, base_dir):
     coloredlogs.DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
     coloredlogs.DEFAULT_FIELD_STYLES = {"asctime": {"color": None}}
     coloredlogs.install(level=loglevel)
-    ctx.obj = ctx.with_resource(Repository(base_dir=base_dir))
+    ctx.obj = ctx.with_resource(Repository(base_dir))
 
 
 @main.group("meta")

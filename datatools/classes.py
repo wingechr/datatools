@@ -7,10 +7,23 @@ from pathlib import Path
 from filelock import SoftFileLock
 
 
-def global_exit_stack(create=True):
-    if "EXIT_STACK" not in globals() and create:
-        globals()["EXIT_STACK"] = ExitStack()
-    return globals()["EXIT_STACK"]
+class GlobalExitStack:
+
+    _exit_stack = None
+
+    def __enter__(self):
+        if not self._exit_stack:
+            # logging.debug("entering global context")
+            self.__class__._exit_stack = ExitStack().__enter__()
+        return self
+
+    def __exit__(self, *exc):
+        # logging.debug("exiting global context")
+        self._exit_stack.__exit__(*exc)
+
+    @classmethod
+    def enter_context(cls, cm):
+        return cls._exit_stack.enter_context(cm)
 
 
 IS_OPEN = "_is_open"
@@ -36,7 +49,7 @@ def set_changed(obj, value):
 def assert_open(fun):
     def decorated_fun(obj, *args, **kwargs):
         if not is_open(obj):
-            exit_stack = global_exit_stack(create=False)
+            exit_stack = GlobalExitStack
             exit_stack.enter_context(obj)
         return fun(obj, *args, **kwargs)
 
@@ -46,7 +59,7 @@ def assert_open(fun):
 def assert_open_changed(fun):
     def decorated_fun(obj, *args, **kwargs):
         if not is_open(obj):
-            exit_stack = global_exit_stack(create=False)
+            exit_stack = GlobalExitStack
             exit_stack.enter_context(obj)
         setattr(obj, IS_CHANGED, True)
         return fun(obj, *args, **kwargs)
@@ -183,12 +196,14 @@ logging.basicConfig(
 )
 
 
-jsons = JsonResourceContainer()
+def example():
 
-with global_exit_stack():
-    with jsons("test.json") as j1:
+    jsons = JsonResourceContainer()
 
-        j1.f("a", 1)
+    with GlobalExitStack():
+        with jsons("test.json") as j1:
 
-        with j1:
-            jsons("test.json").f("a", 4)
+            j1.f("a", 1)
+
+            with j1:
+                jsons("test.json").f("a", 4)
