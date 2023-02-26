@@ -1,0 +1,7 @@
+click
+coloredlogs
+appdirs
+filelock
+requests
+tzlocal
+jsonpath-ng

@@ -1,14 +1,88 @@
-import json
 import logging
-import os
-import re
+from functools import cached_property
+from pathlib import Path
 
-import appdirs
 import click
 import coloredlogs
 
-from . import __app_name__, __version__
-from .storage import DataIndex
+from datatools import __app_name__, __version__
+from datatools.classes import MainContext
+
+
+class Repository(MainContext):
+    def __init__(self, base_dir):
+        self.base_path = Path(base_dir).absolute()
+        logging.debug(f"base_dir: {self.base_path.as_posix()}")
+
+    def get_location(self, location):
+        path = Path(location)
+        if path.is_absolute():
+            return location
+        path = self.base_path.joinpath(path)
+        return path.as_posix()
+
+    def resource(self, location):
+        location = self.get_location(location)
+        return Resource(self, location)
+
+
+class MetadataStorage:
+    def __init__(self, index_location):
+        self.index_location = index_location
+        logging.debug(f"index_location: {self.index_location}")
+
+    def get_resource(self, path):
+        pass
+
+
+class ResourceMetadata:
+    """Proxy object for resource inside a metadata storage"""
+
+    def __init__(self, resource):
+        self.resource = resource
+        self.metadata_storage = self.get_metadata_storage(resource.location)
+
+    @classmethod
+    def get_metadata_storage(cls, location):
+
+        return MetadataStorage(location + ".metadata.json")
+
+    def get(self, key, value_default=None):
+        return value_default
+
+    def set(self, key, value=None):
+        pass
+
+    def check(self, key, value=None):
+        if value is None:
+            value = self.get(key)
+
+    def update(self, key):
+        pass
+
+
+class Resource:
+    def __init__(self, repository, location):
+        self.repository = repository
+        self.location = location
+
+    def __enter__(self):
+        # logging.debug(f"enter {self}")
+        return self
+
+    def __exit__(self, *args):
+        # logging.debug(f"exit {self}")
+        pass
+
+    @cached_property
+    def metadata(self):
+        return ResourceMetadata(self)
+
+    @cached_property
+    def metadata_storage(self):
+        return MetadataStorage(self.location + ".metadata.json")
+
+        return ResourceMetadata(self)
 
 
 @click.group("main")
@@ -17,66 +91,68 @@ from .storage import DataIndex
 @click.option(
     "--loglevel",
     "-l",
-    type=click.Choice(["debug", "info", "warning", "error"]),
-    default="info",
+    type=click.Choice(
+        ["debug", "info", "warning", "error", "d", "i", "w", "e"], case_sensitive=False
+    ),
+    default="d",
 )
-@click.option("is_global", "--global", "-g", is_flag=True, help="use global repository")
-@click.option("--data-location", "-d", help="change the default location")
-def main(ctx, loglevel, is_global, data_location):
+@click.option("--base-dir", "-b", default=".")
+def main(ctx, loglevel, base_dir):
     """Script entry point."""
 
     # setup logging
-    if isinstance(loglevel, str):
-        loglevel = getattr(logging, loglevel.upper())
+    loglevel = loglevel.lower()
+    loglevel = {"d": "debug", "i": "info", "w": "warning", "e": "error"}.get(
+        loglevel, loglevel
+    )
+    loglevel = getattr(logging, loglevel.upper())
+
     coloredlogs.DEFAULT_LOG_FORMAT = "[%(asctime)s %(levelname)7s] %(message)s"
     coloredlogs.DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
     coloredlogs.DEFAULT_FIELD_STYLES = {"asctime": {"color": None}}
     coloredlogs.install(level=loglevel)
-
-    def get_data_location(is_global):
-        if is_global:
-            path = appdirs.user_data_dir(
-                __app_name__, appauthor=None, version=None, roaming=False
-            )
-            path += "/data"
-        else:
-            path = "."
-        return path
-
-    data_location = data_location or get_data_location(is_global)
-    data_location = os.path.abspath(data_location)
-    os.makedirs(data_location, exist_ok=True)
-
-    ctx.obj = ctx.with_resource(DataIndex(data_location))
+    ctx.obj = ctx.with_resource(Repository(base_dir=base_dir))
 
 
-@main.command("list")
-@click.option("regexp", "-r", help="regexp pattern")
+@main.group("meta")
+@click.pass_context
+@click.argument("location")
+def meta(ctx, location):
+    repository = ctx.obj
+    resource = repository.resource(location)
+    ctx.obj = resource.metadata
+
+
+@meta.command("get")
 @click.pass_obj
-def list(index: DataIndex, regexp):
-    regexp = re.compile(regexp or ".*")
-
-    for res in index._data["resources"]:
-        if regexp.match(res["path"]):
-            res = json.dumps(res, indent=2)
-            print(res)
+@click.argument("key")
+@click.argument("value-default", required=False)
+def meta_get(resource_metdata, key, value_default=None):
+    val = resource_metdata.get(key, value_default)
+    print(val)
 
 
-@main.command("check")
+@meta.command("set")
 @click.pass_obj
-@click.option("--fix", "-f", is_flag=True, help="fix problems")
-@click.option("--delete", "-d", is_flag=True, help="delete index entries for missing")
-@click.option("--hash", "-h", is_flag=True, help="check hashes")
-def check(index: DataIndex, fix, delete, hash):
-    index.check(fix, delete, hash)
+@click.argument("key")
+@click.argument("value", required=False)
+def meta_set(resource_metdata, key, value=None):
+    resource_metdata.set(key, value)
 
 
-@main.command("download")
+@meta.command("check")
 @click.pass_obj
-@click.option("--force", "-f", is_flag=True, help="overwrite existing")
-@click.argument("uri")
-def download(index: DataIndex, uri, force):
-    index.download(uri, force=force)
+@click.argument("key")
+@click.argument("value", required=False)
+def meta_check(resource_metdata, key, value=None):
+    resource_metdata.check(key, value)
+
+
+@meta.command("update")
+@click.pass_obj
+@click.argument("key")
+def meta_update(resource_metdata, key):
+    resource_metdata.update(key)
 
 
 if __name__ == "__main__":

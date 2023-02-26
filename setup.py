@@ -12,6 +12,7 @@ if __name__ == "__main__":
             "filelock",
             "requests",
             "tzlocal",
+            "jsonpath-ng",
         ],
         name="datatools",
         description=None,
