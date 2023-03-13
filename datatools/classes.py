@@ -58,7 +58,6 @@ def assert_open_changed(fun):
 
 def get_resource_handler(uri):
     def get_scheme(uri):
-
         # FIXME
         if os.path.isfile(uri):
             return "file"
@@ -83,7 +82,6 @@ def get_resource_handler(uri):
 
 
 class AbstractResourceContainer:
-
     _class = None
 
     def __init__(self):
@@ -105,7 +103,6 @@ class AbstractResourceContainer:
 
 
 class ResourceContainerMixin:
-
     _instances = None  # class should override this with a dict
 
     @classmethod
@@ -126,7 +123,6 @@ class ResourceContainerMixin:
 
 
 class ByteResource:
-
     default_value = b""
 
     def __init__(self, path):
@@ -824,12 +820,10 @@ class HttpResource(RemoteResource):
 
 
 def main_test():
-
     jsons = TestJsonResourceContainer
 
     with conf.exit_stack:
         with jsons.get_instance("test.json") as j1:
-
             j1.f("a", 1)
 
             with j1:
@@ -837,7 +831,6 @@ def main_test():
 
 
 if __name__ == "__main__":
-
     logging.basicConfig(
         format="[%(asctime)s %(levelname)7s] %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",

@@ -107,7 +107,6 @@ class TestClasses(unittest.TestCase):
         # and now:share the resource
 
     def test_shared_context_2(self):
-
         with MainContext() as main:
             v_a = TestSharedContextInstance("A", parent=main)
             v_a["x"] = 1

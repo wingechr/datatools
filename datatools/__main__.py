@@ -47,8 +47,10 @@ def main(ctx, loglevel, cache_dir=None):
 def meta(ctx, location):
     res = get_resource_handler(location)
 
-    logging.debug(f"Location: {res.location}, exists={res.exists}")
-    logging.debug(f"Index: {res.metadata.index_location}: {res.metadata.relative_path}")
+    # logging.debug(f"Location: {res.location}, exists={res.exists}")
+    # logging.debug(f"Index: {res.metadata.index_location}: {res.metadata.relative_path}") # noqa
+    # FIXME:
+    assert res.exists
 
     ctx.obj["resource_metadata"] = res.metadata
 
