@@ -1,7 +1,6 @@
 from setuptools import setup
 
 if __name__ == "__main__":
-
     setup(
         packages=["datatools"],
         keywords=[],
@@ -12,6 +11,7 @@ if __name__ == "__main__":
             "filelock",
             "requests",
             "tzlocal",
+            "jsonpath-ng",
         ],
         name="datatools",
         description=None,

@@ -1,14 +1,10 @@
-import json
 import logging
-import os
-import re
 
-import appdirs
 import click
 import coloredlogs
 
-from . import __app_name__, __version__
-from .storage import DataIndex
+from datatools import __app_name__, __version__, conf
+from datatools.classes import get_resource_handler
 
 
 @click.group("main")
@@ -17,66 +13,78 @@ from .storage import DataIndex
 @click.option(
     "--loglevel",
     "-l",
-    type=click.Choice(["debug", "info", "warning", "error"]),
-    default="info",
+    type=click.Choice(
+        ["debug", "info", "warning", "error", "d", "i", "w", "e"], case_sensitive=False
+    ),
+    default="d",
 )
-@click.option("is_global", "--global", "-g", is_flag=True, help="use global repository")
-@click.option("--data-location", "-d", help="change the default location")
-def main(ctx, loglevel, is_global, data_location):
+@click.option("--cache-dir", "-d")
+def main(ctx, loglevel, cache_dir=None):
     """Script entry point."""
 
     # setup logging
-    if isinstance(loglevel, str):
-        loglevel = getattr(logging, loglevel.upper())
+    loglevel = loglevel.lower()
+    loglevel = {"d": "debug", "i": "info", "w": "warning", "e": "error"}.get(
+        loglevel, loglevel
+    )
+    loglevel = getattr(logging, loglevel.upper())
+
     coloredlogs.DEFAULT_LOG_FORMAT = "[%(asctime)s %(levelname)7s] %(message)s"
     coloredlogs.DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
     coloredlogs.DEFAULT_FIELD_STYLES = {"asctime": {"color": None}}
     coloredlogs.install(level=loglevel)
 
-    def get_data_location(is_global):
-        if is_global:
-            path = appdirs.user_data_dir(
-                __app_name__, appauthor=None, version=None, roaming=False
-            )
-            path += "/data"
-        else:
-            path = "."
-        return path
+    if cache_dir:
+        conf.cache_dir = cache_dir
 
-    data_location = data_location or get_data_location(is_global)
-    data_location = os.path.abspath(data_location)
-    os.makedirs(data_location, exist_ok=True)
-
-    ctx.obj = ctx.with_resource(DataIndex(data_location))
+    ctx.with_resource(conf.exit_stack)
+    ctx.obj = {}
 
 
-@main.command("list")
-@click.option("regexp", "-r", help="regexp pattern")
-@click.pass_obj
-def list(index: DataIndex, regexp):
-    regexp = re.compile(regexp or ".*")
+@main.group("meta")
+@click.pass_context
+@click.argument("location")
+def meta(ctx, location):
+    res = get_resource_handler(location)
 
-    for res in index._data["resources"]:
-        if regexp.match(res["path"]):
-            res = json.dumps(res, indent=2)
-            print(res)
+    # logging.debug(f"Location: {res.location}, exists={res.exists}")
+    # logging.debug(f"Index: {res.metadata.index_location}: {res.metadata.relative_path}") # noqa
+    # FIXME:
+    assert res.exists
 
-
-@main.command("check")
-@click.pass_obj
-@click.option("--fix", "-f", is_flag=True, help="fix problems")
-@click.option("--delete", "-d", is_flag=True, help="delete index entries for missing")
-@click.option("--hash", "-h", is_flag=True, help="check hashes")
-def check(index: DataIndex, fix, delete, hash):
-    index.check(fix, delete, hash)
+    ctx.obj["resource_metadata"] = res.metadata
 
 
-@main.command("download")
-@click.pass_obj
-@click.option("--force", "-f", is_flag=True, help="overwrite existing")
-@click.argument("uri")
-def download(index: DataIndex, uri, force):
-    index.download(uri, force=force)
+@meta.command("get")
+@click.pass_context
+@click.argument("key", required=False)
+@click.argument("value-default", required=False)
+def meta_get(ctx, key, value_default=None):
+    val = ctx.obj["resource_metadata"].get(key, value_default)
+    print(val)
+
+
+@meta.command("set")
+@click.pass_context
+@click.argument("key")
+@click.argument("value", required=False)
+def meta_set(ctx, key, value=None):
+    ctx.obj["resource_metadata"].set(key, value)
+
+
+@meta.command("check")
+@click.pass_context
+@click.argument("key")
+@click.argument("value", required=False)
+def meta_check(ctx, key, value=None):
+    ctx.obj["resource_metadata"].check(key, value)
+
+
+@meta.command("update")
+@click.pass_context
+@click.argument("key")
+def meta_update(ctx, key):
+    ctx.obj["resource_metadata"].update(key)
 
 
 if __name__ == "__main__":

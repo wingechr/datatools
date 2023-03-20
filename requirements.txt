@@ -4,5 +4,4 @@ appdirs
 filelock
 requests
 tzlocal
-# dev
-pre-commit
+jsonpath-ng

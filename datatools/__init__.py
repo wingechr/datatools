@@ -1,7 +1,5 @@
 __version__ = "0.0.0"
 __app_name__ = "datatools"
+__all__ = ["get_resource_handler"]
 
-__all__ = ["storage"]
-
-
-from . import storage
+from .classes import get_resource_handler

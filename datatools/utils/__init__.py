@@ -32,11 +32,11 @@ def get_now():
 
 
 def get_now_str():
-    get_now().strftime(DATETIMETZ_FMT)
+    return get_now().strftime(DATETIMETZ_FMT)
 
 
 def get_today_str():
-    get_now().strftime(DATE_FMT)
+    return get_now().strftime(DATE_FMT)
 
 
 def get_user_long():
