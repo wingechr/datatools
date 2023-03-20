@@ -1,62 +1,91 @@
-#!/usr/bin/env python3
-
-import logging  # noqa
-import sys
+import logging
 
 import click
+import coloredlogs
 
-from datatools import __version__
-from datatools.location import location
-from datatools.utils.cli import create_main
-
-main = create_main(version=__version__, name="test")
+from datatools import __app_name__, __version__, conf
+from datatools.classes import get_resource_handler
 
 
-@main.command()
-@click.argument("source")
-@click.argument("target")
-@click.option("--bytes-hash", "-h")
+@click.group("main")
+@click.pass_context
+@click.version_option(__version__)
 @click.option(
-    "--json-schema", "-j", help="location of schema or `auto` to load from $schema"
+    "--loglevel",
+    "-l",
+    type=click.Choice(
+        ["debug", "info", "warning", "error", "d", "i", "w", "e"], case_sensitive=False
+    ),
+    default="d",
 )
-@click.option(
-    "--table-schema",
-    "-t",
-    help="location of schema or `auto` to load from reousrce.schema",
-)
-@click.option("--overwrite", "-w", is_flag=True)
-def load(
-    source,
-    target,
-    bytes_hash=None,
-    json_schema=None,
-    table_schema=None,
-    overwrite=False,
-):
-    if json_schema == "auto":
-        json_schema = True
-    if table_schema == "auto":
-        table_schema = True
+@click.option("--cache-dir", "-d")
+def main(ctx, loglevel, cache_dir=None):
+    """Script entry point."""
 
-    source = location(source)
-    target = location(target)
-
-    if target.supports_metadata:
-        metadata = {"source": str(source)}
-    else:
-        metadata = None
-
-    rep = target.write(
-        source.read(),
-        bytes_hash=bytes_hash,
-        json_schema=json_schema,
-        table_schema=table_schema,
-        overwrite=overwrite,
-        metadata=metadata,
+    # setup logging
+    loglevel = loglevel.lower()
+    loglevel = {"d": "debug", "i": "info", "w": "warning", "e": "error"}.get(
+        loglevel, loglevel
     )
-    rep_bytes = str(rep).encode()
-    sys.stdout.buffer.write(rep_bytes)
+    loglevel = getattr(logging, loglevel.upper())
+
+    coloredlogs.DEFAULT_LOG_FORMAT = "[%(asctime)s %(levelname)7s] %(message)s"
+    coloredlogs.DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+    coloredlogs.DEFAULT_FIELD_STYLES = {"asctime": {"color": None}}
+    coloredlogs.install(level=loglevel)
+
+    if cache_dir:
+        conf.cache_dir = cache_dir
+
+    ctx.with_resource(conf.exit_stack)
+    ctx.obj = {}
+
+
+@main.group("meta")
+@click.pass_context
+@click.argument("location")
+def meta(ctx, location):
+    res = get_resource_handler(location)
+
+    # logging.debug(f"Location: {res.location}, exists={res.exists}")
+    # logging.debug(f"Index: {res.metadata.index_location}: {res.metadata.relative_path}") # noqa
+    # FIXME:
+    assert res.exists
+
+    ctx.obj["resource_metadata"] = res.metadata
+
+
+@meta.command("get")
+@click.pass_context
+@click.argument("key", required=False)
+@click.argument("value-default", required=False)
+def meta_get(ctx, key, value_default=None):
+    val = ctx.obj["resource_metadata"].get(key, value_default)
+    print(val)
+
+
+@meta.command("set")
+@click.pass_context
+@click.argument("key")
+@click.argument("value", required=False)
+def meta_set(ctx, key, value=None):
+    ctx.obj["resource_metadata"].set(key, value)
+
+
+@meta.command("check")
+@click.pass_context
+@click.argument("key")
+@click.argument("value", required=False)
+def meta_check(ctx, key, value=None):
+    ctx.obj["resource_metadata"].check(key, value)
+
+
+@meta.command("update")
+@click.pass_context
+@click.argument("key")
+def meta_update(ctx, key):
+    ctx.obj["resource_metadata"].update(key)
 
 
 if __name__ == "__main__":
-    main()
+    main(prog_name=__app_name__)
