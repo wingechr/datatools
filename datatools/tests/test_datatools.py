@@ -7,8 +7,8 @@ import unittest
 logging.basicConfig(level=logging.INFO)
 
 
-from . import Repository
-from .utils import filecache_json, get_local_path
+from datatools import Repository
+from datatools.utils import filecache_json, get_local_path
 
 
 class TestRepository(unittest.TestCase):

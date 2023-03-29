@@ -1,7 +1,12 @@
+pyyaml
 click
 coloredlogs
 appdirs
 filelock
 requests
 tzlocal
-jsonpath-ng
+jsonpath-ng>=1.5
+jsonschema>=4.17
+frictionless>=5.10
+pandas>=1.5
+jsonref>=1.1

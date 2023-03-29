@@ -1,0 +1,14 @@
+{
+  "$schema": "../schema/tabular-data-resource.schema.json",
+  "$schemaOnline": "https://specs.frictionlessdata.io/schemas/tabular-data-resource.json",
+  "name": "example",
+  "data": [],
+  "schema": {
+    "fields": [
+      {
+        "name": "field1"
+      }
+    ]
+  },
+  "profile": "tabular-data-resource"
+}

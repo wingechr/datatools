@@ -14,7 +14,7 @@ from filelock import FileLock, SoftFileLock
 
 from datatools import __app_name__, __version__
 
-# from . import 
+# from . import
 
 global_cache_dir = (
     appdirs.user_data_dir(__app_name__, appauthor=None, version=None, roaming=False)
