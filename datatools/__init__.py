@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
+import logging
 
 from filelock import FileLock
 
@@ -91,44 +92,57 @@ class Repository:
             "location",
             normpath(self.location or get_app_data_dir(__app_name__) + "/data"),
         )
+        logging.debug(f"LOCATION: {self.location}")
 
     def __enter__(self):
+        logging.debug("ENTER")
         self._exit_stack.__enter__()
 
     def __exit__(self, *error):
+        logging.debug("EXIT")
         self._exit_stack.__exit__(*error)
 
     def __getitem__(self, uri: str):
         return Resource(self, uri)
 
     def get_resource_location(self, uri: str):
-        return get_local_path(uri, base_path=self.location)
+        location = get_local_path(uri, base_path=self.location)
+        location = normpath(location)
+        return location
+
+    def find_datapackage_index_location(self, resource):
+        # walk paths
+        path = resource.location
+        while True:
+            # split off the last part
+            path = re.match("^(.+)/[^/]+$", path).groups()[0]
+            if not path.startswith(self.location):
+                break
+            metadata_storage_location = path + "/datapackage.json"
+            if os.path.isfile(metadata_storage_location):
+                return metadata_storage_location
 
     def get_metadata_storage(self, resource: "Resource"):
         single_resource_json_path = resource.location + ".metadata.json"
         single_resource_yml_path = resource.location + ".metadata.yml"
 
+        logging.debug(f"meta storage location: {self.location}")
+        logging.debug(f"resource location: {resource.location}")
+
         assert resource.location.startswith(self.location)
 
-        metadata_storage_type = None
-        if os.path.isfile(single_resource_json_path):
-            metadata_storage_location = single_resource_json_path
-            metadata_storage_type = StorageType.SINGLE_RESOURCE_JSON
-        elif os.path.isfile(single_resource_yml_path):
-            metadata_storage_location = single_resource_yml_path
-            metadata_storage_type = StorageType.SINGLE_RESOURCE_YML
+        metadata_storage_location = self.find_datapackage_index_location(resource)
+        if metadata_storage_location:
+            metadata_storage_type = StorageType.DATAPACKAGE
         else:
-            # walk paths
-            path = resource.location
-            while True:
-                # split off the last part
-                path = re.match("^(.+)/[^/]+$", path).groups()[0]
-                if not path.startswith(self.location):
-                    break
-                metadata_storage_location = path & "/datapackage.json"
-                if os.path.isfile(metadata_storage_location):
-                    metadata_storage_type = StorageType.DATAPACKAGE
-                    break
+            # TODO: user preference for yamlor json
+
+            if os.path.isfile(single_resource_yml_path):
+                metadata_storage_location = single_resource_yml_path
+                metadata_storage_type = StorageType.SINGLE_RESOURCE_YML
+            else:
+                metadata_storage_location = single_resource_json_path
+                metadata_storage_type = StorageType.SINGLE_RESOURCE_JSON
 
         if not metadata_storage_type:
             raise NotImplementedError(resource)
@@ -152,7 +166,7 @@ class Resource:
     @cached_property
     def metadata(self):
         metadata_storage = self.repository.get_metadata_storage(self)
-        return metadata_storage.get_metadata_for_resource(self)
+        return metadata_storage[self]
 
     def download(self):
         raise NotImplementedError()
@@ -163,6 +177,11 @@ class Metadata:
     _metadata_storage: "MetadataStorage" = field(repr=False)
     _resource: "Resource" = field(repr=False)
     _data: dict
+
+    # TODO: item assignment/loading (with json path?)
+    def __setitem__(self, key, val):
+
+        self._metadata_storage._has_changed
 
 
 @dataclass(frozen=True)
@@ -185,10 +204,9 @@ class MetadataStorage:
             self.container_location
         ), f"{resource.location} > {self.container_location}"
 
-        return Metadata(
-            self,
-            resource,
-        )
+        data = {}  # TODO
+
+        return Metadata(self, resource, data)
 
     def __post_init__(self):
         object.__setattr__(
@@ -200,9 +218,4 @@ class MetadataStorage:
                 default=create_obj_to_bytes()({"resources": []}),
             ),
         )
-        object.__setattr__(
-            self, "_data", create_bytes_to_obj()(self._file.get_byte_data())
-        )
-
-    def _update(self, metadata: "Metadata"):
-        self._file._has_changed
+        object.__setattr__(self, "_data", create_bytes_to_obj()(self._file.byte_data))

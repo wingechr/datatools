@@ -5,6 +5,7 @@ import os
 import socket
 from stat import S_IREAD, S_IRGRP, S_IROTH
 from urllib.parse import urlsplit
+from functools import cache
 
 import appdirs
 import tzlocal
@@ -41,16 +42,21 @@ def get_today_str():
     return get_now().strftime(DATE_FMT)
 
 
+@cache
+def get_host():
+    """Return current domain name"""
+    # return socket.gethostname()
+    return socket.getfqdn()
+
+
+@cache
+def get_user():
+    """Return current user name"""
+    return getpass.getuser()
+
+
+@cache
 def get_user_long():
-    def get_user():
-        """Return current user name"""
-        return getpass.getuser()
-
-    def get_host():
-        """Return current domain name"""
-        # return socket.gethostname()
-        return socket.getfqdn()
-
     return f"{get_user()}@{get_host()}"
 
 
@@ -168,7 +174,27 @@ def normpath(path):
 
 def get_local_path(uri, base_path):
     url = urlsplit(uri)
-    return uri
+
+    host = url.hostname or get_host()
+    path = url.path
+
+    # TODO: maybe urldecode spaces? but not all special chars?
+
+    if not path.startswith("/"):
+        path = "/" + path
+
+    # if path == "/":
+    #    path = "/index.html"
+
+    path = host + path
+
+    if url.fragment:
+        path += url.fragment
+
+    path = base_path + "/" + path
+    path = normpath(path)
+
+    return path
 
 
 def assert_file_folder(filepath: str):
