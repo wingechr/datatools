@@ -8,22 +8,7 @@ Have a look at the specs at
 
 import unittest
 
-import frictionless
-
-
-def validate_resource(resource_descriptor):
-    res = frictionless.Resource(resource_descriptor)
-    rep = res.validate()
-
-    if rep.stats["errors"]:
-        errors = []
-        for task in rep.tasks:
-            for err in task["errors"]:
-                errors.append(err["message"])
-
-        err_str = "\n".join(errors)
-        # logging.error(err_str)
-        raise ValueError(err_str)
+from dataschema import validate_resource
 
 
 class TestFrictionless(unittest.TestCase):

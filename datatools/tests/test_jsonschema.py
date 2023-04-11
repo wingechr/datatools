@@ -7,46 +7,9 @@ Have a look at the specs at
 """
 
 import unittest
+
 import jsonschema
-
-
-def get_jsonschema_validator(schema):
-    """Return validator instance for schema.
-
-    Example:
-
-    >>> schema = {"type": "object", "properties": {"id": {"type": "integer"}}, "required": [ "id" ]}  # noqa
-    >>> validator = get_jsonschema_validator(schema)
-    >>> validator({})
-    Traceback (most recent call last):
-        ...
-    ValueError: 'id' is a required property ...
-
-    >>> validator({"id": "a"})
-    Traceback (most recent call last):
-        ...
-    ValueError: 'a' is not of type 'integer' ...
-
-    >>> validator({"id": 1})
-
-    """
-    validator_cls = jsonschema.validators.validator_for(schema)
-    # check if schema is valid
-    validator_cls.check_schema(schema)
-    validator = validator_cls(schema)
-
-    def validator_function(instance):
-        errors = []
-        for err in validator.iter_errors(instance):
-            # path in data structure where error occurs
-            path = "$" + "/".join(str(x) for x in err.absolute_path)
-            errors.append("%s in %s" % (err.message, path))
-        if errors:
-            err_str = "\n".join(errors)
-            # logging.error(err_str)
-            raise ValueError(err_str)
-
-    return validator_function
+from dataschema import get_jsonschema_validator
 
 
 class TestJsonSchema(unittest.TestCase):
