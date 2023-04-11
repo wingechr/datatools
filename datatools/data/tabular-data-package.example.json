@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/wingechr/dataschema/master/dataschema/data/tabular-data-package.schema.json#",
+  "name": "example",
+  "resources": [
+    {
+      "name": "example",
+      "profile": "tabular-data-resource",
+      "data": [],
+      "schema": {
+        "fields": [
+          {
+            "name": "field1"
+          }
+        ]
+      }
+    }
+  ],
+  "profile": "tabular-data-package"
+}

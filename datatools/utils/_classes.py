@@ -12,8 +12,16 @@ import appdirs
 import requests
 from filelock import FileLock, SoftFileLock
 
-from datatools import __app_name__, conf
-from datatools.utils import get_hash, get_now_str, get_user_long, make_readonly
+from datatools import __app_name__, __version__
+
+# from . import
+
+global_cache_dir = (
+    appdirs.user_data_dir(__app_name__, appauthor=None, version=None, roaming=False)
+    + "/data"
+)
+
+cache_dir = global_cache_dir
 
 IS_OPEN = "_is_open"
 IS_CHANGED = "_is_changed"
@@ -817,23 +825,3 @@ class HttpResource(RemoteResource):
 
         with open(tgt, "wb") as file:
             file.write(res.content)
-
-
-def main_test():
-    jsons = TestJsonResourceContainer
-
-    with conf.exit_stack:
-        with jsons.get_instance("test.json") as j1:
-            j1.f("a", 1)
-
-            with j1:
-                jsons.get_instance("test.json").f("a", 4)
-
-
-if __name__ == "__main__":
-    logging.basicConfig(
-        format="[%(asctime)s %(levelname)7s] %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        level=logging.DEBUG,
-    )
-    main_test()
