@@ -1,4 +1,4 @@
-name: build-and-deploy
+name: pages
 on:
   push:
     branches:
@@ -8,12 +8,12 @@ permissions:
   id-token: write
   pages: write
 jobs:
-  build-and-deploy:
+  pages:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - run: npm ci && npm run build
       - uses: actions/upload-pages-artifact@v1
         with:
-          path: dist
+          path: _pages
       - uses: actions/deploy-pages@v2

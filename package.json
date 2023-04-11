@@ -1,7 +1,7 @@
 {
   "name": "datatools",
   "scripts": {
-    "build": "npx parcel build --no-source-maps --dist-dir dist/schema --public-url . pages/schema/index.html",
+    "build": "npx parcel build --no-source-maps --dist-dir _pages/schema --public-url . pages/schema/index.html",
     "serve": "npx parcel serve --no-source-maps pages/schema/index.html"
   },
   "dependencies": {
