@@ -1,11 +1,12 @@
 "use strict";
 
-require("bootstrap");
+import 'bootstrap';
+
 
 // TODO: $refs dont work?
 
-// eslint-disable-next-line max-len
-const defaultSchemaUrl = "https://raw.githubusercontent.com/wingechr/dataschema/master/dataschema/data/tabular-data-resource.schema.json";
+const repo = "https://raw.githubusercontent.com/wingechr/datatools/main";
+const defaultSchemaUrl = repo + "/data/tabular-data-resource.schema.json";
 const JSONEditor = require("@json-editor/json-editor").JSONEditor;
 // eslint-disable-next-line no-unused-vars
 let editor;
@@ -44,9 +45,25 @@ console.log(window.location.href);
 getJson(params.schema).then(function(schema) {
   editor = new JSONEditor(
       document.getElementById('editor'),
+      // https://github.com/json-editor/json-editor
       {
         schema: schema,
         theme: "bootstrap5",
+        iconlib: "fontawesome5",
+        remove_button_labels: true,
+        compact: true,
+        disable_collapse: true,
+        disable_edit_json: true,
+        disable_properties: true,
+        disable_collapse: true,
+        array_controls_top: true,
+        disable_array_reorder: true,
+        disable_array_delete_last_row: true,
+        disable_array_delete_all_rows: true,
+        prompt_before_delete: false,
+        show_opt_in: true,
+        max_depth: 10, /* recursive depth */
+        /* urn_resolver: null */
       },
   );
 });

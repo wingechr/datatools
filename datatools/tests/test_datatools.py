@@ -1,11 +1,7 @@
 # coding: utf-8
-import logging
 import os
 import tempfile
 import unittest
-
-logging.basicConfig(level=logging.INFO)
-
 
 from datatools import Repository
 from datatools.utils import filecache_json, get_local_path

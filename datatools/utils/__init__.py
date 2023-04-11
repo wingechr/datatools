@@ -1,14 +1,18 @@
 import datetime
 import getpass
 import hashlib
+import json
 import os
 import socket
+from functools import cache
 from stat import S_IREAD, S_IRGRP, S_IROTH
 from urllib.parse import urlsplit
-from functools import cache
 
 import appdirs
 import tzlocal
+
+DEFAULT_ENCODING = "utf-8"
+DEFAULT_JSON_INDENT = 2
 
 DATETIMETZ_FMT = "%Y-%m-%d %H:%M:%S%z"
 DATE_FMT = "%Y-%m-%d"
@@ -45,7 +49,6 @@ def get_today_str():
 @cache
 def get_host():
     """Return current domain name"""
-    # return socket.gethostname()
     return socket.getfqdn()
 
 
@@ -58,13 +61,6 @@ def get_user():
 @cache
 def get_user_long():
     return f"{get_user()}@{get_host()}"
-
-
-import json
-import os
-
-DEFAULT_ENCODING = "utf-8"
-DEFAULT_JSON_INDENT = 2
 
 
 def create_filecache(from_bytes, to_bytes):

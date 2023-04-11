@@ -1,10 +1,10 @@
 import logging
+from types import SimpleNamespace
 
 import click
 import coloredlogs
 
-from datatools import __app_name__, __version__, Repository
-from types import SimpleNamespace
+from datatools import Repository, __app_name__, __version__
 
 
 @click.group("main")
