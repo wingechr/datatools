@@ -1,4 +1,5 @@
 {
+  "name": "datatools",
   "scripts": {
     "build": "npx parcel build --dist-dir dist/schema --public-url . pages/schema/index.html"
   },

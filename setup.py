@@ -35,5 +35,4 @@ if __name__ == "__main__":
             "Operating System :: OS Independent",
         ],
         entry_points={"console_scripts": ["datatools = datatools.__main__:main"]},
-        package_data={"datatools": ["data/**/*.json"]},
     )
