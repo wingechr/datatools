@@ -46,108 +46,247 @@
     },
     "mediatype": {
       "description": "The media type of this resource. Can be any valid media type listed with [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml).",
-      "examples": ["text/csv"],
+      "examples": ["text/csv", "application/json"],
       "pattern": "^(.+)/(.+)$",
       "title": "Media Type",
       "type": "string"
     },
-    "licenses": {
-      "context": "This property is not legally binding and does not guarantee that the package is licensed under the terms defined herein.",
-      "description": "The license(s) under which the resource is published.",
-      "examples": [
-        [
-          {
-            "name": "odc-pddl-1.0",
-            "path": "http://opendatacommons.org/licenses/pddl/",
-            "title": "Open Data Commons Public Domain Dedication and License v1.0"
-          }
-        ]
-      ],
+    "language": {
+      "description": "Language used within the described data structures (e.g. titles, descriptions). The language key can be repeated if more languages are used. Standard: IETF (BCP47). Example: [en-GB, de-DE, fr-FR]",
+      "type": "array",
       "items": {
-        "anyOf": [
-          {
-            "required": ["name"]
-          },
-          {
-            "required": ["path"]
-          }
-        ],
-        "context": "Use of this property does not imply that the person was the original creator of, or a contributor to, the data in the descriptor, but refers to the composition of the descriptor itself.",
-        "description": "A license for this descriptor.",
-        "properties": {
-          "name": {
-            "description": "MUST be an Open Definition license identifier, see http://licenses.opendefinition.org/",
-            "pattern": "^([-a-zA-Z0-9._])+$",
-            "title": "Open Definition license identifier",
-            "type": "string"
-          },
-          "path": {
-            "context": "Implementations need to negotiate the type of path provided, and dereference the data accordingly.",
-            "description": "A fully qualified URL, or a POSIX file path.",
-            "examples": ["file.csv", "http://example.com/file.csv"],
-            "pattern": "^(?=^[^./~])(^((?!\\.{2}).)*$).*$",
-            "title": "Path",
-            "type": "string"
-          },
-          "title": {
-            "description": "A human-readable title.",
-            "examples": ["My Package Title"],
-            "title": "Title",
-            "type": "string"
-          }
-        },
-        "title": "License",
-        "type": "object",
-        "additionalProperties": false
+        "type": "string",
+        "examples": ["en", "en-US", "de", "de-DE", "fr", "fr-FR"],
+        "title": "Language"
       },
-      "title": "Licenses",
-      "type": "array"
+      "title": "Language"
+    },
+    "keywords": {
+      "description": "An array of string keywords to assist users searching for the package in catalogs. Example: [example, template, test]",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 40,
+        "title": "Keyword",
+        "examples": ["example"]
+      },
+      "title": "Keyword"
+    },
+    "publicationDate": {
+      "description": "Date of publishing. Date Format is ISO 8601 (YYYY-MM-DD). Example: 2019-02-06",
+      "type": "string",
+      "title": "Publication date",
+      "format": "date",
+      "examples": ["2023-12-04"]
+    },
+    "context": {
+      "description": "Object. Contains name-value-pairs that describe the general setting, evironment or project leading to the creation or maintenance of this dataset.",
+      "type": "object",
+      "properties": {
+        "homepage": {
+          "description": "URL of project. Example: https://openenergy-platform.org/",
+          "type": "string",
+          "title": "Homepage",
+          "format": "uri",
+          "examples": ["https://example.org"]
+        },
+        "documentation": {
+          "description": "URL of project documentation. Example: https://github.com/OpenEnergyPlatform/metadata/wiki/Metadata-Description",
+          "type": "string",
+          "title": "Documentation"
+        },
+        "sourceCode": {
+          "description": "Url of project source code. Example: https://github.com/OpenEnergyPlatform",
+          "type": "string",
+          "title": "Source code"
+        },
+        "contact": {
+          "description": "Reference to the creator or maintainer of the data set. Example: contact@example.com",
+          "type": "string",
+          "title": "E-Mail contact",
+          "format": "email",
+          "examples": ["example@example.org"]
+        },
+        "grantNo": {
+          "description": "In a publicly funded Project: the identifying grant number. Example: 01AB2345",
+          "type": "string",
+          "title": "Grant no"
+        },
+        "fundingAgency": {
+          "description": "In a funded Project: The name of the funding agency. Example: Bundesministerium für Wirtschaft und Energie",
+          "type": "string",
+          "title": "Funding agency"
+        },
+        "fundingAgencyLogo": {
+          "description": "In a publicly funded Project: A link to the Logo of the funding agency. Example: https://www.innovation-beratung-foerderung.de/INNO/Redaktion/DE/Bilder/Titelbilder/titel_foerderlogo_bmwi.jpg?__blob=poster&v=2",
+          "type": "string",
+          "title": "Funding agency logo",
+          "format": "uri"
+        },
+        "publisherLogo": {
+          "description": "Link to the logo of the publishing institution. Example: https://reiner-lemoine-institut.de//wp-content/uploads/2015/09/rlilogo.png",
+          "type": "string",
+          "title": "Publisher logo",
+          "format": "uri"
+        }
+      },
+      "additionalProperties": false,
+      "title": "Context"
+    },
+    "spatial": {
+      "description": "Object. Contains name-value-pairs describing the spatial context of the contained data.",
+      "type": "object",
+      "properties": {
+        "location": {
+          "description": "In the case of data where the location can be described as a point. May come as coordinates, URI or addresses with street, house number and zip code. Example: 52.433509, 13.535855",
+          "type": "string",
+          "title": "Location"
+        },
+        "extent": {
+          "description": "Covered area. May be the name of a region, or the geometry of a bounding box. Example: Europe",
+          "type": "string",
+          "title": "Extent",
+          "examples": ["Germany", "Europe"]
+        },
+        "resolution": {
+          "description": "Pixel size in case of a regular raster image. Reference to administrative level or other spatial division that is present as the smallest spatially distinguished unit size. Example: 30m",
+          "type": "string",
+          "title": "Resolution",
+          "examples": ["100m", "NUTS-2"]
+        }
+      },
+      "additionalProperties": false,
+      "title": "Spatial"
+    },
+    "temporal": {
+      "description": "Temporal object. Time period covered in the data. Temporal information should either contain a \"referenceDate\" or the keys describing a time series; in rare cases both.",
+      "type": "object",
+      "properties": {
+        "referenceDate": {
+          "description": "Base year, month or day. Point in time for which the data is meant to be accurate. A census will generally have a reference year. A satellite image will have a reference date. Date Format is ISO 8601. Example: 2016-01-01",
+          "type": "string",
+          "title": "Reference date",
+          "format": "date",
+          "examples": ["2020-01-01"]
+        },
+        "timeseries": {
+          "description": "Times series object in temporal object, contains start, end, resolution, alignment and aggregation type properties.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "start": {
+                "description": "The beginning point in time of a time series. Example: 2019-02-06T10:12:04+00:00",
+                "type": "string",
+                "title": "Start",
+                "format": "date-time",
+                "examples": ["2019-02-06T10:12:04+00:00"]
+              },
+              "end": {
+                "description": "The end point in time of a time series. Example: 2019-02-07T10:12:04+00:00",
+                "type": "string",
+                "title": "End",
+                "format": "date-time",
+                "examples": [" 2019-02-07T10:12:04+00:00"]
+              },
+              "resolution": {
+                "description": "The time span between individual points of information in a time series. Example: 30s",
+                "type": "string",
+                "title": "Resolution",
+                "examples": ["1h"]
+              },
+              "alignment": {
+                "description": "Indicator whether stamps in a time series are left, right or middle. Example: left",
+                "type": "string",
+                "title": "Alignment",
+                "enum": ["left", "right", "middle"]
+              },
+              "aggregationType": {
+                "description": "Indicates whether the values are a sum, average or current. Example: sum",
+                "type": "string",
+                "title": "Aggregation type",
+                "examples": ["current", "sum", "average"]
+              }
+            },
+            "additionalProperties": false,
+            "title": "Timeseries"
+          },
+          "title": "Timeseries"
+        }
+      },
+      "additionalProperties": false,
+      "title": "Temporal"
     },
     "sources": {
-      "description": "The raw sources for this resource.",
-      "examples": [
-        [
-          {
-            "title": "World Bank and OECD",
-            "path": "http://data.worldbank.org/indicator/NY.GDP.MKTP.CD"
-          }
-        ]
-      ],
+      "description": "List of source objects. Each object has all name-value-pairs.",
+      "type": "array",
       "items": {
-        "description": "A source file.",
+        "description": "Source object in list of source objects. Each object has all name-value-pairs.",
+        "type": "object",
         "properties": {
-          "email": {
-            "description": "An email address.",
-            "examples": ["example@example.com"],
-            "format": "email",
-            "title": "Email",
-            "type": "string"
+          "title": {
+            "description": "Human readable title of the source, e.g. document title or organisation name. Example: IPCC Fifth Assessment Report",
+            "type": "string",
+            "title": "Title",
+            "examples": ["IPCC Fifth Assessment Report"]
+          },
+          "description": {
+            "description": "Free text description of the data set. Example: Scientific climate change report by the UN",
+            "type": "string",
+            "title": "Description"
           },
           "path": {
-            "context": "Implementations need to negotiate the type of path provided, and dereference the data accordingly.",
-            "description": "A fully qualified URL, or a POSIX file path.",
-            "examples": ["file.csv", "http://example.com/file.csv"],
-            "pattern": "^(?=^[^./~])(^((?!\\.{2}).)*$).*$",
+            "description": "URL to original source. Example: https://www.ipcc.ch/site/assets/uploads/2018/02/ipcc_wg3_ar5_full.pdf",
+            "type": "string",
             "title": "Path",
-            "type": "string"
+            "format": "uri",
+            "examples": [
+              "https://www.ipcc.ch/site/assets/uploads/2018/02/ipcc_wg3_ar5_full.pdf"
+            ]
           },
-          "title": {
-            "description": "A human-readable title.",
-            "examples": ["My Package Title"],
-            "title": "Title",
-            "type": "string"
+          "licenses": {
+            "description": "The license(s) under which the source(s) is/are provided. List of objects.",
+            "type": "array",
+            "items": {
+              "description": "A license object under which the described source is provided. Each object has all name-value-pairs.",
+              "type": "object",
+              "properties": {
+                "name": {
+                  "description": "SPDX identifier: Example: ODbL-1.0",
+                  "type": "string",
+                  "title": "Name",
+                  "examples": ["CC-BY-4.0"]
+                },
+                "title": {
+                  "description": "Official (human readable) title. Example: Open Data Commons Open Database License 1.0",
+                  "type": "string",
+                  "title": "Title"
+                },
+                "path": {
+                  "description": "A link to the license. Example: https://opendatacommons.org/licenses/odbl/1-0/index.html",
+                  "type": "string",
+                  "title": "Path"
+                },
+                "instruction": {
+                  "description": "Short description of rights and restrictions. Example: You are free to share and change, but you must attribute, and share derivations under the same license.",
+                  "type": "string",
+                  "title": "Instruction"
+                },
+                "attribution": {
+                  "description": "Copyrightholder of the source. Example: © Intergovernmental Panel on Climate Change 2014",
+                  "type": "string",
+                  "title": "Attribution"
+                }
+              },
+              "title": "Licenses"
+            },
+            "title": "Licenses"
           }
         },
-        "required": ["title"],
-        "title": "Source",
-        "type": "object"
+        "additionalProperties": false,
+        "title": "Sources"
       },
-      "options": {
-        "hidden": false
-      },
-      "propertyOrder": 140,
-      "title": "Sources",
-      "type": "array"
+      "title": "Sources"
     },
     "schema": {
       "description": "A Table Schema for this resource, compliant with the [Table Schema](/tableschema/) specification.",
