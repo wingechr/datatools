@@ -72,6 +72,7 @@
     "keywords": {
       "description": "An array of string keywords to assist users searching for the package in catalogs",
       "type": "array",
+      "uniqueItems": true,
       "format": "table",
       "items": {
         "type": "string",
@@ -135,7 +136,7 @@
     "temporal": {
       "description": "Time period covered in the data",
       "type": "object",
-      "format": "table",
+      "format": "grid",
       "properties": {
         "extent": {
           "description": "Covered area. May be the name of a region, or the geometry of a bounding box.",
