@@ -1,3 +1,10 @@
 @import "~bootstrap/scss/bootstrap";
 @import '../../node_modules/@fortawesome/fontawesome-free/css/all.css';
 @import '../../node_modules/typeahead/style.css';
+
+/* fixlayout */
+
+// space before add new object button
+.json-editor-btn-add {
+    margin-left: 1em;
+}

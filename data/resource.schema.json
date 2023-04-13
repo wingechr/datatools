@@ -2,7 +2,7 @@
   "$id": "https://raw.githubusercontent.com/wingechr/datatools/main/data/resource.schema.json#",
   "$schema": "http://json-schema.org/draft-07/schema#",
   "required": [],
-  "title": "Title",
+  "title": "Resource",
   "properties": {
     "$schema": {
       "options": {
@@ -14,25 +14,16 @@
     },
     "name": {
       "rdf": "dct:title",
-      "description": "An identifier string. Lower case characters with `.`, `_`, `-` and `/` are allowed.",
-      "examples": ["my-nice-name"],
+      "description": "An identifier string.",
       "options": {
-        "inputAttributes": {
-          "placeholder": "identification-name"
-        },
-        "autocomplete": {
-          "search": "search_za",
-          "getResultValue": "getResultValue_za",
-          "renderResult": "renderResult_za",
-          "autoSelect": true
-        }
+        "placeholder": "identifier-string"
       },
       "pattern": "^([-a-z0-9._/])+$",
       "title": "Name",
       "type": "string"
     },
     "description": {
-      "description": "A text description.",
+      "description": "A long form description of the resource.",
       "rdf": "dct:description",
       "format": "textarea",
       "title": "Description",
@@ -48,7 +39,8 @@
     },
     "hash": {
       "options": {
-        "hidden": true
+        "hidden": true,
+        "placeholder": "e.g. sah256:ff6356d556d75sd656df5676s6dfsdf"
       },
       "pattern": "^[^:]+:[a-fA-F0-9]+$",
       "title": "Hash",
@@ -59,7 +51,9 @@
       "typeInfo": "https://en.wikipedia.org/wiki/Popularity_of_text_encodings",
       "description": "The file text encoding of this resource.",
       "examples": ["utf-8"],
-      "enum": ["utf-8", "iso-8859-1", "windows-1251"],
+      "options": {
+        "autocomplete": ["utf-8", "iso-8859-1", "windows-1251"]
+      },
       "title": "Encoding",
       "type": "string"
     },
@@ -67,20 +61,36 @@
       "typeInfo": "https://www.iana.org/assignments/media-types/media-types.xhtml",
       "description": "The media type of this resource",
       "examples": ["text/csv", "application/json"],
+      "options": {
+        "autocomplete": [
+          "text/csv",
+          "application/json",
+          "application/geo+json",
+          "application/pdf",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "application/vnd.shp",
+          "application/vnd.opengeospatial.geopackage+sqlite3"
+        ]
+      },
       "pattern": "^(.+)/(.+)$",
       "title": "Media Type",
       "type": "string"
     },
     "language": {
       "typeInfo": "IETF (BCP47)",
-      "description": "Language code used within the described data structures (e.g. titles, descriptions)",
+      "description": "Language code used within the resource.",
       "type": "string",
       "rdf": "dct:language",
+      "options": {
+        "placeholder": "e.g. en-US",
+        "autocomplete": ["en", "en-US", "de", "de-DE", "fr", "fr-FR"]
+      },
       "examples": ["en", "en-US", "de", "de-DE", "fr", "fr-FR"],
       "title": "Language"
     },
     "keywords": {
-      "description": "An array of string keywords to assist users searching for the package in catalogs",
+      "description": "An array of string keywords to assist users searching for the resource.",
       "type": "array",
       "uniqueItems": true,
       "format": "table",
@@ -94,30 +104,37 @@
       "title": "Keyword"
     },
     "license": {
-      "description": "The license(s) under which the source(s) is/are provided. List of objects.",
+      "description": "The license under which the resource is published",
       "typeInfo": "SPDX",
       "type": "string",
       "title": "License",
       "examples": ["CC-BY-4.0"],
-      "autocomplete": [
-        "CC-BY-4.0",
-        "Creative Commons Attribution 4.0 International",
-        "ODbL-1.0",
-        "Open Data Commons Open Database License v1.0",
-        "ODC-By-1.0",
-        "Open Data Commons Attribution License v1.0",
-        "CC0-1.0",
-        "Creative Commons Zero v1.0 Universal"
-      ]
+      "options": {
+        "placeholder": "e.g. CC-BY-4.0",
+        "autocomplete": [
+          "CC-BY-4.0",
+          "Creative Commons Attribution 4.0 International",
+          "ODbL-1.0",
+          "Open Data Commons Open Database License v1.0",
+          "ODC-By-1.0",
+          "Open Data Commons Attribution License v1.0",
+          "CC0-1.0",
+          "Creative Commons Zero v1.0 Universal"
+        ]
+      }
     },
     "attribution": {
-      "description": "Copyrightholder of the source",
+      "description": "How to attribute usage of this resource.",
+      "options": {
+        "placeholder": "e.g. @ Öko-Institut"
+      },
       "type": "string",
       "title": "Attribution"
     },
     "publicationDate": {
       "type": "string",
       "title": "Publication date",
+      "description": "Date of publication / creation of the resource.",
       "format": "date",
       "examples": ["2023-12-04"]
     },
@@ -130,56 +147,85 @@
           "type": "string",
           "title": "Extent",
           "rdf": "dct:spatial",
-          "examples": ["Germany", "Europe"]
+          "examples": ["Germany", "Europe"],
+          "options": {
+            "placeholder": "e.g. Europe",
+            "autocomplete": ["World", "Europe", "Germany"]
+          }
         },
         "resolution": {
-          "description": "Pixel size in case of a regular raster image. Reference to administrative level or other spatial division that is present as the smallest spatially distinguished unit size.",
+          "description": "Raster size or administrative level or other nomenclature of smallest unit",
           "type": "string",
           "title": "Resolution",
-          "examples": ["100m", "NUTS-2"]
+          "examples": ["100m", "NUTS-2", "country"],
+          "options": {
+            "placeholder": "e.g. 100m",
+            "autocomplete": [
+              "100m",
+              "NUTS-1",
+              "NUTS-2",
+              "NUTS-3",
+              "country",
+              "municipality"
+            ]
+          }
         },
         "referenceDate": {
           "type": "string",
           "title": "Reference date",
+          "description": "Reference date for the validity of the geo data",
           "format": "date",
           "examples": ["2023-12-04"]
         },
         "referenceSystem": {
           "type": "string",
           "title": "Coordinate Reference System",
-          "format": "date",
-          "examples": ["2023-12-04"]
+          "description": "Coordinate reference system of the geo data",
+          "options": {
+            "placeholder": "e.g. EPSG:4326",
+            "autocomplete": [
+              "EPSG:4326",
+              "EPSG:3035",
+              "EPSG:3035",
+              "WGS 1984",
+              "EPSG:3857",
+              "Mercator"
+            ]
+          }
         }
       },
-      "additionalProperties": false,
       "title": "Spatial Coverage"
     },
     "temporal": {
-      "description": "Time period covered in the data",
       "type": "object",
       "format": "grid",
       "properties": {
         "extent": {
-          "description": "Covered area. May be the name of a region, or the geometry of a bounding box.",
+          "description": "Time period covered in the data",
           "type": "string",
           "title": "Extent",
           "rdf": "dct:temporal",
-          "examples": []
+          "options": {
+            "placeholder": "e.g. 1990-2020"
+          }
         },
         "resolution": {
-          "description": "Pixel size in case of a regular raster image. Reference to administrative level or other spatial division that is present as the smallest spatially distinguished unit size.",
+          "description": "In case of a time series: temporal resolution of data points",
           "type": "string",
           "rdf": "dcat:temporalResolution",
           "title": "Resolution",
-          "examples": ["100m", "NUTS-2"]
+          "options": {
+            "placeholder": "e.g. 1h"
+          }
         }
       },
       "additionalProperties": false,
       "title": "Temporal coverage"
     },
     "sources": {
-      "description": "List of source objects. Each object has all name-value-pairs.",
+      "description": "List of sources used to create this resource",
       "type": "array",
+      "uniqueItems": true,
       "format": "table",
       "items": {
         "description": "Source object in list of source objects. Each object has all name-value-pairs.",
@@ -191,29 +237,37 @@
             "title": "Title",
             "examples": []
           },
-          "description": {
-            "description": "Free text description of the data set.",
-            "type": "string",
-            "title": "Description"
-          },
           "path": {
             "description": "URL to original source.",
             "type": "string",
             "title": "Path",
             "format": "uri",
-            "examples": [
-              "https://www.ipcc.ch/site/assets/uploads/2018/02/ipcc_wg3_ar5_full.pdf"
-            ]
+            "options": {
+              "placeholder": "http://example.com"
+            }
           },
           "license": {
-            "description": "The license(s) under which the source(s) is/are provided. List of objects.",
-            "typeInfo": "https://spdx.org/licenses/",
+            "description": "The license under which the source was published",
+            "typeInfo": "SPDX",
             "type": "string",
-            "title": "Name",
-            "examples": ["CC-BY-4.0"]
+            "title": "License",
+            "examples": ["CC-BY-4.0"],
+            "options": {
+              "placeholder": "e.g. CC-BY-4.0",
+              "autocomplete": [
+                "CC-BY-4.0",
+                "Creative Commons Attribution 4.0 International",
+                "ODbL-1.0",
+                "Open Data Commons Open Database License v1.0",
+                "ODC-By-1.0",
+                "Open Data Commons Attribution License v1.0",
+                "CC0-1.0",
+                "Creative Commons Zero v1.0 Universal"
+              ]
+            }
           },
           "attribution": {
-            "description": "Copyrightholder of the source",
+            "description": "How to attribute usage of this source.",
             "type": "string",
             "title": "Attribution"
           },
@@ -228,8 +282,9 @@
       "title": "Sources"
     },
     "contributors": {
-      "description": "The people or organizations who contributed to this data package. List of objects.",
+      "description": "The people or organizations who contributed to this resource.",
       "type": "array",
+      "uniqueItems": true,
       "format": "table",
       "items": {
         "description": "A person or organizations who contributed to this data package. Each object refers to one contributor. Every contributor must have a title and property. A path, email, role and organization properties are optional extras.",
@@ -239,19 +294,25 @@
           "name": {
             "description": "Name/title of the contributor (name for a person, name or title for an organization)",
             "type": "string",
-            "title": "Title",
-            "examples": ["Jon Doe"]
+            "title": "Name",
+            "examples": ["John Doe"],
+            "options": {
+              "placeholder": "e.g. John Doe"
+            }
           },
           "email": {
             "description": "E-mail address of the contributor",
             "type": "string",
             "title": "Email",
             "format": "email",
-            "examples": ["example@example.org"]
+            "examples": ["example@example.org"],
+            "options": {
+              "placeholder": "example@example.org"
+            }
           },
           "date": {
             "typeInfo": "ISO 8601",
-            "description": "Date of the contribution. If the contribution took more than a day, use the date of the final contribiution",
+            "description": "date of the contribution",
             "type": "string",
             "title": "Date",
             "format": "date",
@@ -280,7 +341,19 @@
               },
               "type": {
                 "title": "Data Type",
-                "type": "string"
+                "type": "string",
+                "options": {
+                  "placeholder": "e.g. string",
+                  "autocomplete": [
+                    "string",
+                    "text",
+                    "number",
+                    "float",
+                    "date",
+                    "datetime",
+                    "boolean"
+                  ]
+                }
               }
             },
             "required": ["name"],
@@ -288,6 +361,7 @@
             "additionalProperties": false
           },
           "type": "array",
+          "uniqueItems": true,
           "format": "table",
           "additionalProperties": false
         }
