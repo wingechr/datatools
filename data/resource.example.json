@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wingechr/datatools/dev/data/resource.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wingechr/datatools/main/data/resource.schema.json",
   "name": "my-nice-name",
   "bytes": 2082,
   "encoding": "utf-8",

@@ -1,5 +1,5 @@
 {
-  "$id": "https://raw.githubusercontent.com/wingechr/datatools/dev/data/resource.schema.json#",
+  "$id": "https://raw.githubusercontent.com/wingechr/datatools/main/data/resource.schema.json#",
   "$schema": "http://json-schema.org/draft-07/schema#",
   "required": [],
   "title": "Title",
@@ -10,7 +10,7 @@
       },
       "type": "string",
       "format": "uri",
-      "const": "https://raw.githubusercontent.com/wingechr/datatools/dev/data/resource.schema.json#"
+      "const": "https://raw.githubusercontent.com/wingechr/datatools/main/data/resource.schema.json#"
     },
     "name": {
       "rdf": "dct:title",
@@ -88,7 +88,17 @@
       "typeInfo": "SPDX",
       "type": "string",
       "title": "License",
-      "examples": ["CC-BY-4.0"]
+      "examples": ["CC-BY-4.0"],
+      "autocomplete": [
+        "CC-BY-4.0",
+        "Creative Commons Attribution 4.0 International",
+        "ODbL-1.0",
+        "Open Data Commons Open Database License v1.0",
+        "ODC-By-1.0",
+        "Open Data Commons Attribution License v1.0",
+        "CC0-1.0",
+        "Creative Commons Zero v1.0 Universal"
+      ]
     },
     "attribution": {
       "description": "Copyrightholder of the source",
