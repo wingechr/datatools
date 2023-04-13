@@ -5,6 +5,7 @@
   "title": "Title",
   "properties": {
     "name": {
+      "rdf": "dct:title",
       "description": "An identifier string. Lower case characters with `.`, `_`, `-` and `/` are allowed.",
       "examples": ["my-nice-name"],
       "pattern": "^([-a-z0-9._/])+$",
@@ -13,6 +14,7 @@
     },
     "description": {
       "description": "A text description.",
+      "rdf": "dct:description",
       "format": "textarea",
       "title": "Description",
       "type": "string"
@@ -53,6 +55,7 @@
       "typeInfo": "IETF (BCP47)",
       "description": "Language code used within the described data structures (e.g. titles, descriptions)",
       "type": "string",
+      "rdf": "dct:language",
       "examples": ["en", "en-US", "de", "de-DE", "fr", "fr-FR"],
       "title": "Language"
     },
@@ -61,38 +64,44 @@
       "type": "array",
       "items": {
         "type": "string",
+        "rdf": "dcat:keyword",
         "maxLength": 32,
         "title": "Keyword",
         "examples": ["example"]
       },
       "title": "Keyword"
     },
-    "attribution": {
-      "description": "@ author",
-      "type": "string",
-      "title": "Attribution"
-    },
     "context": {
       "description": "Object. Contains name-value-pairs that describe the general setting, evironment or project leading to the creation or maintenance of this dataset.",
       "type": "object",
       "properties": {
-        "homepage": {
+        "description": {
           "description": "URL of project",
           "type": "string",
           "title": "Homepage",
-          "format": "uri",
-          "examples": ["https://example.org"]
-        },
-        "contact": {
-          "description": "Reference to the creator or maintainer of the data set.",
-          "type": "string",
-          "title": "E-Mail contact",
-          "format": "email",
-          "examples": ["example@example.org"]
+          "format": "textarea"
         }
       },
       "additionalProperties": false,
       "title": "Context"
+    },
+    "license": {
+      "description": "The license(s) under which the source(s) is/are provided. List of objects.",
+      "typeInfo": "SPDX",
+      "type": "string",
+      "title": "Name",
+      "examples": ["CC-BY-4.0"]
+    },
+    "attribution": {
+      "description": "Copyrightholder of the source",
+      "type": "string",
+      "title": "Attribution"
+    },
+    "publicationDate": {
+      "type": "string",
+      "title": "Publication date",
+      "format": "date",
+      "examples": ["2023-12-04"]
     },
     "spatial": {
       "type": "object",
@@ -101,6 +110,7 @@
           "description": "Covered area. May be the name of a region, or the geometry of a bounding box.",
           "type": "string",
           "title": "Extent",
+          "rdf": "dct:spatial",
           "examples": ["Germany", "Europe"]
         },
         "resolution": {
@@ -133,11 +143,13 @@
           "description": "Covered area. May be the name of a region, or the geometry of a bounding box.",
           "type": "string",
           "title": "Extent",
-          "examples": ["Germany", "Europe"]
+          "rdf": "dct:temporal",
+          "examples": []
         },
         "resolution": {
           "description": "Pixel size in case of a regular raster image. Reference to administrative level or other spatial division that is present as the smallest spatially distinguished unit size.",
           "type": "string",
+          "rdf": "dcat:temporalResolution",
           "title": "Resolution",
           "examples": ["100m", "NUTS-2"]
         }
@@ -151,12 +163,12 @@
       "items": {
         "description": "Source object in list of source objects. Each object has all name-value-pairs.",
         "type": "object",
+        "rdf": "dct:source",
         "properties": {
-          "title": {
-            "description": "Human readable title of the source, e.g. document title or organisation name",
+          "name": {
             "type": "string",
             "title": "Title",
-            "examples": ["IPCC Fifth Assessment Report"]
+            "examples": []
           },
           "description": {
             "description": "Free text description of the data set.",
@@ -172,45 +184,21 @@
               "https://www.ipcc.ch/site/assets/uploads/2018/02/ipcc_wg3_ar5_full.pdf"
             ]
           },
-          "licenses": {
+          "license": {
             "description": "The license(s) under which the source(s) is/are provided. List of objects.",
-            "type": "array",
-            "items": {
-              "description": "A license object under which the described source is provided. Each object has all name-value-pairs.",
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "name": {
-                  "typeIno": "SPDX",
-                  "description": "SPDX identifier",
-                  "type": "string",
-                  "title": "Name",
-                  "examples": ["CC-BY-4.0"]
-                },
-                "title": {
-                  "description": "Official (human readable) title",
-                  "type": "string",
-                  "title": "Title"
-                },
-                "path": {
-                  "description": "A link to the license",
-                  "type": "string",
-                  "title": "Path"
-                },
-                "instruction": {
-                  "description": "Short description of rights and restrictions",
-                  "type": "string",
-                  "title": "Instruction"
-                },
-                "attribution": {
-                  "description": "Copyrightholder of the source",
-                  "type": "string",
-                  "title": "Attribution"
-                }
-              },
-              "title": "Licenses"
-            },
-            "title": "Licenses"
+            "typeInfo": "SPDX",
+            "type": "string",
+            "title": "Name",
+            "examples": ["CC-BY-4.0"]
+          },
+          "attribution": {
+            "description": "Copyrightholder of the source",
+            "type": "string",
+            "title": "Attribution"
+          },
+          "accessDate": {
+            "type": "string",
+            "format": "date"
           }
         },
         "additionalProperties": false,
@@ -224,8 +212,9 @@
       "items": {
         "description": "A person or organizations who contributed to this data package. Each object refers to one contributor. Every contributor must have a title and property. A path, email, role and organization properties are optional extras.",
         "type": "object",
+        "rdf": "dct:contributor",
         "properties": {
-          "title": {
+          "name": {
             "description": "Name/title of the contributor (name for a person, name or title for an organization)",
             "type": "string",
             "title": "Title",
