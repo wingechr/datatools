@@ -15,6 +15,7 @@
     "name": {
       "rdf": "dct:title",
       "description": "An identifier string. Lower case characters with `.`, `_`, `-` and `/` are allowed.",
+      "infoText": "example info text",
       "examples": ["my-nice-name"],
       "pattern": "^([-a-z0-9._/])+$",
       "title": "Name",
@@ -71,6 +72,7 @@
     "keywords": {
       "description": "An array of string keywords to assist users searching for the package in catalogs",
       "type": "array",
+      "format": "table",
       "items": {
         "type": "string",
         "rdf": "dcat:keyword",
@@ -155,6 +157,7 @@
     "sources": {
       "description": "List of source objects. Each object has all name-value-pairs.",
       "type": "array",
+      "format": "table",
       "items": {
         "description": "Source object in list of source objects. Each object has all name-value-pairs.",
         "type": "object",
@@ -204,6 +207,7 @@
     "contributors": {
       "description": "The people or organizations who contributed to this data package. List of objects.",
       "type": "array",
+      "format": "table",
       "items": {
         "description": "A person or organizations who contributed to this data package. Each object refers to one contributor. Every contributor must have a title and property. A path, email, role and organization properties are optional extras.",
         "type": "object",
@@ -261,6 +265,7 @@
             "additionalProperties": false
           },
           "type": "array",
+          "format": "table",
           "additionalProperties": false
         }
       },
