@@ -17,7 +17,10 @@
       "description": "An identifier string. Lower case characters with `.`, `_`, `-` and `/` are allowed.",
       "examples": ["my-nice-name"],
       "options": {
-        "placeholder": "Enter your name"
+        "inputAttributes": {
+          "placeholder": "your name here...",
+          "class": "myclass"
+        }
       },
       "pattern": "^([-a-z0-9._/])+$",
       "title": "Name",
