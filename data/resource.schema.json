@@ -135,6 +135,7 @@
     "temporal": {
       "description": "Time period covered in the data",
       "type": "object",
+      "format": "table",
       "properties": {
         "extent": {
           "description": "Covered area. May be the name of a region, or the geometry of a bounding box.",
