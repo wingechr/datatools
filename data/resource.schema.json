@@ -23,18 +23,15 @@
       "description": "The size of this resource in bytes.",
       "examples": [2082],
       "options": {
-        "hidden": true
+        "hidden": false
       },
       "title": "Bytes",
       "type": "integer"
     },
     "hash": {
       "description": "{algorithm}:{hash} format.",
-      "examples": [
-        "sha256:5262f12512590031bbcc9a430452bfd75c2791ad6771320bb4b5728bfb78c4d0"
-      ],
       "options": {
-        "hidden": true
+        "hidden": false
       },
       "pattern": "^[^:]+:[a-fA-F0-9]+$",
       "title": "Hash",
@@ -145,9 +142,8 @@
         "title": "Source",
         "type": "object"
       },
-      "minItems": 0,
       "options": {
-        "hidden": true
+        "hidden": false
       },
       "propertyOrder": 140,
       "title": "Sources",
@@ -190,8 +186,7 @@
             "additionalProperties": false
           },
           "type": "array",
-          "additionalProperties": false,
-          "minItems": 1
+          "additionalProperties": false
         }
       },
       "required": ["fields"],
