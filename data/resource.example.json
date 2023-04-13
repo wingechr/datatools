@@ -1,32 +1,44 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wingechr/datatools/main/data/resource.schema.json",
-  "name": "my-nice-name",
-  "bytes": 2082,
+  "name": "resource-identifier-string",
   "encoding": "utf-8",
-  "mediatype": "text/csv",
   "language": "en",
-  "keywords": ["example"],
+  "keywords": ["example-keyword1", "example-keyword2"],
+  "license": "CC-BY-4.0",
+  "attribution": "@ Öko-Institut 2023",
   "publicationDate": "2023-12-04",
   "spatial": {
     "extent": "Germany",
     "resolution": "100m",
     "referenceDate": "2023-12-04",
-    "referenceSystem": "2023-12-04"
+    "referenceSystem": "EPSG:3035"
   },
   "temporal": {
-    "resolution": "100m"
+    "extent": "1990-2020",
+    "resolution": "1y"
   },
   "sources": [
     {
-      "path": "https://www.ipcc.ch/site/assets/uploads/2018/02/ipcc_wg3_ar5_full.pdf",
-      "license": "CC-BY-4.0"
+      "name": "example source",
+      "path": "http://example.com",
+      "license": "CC-BY-4.0",
+      "attribution": "@ Öko-Institut 2023",
+      "accessDate": "2023-12-04"
     }
   ],
   "contributors": [
     {
-      "name": "Jon Doe",
+      "name": "John Doe",
       "email": "example@example.org",
       "date": "2023-03-12"
     }
-  ]
+  ],
+  "schema": {
+    "fields": [
+      {
+        "name": "id",
+        "description": "example description",
+        "type": "integer"
+      }
+    ]
+  }
 }

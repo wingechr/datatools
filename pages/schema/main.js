@@ -1,18 +1,18 @@
 "use strict";
 
-import 'bootstrap';
-
-
-// TODO: $refs dont work?
-
 const repo = "https://raw.githubusercontent.com/wingechr/datatools/main";
 const defaultSchemaUrl = repo + "/data/tabular-data-resource.schema.json";
+
+window.$ = require('jquery');
+window.bs = require('bootstrap');
+
 const JSONEditor = require("@json-editor/json-editor").JSONEditor;
-const typeahead = require('typeahead');
+// eslint-disable-next-line max-len
+window.typeahead = require('../../node_modules/corejs-typeahead/dist/typeahead.jquery.js');
+const Bloodhound = require('../../node_modules/corejs-typeahead/dist/bloodhound.js');
+
 
 // eslint-disable-next-line no-unused-vars
-let editor;
-
 
 /**
  *
@@ -45,7 +45,7 @@ history.pushState(undefined, undefined, url);
 
 // start editor
 getJson(params.schema).then(function(schema) {
-  editor = new JSONEditor(
+  let jsonEditor = new JSONEditor(
       document.getElementById('editor'),
       // https://github.com/json-editor/json-editor
       {
@@ -63,6 +63,7 @@ getJson(params.schema).then(function(schema) {
         disable_array_delete_all_rows: true,
         prompt_before_delete: false,
         show_opt_in: false,
+        remove_empty_properties: true,
         max_depth: 10, /* recursive depth */
         /* urn_resolver: null */
       },
@@ -80,10 +81,24 @@ getJson(params.schema).then(function(schema) {
         let ed = editor.editors[key];
         if (ed) {
           if (ed.schema.options && ed.schema.options.autocomplete) {
-            typeahead(ed.input, {
-              source: ed.schema.options.autocomplete,
+            // console.log(ed.input, ed.schema.options.autocomplete);
+
+
+            $(ed.input).typeahead({
+              hint: true,
+              highlight: true,
+              minLength: 1,
+            },
+            {
+              source: new Bloodhound({
+                datumTokenizer: Bloodhound.tokenizers.whitespace,
+                queryTokenizer: Bloodhound.tokenizers.whitespace,
+                // `states` is an array of state names defined in "The Basics"
+                local: ed.schema.options.autocomplete,
+              }),
             });
           }
+
 
           // examples => placeholder
           if (ed.schema.options && ed.schema.options.placeholder) {
@@ -95,8 +110,51 @@ getJson(params.schema).then(function(schema) {
   }
 
   /* patch initial */
-  editor.on('ready', () => patchEditor(editor));
+  jsonEditor.on('ready', () => patchEditor(jsonEditor));
 
   /* also patch newlyadded rows */
-  editor.on('addRow', patchEditor);
+  jsonEditor.on('addRow', patchEditor);
+
+  window.jsonEditor= jsonEditor;
+});
+
+/* uploader */
+const fileInput = document.getElementById('btn-upload-json');
+
+fileInput.addEventListener('change', (event) => {
+  const file = event.target.files[0];
+  const reader = new FileReader();
+  reader.addEventListener('load', (event) => {
+    const jsonString = event.target.result;
+    const data = JSON.parse(jsonString);
+    console.log(data);
+    window.jsonEditor.setValue(data);
+  });
+  reader.readAsText(file);
+});
+
+/* downloader */
+const fileOutput = document.getElementById('btn-download-json');
+
+/**
+ *
+ * @param {*} exportObj
+ * @param {*} exportName
+ */
+function downloadObjectAsJson(exportObj, exportName) {
+  const dataStr = encodeURIComponent(JSON.stringify(exportObj, null, 4));
+  const dataStr2 = "data:text/json;charset=utf-8," + dataStr;
+  const downloadAnchorNode = document.createElement('a');
+  downloadAnchorNode.setAttribute("href", dataStr2);
+  downloadAnchorNode.setAttribute("download", exportName + ".json");
+  document.body.appendChild(downloadAnchorNode); // required for firefox
+  downloadAnchorNode.click();
+  downloadAnchorNode.remove();
+}
+
+
+fileOutput.addEventListener('click', (event) => {
+  let data = window.jsonEditor.getValue();
+  console.log(data);
+  downloadObjectAsJson(data, "metadata");
 });

@@ -1,8 +1,8 @@
 {
   "name": "datatools",
   "scripts": {
-    "build": "npx parcel build --no-source-maps --dist-dir _pages/schema --public-url . pages/schema/index.html",
-    "serve": "npx parcel serve --no-source-maps pages/schema/index.html"
+    "build": "npx parcel build --dist-dir _pages/schema --public-url . pages/schema/index.html",
+    "serve": "npx parcel serve  --dist-dir _pages/schema pages/schema/index.html"
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^5.15.4",
@@ -10,9 +10,9 @@
     "@parcel/transformer-sass": "^2.8.3",
     "@popperjs/core": "^2.11.7",
     "bootstrap": "^5.2",
+    "corejs-typeahead": "^1.3.1",
     "jquery": "^3.6.4",
-    "parcel": "^2.8.3",
-    "typeahead": "^0.2.2"
+    "parcel": "^2.8.3"
   },
   "devDependencies": {
     "eslint": ">=8.24",

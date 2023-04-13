@@ -10,14 +10,15 @@
       },
       "type": "string",
       "format": "uri",
-      "const": "https://raw.githubusercontent.com/wingechr/datatools/main/data/resource.schema.json#"
+      "default": "https://raw.githubusercontent.com/wingechr/datatools/main/data/resource.schema.json#"
     },
     "name": {
       "rdf": "dct:title",
       "description": "An identifier string.",
       "options": {
-        "placeholder": "identifier-string"
+        "placeholder": "resource-identifier-string"
       },
+      "examples": ["resource-identifier-string"],
       "pattern": "^([-a-z0-9._/])+$",
       "title": "Name",
       "type": "string"
@@ -60,7 +61,6 @@
     "mediatype": {
       "typeInfo": "https://www.iana.org/assignments/media-types/media-types.xhtml",
       "description": "The media type of this resource",
-      "examples": ["text/csv", "application/json"],
       "options": {
         "autocomplete": [
           "text/csv",
@@ -94,6 +94,7 @@
       "type": "array",
       "uniqueItems": true,
       "format": "table",
+      "examples": [["example-keyword1", "example-keyword2"]],
       "items": {
         "type": "string",
         "rdf": "dcat:keyword",
@@ -128,6 +129,7 @@
       "options": {
         "placeholder": "e.g. @ Öko-Institut"
       },
+      "examples": ["@ Öko-Institut 2023"],
       "type": "string",
       "title": "Attribution"
     },
@@ -181,6 +183,7 @@
           "type": "string",
           "title": "Coordinate Reference System",
           "description": "Coordinate reference system of the geo data",
+          "examples": ["EPSG:3035"],
           "options": {
             "placeholder": "e.g. EPSG:4326",
             "autocomplete": [
@@ -207,7 +210,8 @@
           "rdf": "dct:temporal",
           "options": {
             "placeholder": "e.g. 1990-2020"
-          }
+          },
+          "examples": ["1990-2020"]
         },
         "resolution": {
           "description": "In case of a time series: temporal resolution of data points",
@@ -216,7 +220,8 @@
           "title": "Resolution",
           "options": {
             "placeholder": "e.g. 1h"
-          }
+          },
+          "examples": ["1y"]
         }
       },
       "additionalProperties": false,
@@ -235,7 +240,7 @@
           "name": {
             "type": "string",
             "title": "Title",
-            "examples": []
+            "examples": ["example source"]
           },
           "path": {
             "description": "URL to original source.",
@@ -244,7 +249,8 @@
             "format": "uri",
             "options": {
               "placeholder": "http://example.com"
-            }
+            },
+            "examples": ["http://example.com"]
           },
           "license": {
             "description": "The license under which the source was published",
@@ -269,11 +275,13 @@
           "attribution": {
             "description": "How to attribute usage of this source.",
             "type": "string",
-            "title": "Attribution"
+            "title": "Attribution",
+            "examples": ["@ Öko-Institut 2023"]
           },
           "accessDate": {
             "type": "string",
-            "format": "date"
+            "format": "date",
+            "examples": ["2023-12-04"]
           }
         },
         "additionalProperties": false,
@@ -333,15 +341,18 @@
               "name": {
                 "description": "Field (Column) name",
                 "title": "Name",
-                "type": "string"
+                "type": "string",
+                "examples": ["id"]
               },
               "description": {
                 "title": "Description",
-                "type": "string"
+                "type": "string",
+                "examples": ["example description"]
               },
               "type": {
                 "title": "Data Type",
                 "type": "string",
+                "examples": ["integer"],
                 "options": {
                   "placeholder": "e.g. string",
                   "autocomplete": [
