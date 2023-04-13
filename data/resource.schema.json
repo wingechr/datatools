@@ -18,8 +18,13 @@
       "examples": ["my-nice-name"],
       "options": {
         "inputAttributes": {
-          "placeholder": "your name here...",
-          "class": "myclass"
+          "placeholder": "identification-name"
+        },
+        "autocomplete": {
+          "search": "search_za",
+          "getResultValue": "getResultValue_za",
+          "renderResult": "renderResult_za",
+          "autoSelect": true
         }
       },
       "pattern": "^([-a-z0-9._/])+$",

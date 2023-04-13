@@ -11,7 +11,8 @@
     "@popperjs/core": "^2.11.7",
     "bootstrap": "^5.2",
     "jquery": "^3.6.4",
-    "parcel": "^2.8.3"
+    "parcel": "^2.8.3",
+    "typeahead": "^0.2.2"
   },
   "devDependencies": {
     "eslint": ">=8.24",

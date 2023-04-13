@@ -8,9 +8,38 @@ import 'bootstrap';
 const repo = "https://raw.githubusercontent.com/wingechr/datatools/main";
 const defaultSchemaUrl = repo + "/data/tabular-data-resource.schema.json";
 const JSONEditor = require("@json-editor/json-editor").JSONEditor;
+
+
 // eslint-disable-next-line no-unused-vars
 let editor;
 
+
+JSONEditor.defaults.callbacks = {
+  "autocomplete": {
+
+    // Setup API calls
+    "search_za": function search(jseditor_editor, input) {
+      return new Promise(function(resolve) {
+        if (input.length < 2) {
+          return resolve([]);
+        }
+
+        resolve(["aaaaa", "ababa"]);
+      });
+    },
+
+    "renderResult_za": function(jseditor_editor, result, props) {
+      return ['<li ' + props + '>',
+        '<div class="eiao-object-title">' + result.data_json + '</div>',
+        '<div class="eiao-object-snippet">' + result.uuid.substring(0, 7) + ' <small>' + result.schema_uuid.substring(0, 5) + '<small></div>',
+        '</li>'].join('');
+    },
+
+    "getResultValue_za": function getResultValue(jseditor_editor, result) {
+      return result.uuid;
+    },
+  },
+};
 
 /**
  *
@@ -65,4 +94,16 @@ getJson(params.schema).then(function(schema) {
         /* urn_resolver: null */
       },
   );
+
+  /*
+  editor.on('ready', () => {
+    let ta = typeahead(document.getElementById("root[name]"), {
+      source: ['foossss', 'barasdt', 'baz123'],
+    });
+  });
+  */
+
+  editor.watch('root.name', (x) => {
+    console.log("ss", x);
+  });
 });
