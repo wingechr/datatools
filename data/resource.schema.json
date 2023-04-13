@@ -6,7 +6,7 @@
   "properties": {
     "$schema": {
       "options": {
-        "hidden": false
+        "hidden": true
       },
       "type": "string",
       "format": "uri",
@@ -29,16 +29,15 @@
     },
     "bytes": {
       "description": "The size of this resource in bytes.",
-      "examples": [2082],
       "options": {
-        "hidden": false
+        "hidden": true
       },
       "title": "Bytes",
       "type": "integer"
     },
     "hash": {
       "options": {
-        "hidden": false
+        "hidden": true
       },
       "pattern": "^[^:]+:[a-fA-F0-9]+$",
       "title": "Hash",
@@ -238,22 +237,22 @@
       "title": "Contributors"
     },
     "schema": {
-      "description": "A Table Schema for this resource, compliant with the [Table Schema](/tableschema/) specification.",
+      "description": "A Table Schema for this resource",
       "properties": {
         "fields": {
           "items": {
             "properties": {
               "name": {
-                "description": "A name for this field.",
+                "description": "Field (Column) name",
                 "title": "Name",
                 "type": "string"
               },
               "description": {
-                "description": "A name for this field.",
-                "title": "Name",
+                "title": "Description",
                 "type": "string"
               },
               "type": {
+                "title": "Data Type",
                 "type": "string"
               }
             },

@@ -1,12 +1,11 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wingechr/datatools/dev/data/resource.schema.json#",
+  "$schema": "https://raw.githubusercontent.com/wingechr/datatools/dev/data/resource.schema.json",
   "name": "my-nice-name",
   "bytes": 2082,
   "encoding": "utf-8",
   "mediatype": "text/csv",
   "language": "en",
   "keywords": ["example"],
-  "license": "CC-BY-4.0",
   "publicationDate": "2023-12-04",
   "spatial": {
     "extent": "Germany",
