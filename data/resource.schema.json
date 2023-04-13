@@ -2,6 +2,7 @@
   "$id": "https://specs.frictionlessdata.io/schemas/tabular-data-resource.json#",
   "$schema": "http://json-schema.org/draft-07/schema#",
   "required": [],
+  "title": "Title",
   "properties": {
     "name": {
       "description": "An identifier string. Lower case characters with `.`, `_`, `-` and `/` are allowed.",
@@ -26,7 +27,6 @@
       "type": "integer"
     },
     "hash": {
-      "description": "{algorithm}:{hash} format.",
       "options": {
         "hidden": false
       },
