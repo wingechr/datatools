@@ -15,8 +15,10 @@
     "name": {
       "rdf": "dct:title",
       "description": "An identifier string. Lower case characters with `.`, `_`, `-` and `/` are allowed.",
-      "infoText": "example info text",
       "examples": ["my-nice-name"],
+      "options": {
+        "placeholder": "Enter your name"
+      },
       "pattern": "^([-a-z0-9._/])+$",
       "title": "Name",
       "type": "string"
@@ -113,7 +115,7 @@
     },
     "spatial": {
       "type": "object",
-      "format": "categories",
+      "format": "grid",
       "properties": {
         "extent": {
           "description": "Covered area. May be the name of a region, or the geometry of a bounding box.",
@@ -197,7 +199,7 @@
           },
           "license": {
             "description": "The license(s) under which the source(s) is/are provided. List of objects.",
-            "typeInfo": "SPDX",
+            "typeInfo": "https://spdx.org/licenses/",
             "type": "string",
             "title": "Name",
             "examples": ["CC-BY-4.0"]
