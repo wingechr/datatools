@@ -1,9 +1,17 @@
 {
-  "$id": "https://specs.frictionlessdata.io/schemas/tabular-data-resource.json#",
+  "$id": "https://raw.githubusercontent.com/wingechr/datatools/dev/data/resource.schema.json#",
   "$schema": "http://json-schema.org/draft-07/schema#",
   "required": [],
   "title": "Title",
   "properties": {
+    "$schema": {
+      "options": {
+        "hidden": false
+      },
+      "type": "string",
+      "format": "uri",
+      "const": "https://raw.githubusercontent.com/wingechr/datatools/dev/data/resource.schema.json#"
+    },
     "name": {
       "rdf": "dct:title",
       "description": "An identifier string. Lower case characters with `.`, `_`, `-` and `/` are allowed.",
@@ -38,9 +46,10 @@
     },
     "encoding": {
       "default": "utf-8",
+      "typeInfo": "https://en.wikipedia.org/wiki/Popularity_of_text_encodings",
       "description": "The file text encoding of this resource.",
       "examples": ["utf-8"],
-      "enum": ["utf-8", "iso-8859-1"],
+      "enum": ["utf-8", "iso-8859-1", "windows-1251"],
       "title": "Encoding",
       "type": "string"
     },
@@ -71,20 +80,6 @@
         "examples": ["example"]
       },
       "title": "Keyword"
-    },
-    "context": {
-      "description": "Object. Contains name-value-pairs that describe the general setting, evironment or project leading to the creation or maintenance of this dataset.",
-      "type": "object",
-      "properties": {
-        "description": {
-          "description": "URL of project",
-          "type": "string",
-          "title": "Homepage",
-          "format": "textarea"
-        }
-      },
-      "additionalProperties": false,
-      "title": "Context"
     },
     "license": {
       "description": "The license(s) under which the source(s) is/are provided. List of objects.",

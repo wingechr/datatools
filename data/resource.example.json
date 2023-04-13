@@ -1,0 +1,33 @@
+{
+  "$schema": "https://raw.githubusercontent.com/wingechr/datatools/dev/data/resource.schema.json#",
+  "name": "my-nice-name",
+  "bytes": 2082,
+  "encoding": "utf-8",
+  "mediatype": "text/csv",
+  "language": "en",
+  "keywords": ["example"],
+  "license": "CC-BY-4.0",
+  "publicationDate": "2023-12-04",
+  "spatial": {
+    "extent": "Germany",
+    "resolution": "100m",
+    "referenceDate": "2023-12-04",
+    "referenceSystem": "2023-12-04"
+  },
+  "temporal": {
+    "resolution": "100m"
+  },
+  "sources": [
+    {
+      "path": "https://www.ipcc.ch/site/assets/uploads/2018/02/ipcc_wg3_ar5_full.pdf",
+      "license": "CC-BY-4.0"
+    }
+  ],
+  "contributors": [
+    {
+      "name": "Jon Doe",
+      "email": "example@example.org",
+      "date": "2023-03-12"
+    }
+  ]
+}
