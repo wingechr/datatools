@@ -94,44 +94,12 @@
           "format": "uri",
           "examples": ["https://example.org"]
         },
-        "documentation": {
-          "description": "URL of project documentation. Example: https://github.com/OpenEnergyPlatform/metadata/wiki/Metadata-Description",
-          "type": "string",
-          "title": "Documentation"
-        },
-        "sourceCode": {
-          "description": "Url of project source code. Example: https://github.com/OpenEnergyPlatform",
-          "type": "string",
-          "title": "Source code"
-        },
         "contact": {
           "description": "Reference to the creator or maintainer of the data set. Example: contact@example.com",
           "type": "string",
           "title": "E-Mail contact",
           "format": "email",
           "examples": ["example@example.org"]
-        },
-        "grantNo": {
-          "description": "In a publicly funded Project: the identifying grant number. Example: 01AB2345",
-          "type": "string",
-          "title": "Grant no"
-        },
-        "fundingAgency": {
-          "description": "In a funded Project: The name of the funding agency. Example: Bundesministerium für Wirtschaft und Energie",
-          "type": "string",
-          "title": "Funding agency"
-        },
-        "fundingAgencyLogo": {
-          "description": "In a publicly funded Project: A link to the Logo of the funding agency. Example: https://www.innovation-beratung-foerderung.de/INNO/Redaktion/DE/Bilder/Titelbilder/titel_foerderlogo_bmwi.jpg?__blob=poster&v=2",
-          "type": "string",
-          "title": "Funding agency logo",
-          "format": "uri"
-        },
-        "publisherLogo": {
-          "description": "Link to the logo of the publishing institution. Example: https://reiner-lemoine-institut.de//wp-content/uploads/2015/09/rlilogo.png",
-          "type": "string",
-          "title": "Publisher logo",
-          "format": "uri"
         }
       },
       "additionalProperties": false,
@@ -287,16 +255,6 @@
             "title": "Date",
             "format": "date",
             "examples": ["2023-03-12"]
-          },
-          "object": {
-            "description": "Target of contribution. Which part of the package was supplied/changed. Example: Metadata",
-            "type": "string",
-            "title": "Object"
-          },
-          "comment": {
-            "description": "Free text comment on what's been done. Example: Fixed a typo in the title",
-            "type": "string",
-            "title": "Comment"
           }
         },
         "additionalProperties": false,
