@@ -103,6 +103,7 @@
     },
     "spatial": {
       "type": "object",
+      "format": "categories",
       "properties": {
         "extent": {
           "description": "Covered area. May be the name of a region, or the geometry of a bounding box.",
