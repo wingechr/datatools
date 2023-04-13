@@ -4,7 +4,6 @@
   "required": [],
   "properties": {
     "name": {
-      "context": "This is ideally a url-usable and human-readable name. Name `SHOULD` be invariant, meaning it `SHOULD NOT` change when its parent descriptor is updated.",
       "description": "An identifier string. Lower case characters with `.`, `_`, `-` and `/` are allowed.",
       "examples": ["my-nice-name"],
       "pattern": "^([-a-z0-9._/])+$",
@@ -37,49 +36,39 @@
     },
     "encoding": {
       "default": "utf-8",
-      "description": "The file encoding of this resource.",
+      "description": "The file text encoding of this resource.",
       "examples": ["utf-8"],
       "title": "Encoding",
       "type": "string"
     },
     "mediatype": {
-      "description": "The media type of this resource. Can be any valid media type listed with [IANA](https://www.iana.org/assignments/media-types/media-types.xhtml).",
+      "typeInfo": "https://www.iana.org/assignments/media-types/media-types.xhtml",
+      "description": "The media type of this resource",
       "examples": ["text/csv", "application/json"],
       "pattern": "^(.+)/(.+)$",
       "title": "Media Type",
       "type": "string"
     },
     "language": {
-      "description": "Language used within the described data structures (e.g. titles, descriptions). The language key can be repeated if more languages are used. Standard: IETF (BCP47). Example: [en-GB, de-DE, fr-FR]",
-      "type": "array",
-      "items": {
-        "type": "string",
-        "examples": ["en", "en-US", "de", "de-DE", "fr", "fr-FR"],
-        "title": "Language"
-      },
+      "typeInfo": "IETF (BCP47)",
+      "description": "Language code used within the described data structures (e.g. titles, descriptions)",
+      "type": "string",
+      "examples": ["en", "en-US", "de", "de-DE", "fr", "fr-FR"],
       "title": "Language"
     },
     "keywords": {
-      "description": "An array of string keywords to assist users searching for the package in catalogs. Example: [example, template, test]",
+      "description": "An array of string keywords to assist users searching for the package in catalogs",
       "type": "array",
       "items": {
         "type": "string",
-        "maxLength": 40,
+        "maxLength": 32,
         "title": "Keyword",
         "examples": ["example"]
       },
       "title": "Keyword"
     },
-    "created": {
-      "context": "The datetime must conform to the string formats for datetime as described in [RFC3339](https://tools.ietf.org/html/rfc3339#section-5.6)",
-      "description": "The datetime on which this descriptor was created.",
-      "examples": ["1985-04-12"],
-      "format": "date",
-      "title": "Created",
-      "type": "string"
-    },
     "attribution": {
-      "description": "Copyrightholder of the source. Example: © Intergovernmental Panel on Climate Change 2014",
+      "description": "@ author",
       "type": "string",
       "title": "Attribution"
     },
@@ -88,14 +77,14 @@
       "type": "object",
       "properties": {
         "homepage": {
-          "description": "URL of project. Example: https://openenergy-platform.org/",
+          "description": "URL of project",
           "type": "string",
           "title": "Homepage",
           "format": "uri",
           "examples": ["https://example.org"]
         },
         "contact": {
-          "description": "Reference to the creator or maintainer of the data set. Example: contact@example.com",
+          "description": "Reference to the creator or maintainer of the data set.",
           "type": "string",
           "title": "E-Mail contact",
           "format": "email",
@@ -106,17 +95,16 @@
       "title": "Context"
     },
     "spatial": {
-      "description": "Object. Contains name-value-pairs describing the spatial context of the contained data.",
       "type": "object",
       "properties": {
         "extent": {
-          "description": "Covered area. May be the name of a region, or the geometry of a bounding box. Example: Europe",
+          "description": "Covered area. May be the name of a region, or the geometry of a bounding box.",
           "type": "string",
           "title": "Extent",
           "examples": ["Germany", "Europe"]
         },
         "resolution": {
-          "description": "Pixel size in case of a regular raster image. Reference to administrative level or other spatial division that is present as the smallest spatially distinguished unit size. Example: 30m",
+          "description": "Pixel size in case of a regular raster image. Reference to administrative level or other spatial division that is present as the smallest spatially distinguished unit size.",
           "type": "string",
           "title": "Resolution",
           "examples": ["100m", "NUTS-2"]
@@ -129,33 +117,33 @@
         },
         "referenceSystem": {
           "type": "string",
-          "title": "Publication date",
+          "title": "Coordinate Reference System",
           "format": "date",
           "examples": ["2023-12-04"]
         }
       },
       "additionalProperties": false,
-      "title": "Spatial"
+      "title": "Spatial Coverage"
     },
     "temporal": {
-      "description": "Temporal object. Time period covered in the data. Temporal information should either contain a \"referenceDate\" or the keys describing a time series; in rare cases both.",
+      "description": "Time period covered in the data",
       "type": "object",
       "properties": {
         "extent": {
-          "description": "Covered area. May be the name of a region, or the geometry of a bounding box. Example: Europe",
+          "description": "Covered area. May be the name of a region, or the geometry of a bounding box.",
           "type": "string",
           "title": "Extent",
           "examples": ["Germany", "Europe"]
         },
         "resolution": {
-          "description": "Pixel size in case of a regular raster image. Reference to administrative level or other spatial division that is present as the smallest spatially distinguished unit size. Example: 30m",
+          "description": "Pixel size in case of a regular raster image. Reference to administrative level or other spatial division that is present as the smallest spatially distinguished unit size.",
           "type": "string",
           "title": "Resolution",
           "examples": ["100m", "NUTS-2"]
         }
       },
       "additionalProperties": false,
-      "title": "Temporal"
+      "title": "Temporal coverage"
     },
     "sources": {
       "description": "List of source objects. Each object has all name-value-pairs.",
@@ -165,18 +153,18 @@
         "type": "object",
         "properties": {
           "title": {
-            "description": "Human readable title of the source, e.g. document title or organisation name. Example: IPCC Fifth Assessment Report",
+            "description": "Human readable title of the source, e.g. document title or organisation name",
             "type": "string",
             "title": "Title",
             "examples": ["IPCC Fifth Assessment Report"]
           },
           "description": {
-            "description": "Free text description of the data set. Example: Scientific climate change report by the UN",
+            "description": "Free text description of the data set.",
             "type": "string",
             "title": "Description"
           },
           "path": {
-            "description": "URL to original source. Example: https://www.ipcc.ch/site/assets/uploads/2018/02/ipcc_wg3_ar5_full.pdf",
+            "description": "URL to original source.",
             "type": "string",
             "title": "Path",
             "format": "uri",
@@ -193,28 +181,29 @@
               "additionalProperties": false,
               "properties": {
                 "name": {
-                  "description": "SPDX identifier: Example: ODbL-1.0",
+                  "typeIno": "SPDX",
+                  "description": "SPDX identifier",
                   "type": "string",
                   "title": "Name",
                   "examples": ["CC-BY-4.0"]
                 },
                 "title": {
-                  "description": "Official (human readable) title. Example: Open Data Commons Open Database License 1.0",
+                  "description": "Official (human readable) title",
                   "type": "string",
                   "title": "Title"
                 },
                 "path": {
-                  "description": "A link to the license. Example: https://opendatacommons.org/licenses/odbl/1-0/index.html",
+                  "description": "A link to the license",
                   "type": "string",
                   "title": "Path"
                 },
                 "instruction": {
-                  "description": "Short description of rights and restrictions. Example: You are free to share and change, but you must attribute, and share derivations under the same license.",
+                  "description": "Short description of rights and restrictions",
                   "type": "string",
                   "title": "Instruction"
                 },
                 "attribution": {
-                  "description": "Copyrightholder of the source. Example: © Intergovernmental Panel on Climate Change 2014",
+                  "description": "Copyrightholder of the source",
                   "type": "string",
                   "title": "Attribution"
                 }
@@ -237,20 +226,21 @@
         "type": "object",
         "properties": {
           "title": {
-            "description": "Name/title of the contributor (name for a person, name or title for an organization). Example: Jon Doe",
+            "description": "Name/title of the contributor (name for a person, name or title for an organization)",
             "type": "string",
             "title": "Title",
             "examples": ["Jon Doe"]
           },
           "email": {
-            "description": "E-mail address of the contributor. Example: contact@example.com",
+            "description": "E-mail address of the contributor",
             "type": "string",
             "title": "Email",
             "format": "email",
             "examples": ["example@example.org"]
           },
           "date": {
-            "description": "Date of the contribution. If the contribution took more than a day, use the date of the final contribiution. Date Format is ISO 8601. Example: 2016-06-16",
+            "typeInfo": "ISO 8601",
+            "description": "Date of the contribution. If the contribution took more than a day, use the date of the final contribiution",
             "type": "string",
             "title": "Date",
             "format": "date",
@@ -264,23 +254,6 @@
     },
     "schema": {
       "description": "A Table Schema for this resource, compliant with the [Table Schema](/tableschema/) specification.",
-      "examples": [
-        {
-          "fields": [
-            {
-              "name": "first_name",
-              "type": "string",
-              "constraints": {
-                "required": true
-              }
-            },
-            {
-              "name": "age",
-              "type": "integer"
-            }
-          ]
-        }
-      ],
       "properties": {
         "fields": {
           "items": {
