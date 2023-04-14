@@ -164,11 +164,16 @@
             "placeholder": "e.g. 100m",
             "autocomplete": [
               "100m",
-              "NUTS-1",
-              "NUTS-2",
-              "NUTS-3",
+              "NUTS 0",
+              "NUTS 1",
+              "NUTS 2",
+              "NUTS 3",
+              "LAU",
               "country",
-              "municipality"
+              "municipality",
+              "Gemeinde",
+              "Bundesland",
+              "Landkreis"
             ]
           }
         },
@@ -334,6 +339,12 @@
             "title": "Date",
             "format": "date",
             "examples": ["2023-03-12"]
+          },
+          "description": {
+            "title": "Description",
+            "description": "Description of contribution / process steps",
+            "type": "string",
+            "examples": ["example description"]
           }
         },
         "additionalProperties": false,
