@@ -195,6 +195,15 @@
               "Mercator"
             ]
           }
+        },
+        "geometryType": {
+          "type": "string",
+          "title": "Geometry type",
+          "examples": ["polygon"],
+          "options": {
+            "placeholder": "e.g. polygon",
+            "autocomplete": ["point", "line", "polygon"]
+          }
         }
       },
       "title": "Spatial Coverage"

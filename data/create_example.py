@@ -30,6 +30,8 @@ def generate_example(schema: dict) -> dict:
 
     if schema.get("const"):
         return schema["const"]
+    if schema.get("default"):
+        return schema["default"]
     if schema.get("examples"):
         # the object has examples: return the first
         # TODO: maybe randomize?

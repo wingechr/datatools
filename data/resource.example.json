@@ -1,4 +1,5 @@
 {
+  "$schema": "https://raw.githubusercontent.com/wingechr/datatools/main/data/resource.schema.json#",
   "name": "resource-identifier-string",
   "encoding": "utf-8",
   "language": "en",
@@ -10,7 +11,8 @@
     "extent": "Germany",
     "resolution": "100m",
     "referenceDate": "2023-12-04",
-    "referenceSystem": "EPSG:3035"
+    "referenceSystem": "EPSG:3035",
+    "geometryType": "polygon"
   },
   "temporal": {
     "extent": "1990-2020",
