@@ -369,6 +369,24 @@
                 "type": "string",
                 "examples": ["example description"]
               },
+              "domain": {
+                "title": "Domain",
+                "description": "(Explanation of) possible values in this column",
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["value"],
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
               "type": {
                 "title": "Data Type",
                 "type": "string",
