@@ -38,18 +38,25 @@ def resource(ctx, loglevel, repository_location=None, uri=None):
     ctx.obj = SimpleNamespace()
 
     ctx.obj.repository = Repository(location=repository_location)
+
     ctx.with_resource(ctx.obj.repository)
 
     ctx.obj.resource = ctx.obj.repository[uri]
     logging.debug(ctx.obj.resource)
 
 
-@resource.command("meta")
-@click.pass_context
-def repo_res_meta(ctx):
-    logging.debug(ctx.obj.resource.metadata)
+# @resource.command("meta")
+# @click.pass_context
+# def repo_res_meta(ctx):
+#    logging.debug(ctx.obj.resource.metadata)
+#
+#    ctx.obj.resource.metadata["a"] = 1
 
-    ctx.obj.resource.metadata["a"] = 1
+
+@resource.command("download")
+@click.pass_context
+def repo_res_download(ctx):
+    ctx.obj.resource.download()
 
 
 if __name__ == "__main__":
