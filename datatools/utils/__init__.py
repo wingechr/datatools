@@ -13,11 +13,9 @@ from functools import cache, cached_property
 from os import makedirs
 from os.path import dirname, isfile, realpath
 from pathlib import Path
-
-# from shutil import move
+from shutil import move
 from stat import S_IREAD, S_IRGRP, S_IROTH
-
-# from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile
 from typing import Callable
 from urllib.parse import urlsplit
 
@@ -306,11 +304,19 @@ def get_jsonschema_validator(schema):
 
 
 class ByteContext:
-    def __init__(self, filepath: Path, exit_stack: ExitStack = None, default=b""):
+    def __init__(
+        self,
+        filepath: Path,
+        exit_stack: ExitStack,
+        get_data,
+        get_default=lambda: b"",
+    ):
         self._exit_stack = exit_stack
         self._filepath = filepath
         self._lock = FileLock(self._filepath + ".lock")
-        self._byte_data = default
+        self._byte_data = None
+        self._get_data = get_data
+        self._get_default = get_default
         self._has_changed = False
 
     def __enter__(self):
@@ -323,12 +329,15 @@ class ByteContext:
             logging.debug(f"Reading from {self._filepath}")
             with open(self._filepath, "rb") as file:
                 self._byte_data = file.read()
+        else:
+            self._byte_data = self._get_default()
 
         return self
 
     def __exit__(self, *args):
         assert self._lock.is_locked
         if self._has_changed:
+            self._byte_data = self._get_data()
             logging.debug(f"Writing to {self._filepath}")
             with open(self._filepath, "wb") as file:
                 file.write(self._byte_data)
@@ -454,26 +463,27 @@ class Resource:
     def download(self):
         logging.warning("TODO: determine correct loader from scheme")
 
-        # if os.path.isfile(self.location):
-        #    raise FileExistsError(self.location)
-        #
-        # os.makedirs(os.path.dirname(self.location), exist_ok=True)
-        #
-        # with requests.get(self.uri, stream=True) as res:
-        #    res.raise_for_status()
-        #    content_type = res.headers.get("Content-Type")
-        #    with NamedTemporaryFile("wb", delete=False) as file:
-        #        for chunk in res.iter_content(chunk_size=8192):
-        #            file.write(chunk)
-        #    move(file.name, self.location)
+        if os.path.isfile(self.location):
+            raise FileExistsError(self.location)
 
-        # content_type_parts = [x.strip() for x in content_type.split(";")]
-        # media_type = content_type_parts[0]
-        # content_type_options = {}
-        # for p in content_type_parts[1:]:
-        #    k, v = p.split("=")
-        #    content_type_options[k.strip()] = v.strip()
-        # encoding = content_type_options.get("encoding")
+        os.makedirs(os.path.dirname(self.location), exist_ok=True)
+
+        with requests.get(self.uri, stream=True) as res:
+            res.raise_for_status()
+            content_type = res.headers.get("Content-Type")
+            with NamedTemporaryFile("wb", delete=False) as file:
+                for chunk in res.iter_content(chunk_size=8192):
+                    file.write(chunk)
+            move(file.name, self.location)
+
+        content_type_parts = [x.strip() for x in content_type.split(";")]
+        media_type = content_type_parts[0]
+        content_type_options = {}
+        for p in content_type_parts[1:]:
+            k, v = p.split("=")
+            content_type_options[k.strip()] = v.strip()
+        encoding = content_type_options.get("encoding")
+
         user = get_user_long()
         now_str = get_today_str()
 
@@ -486,15 +496,15 @@ class Resource:
         meta["sources[0].path"] = self.uri
         meta["sources[0].accessDate"] = now_str
 
-        # if media_type:
-        #    meta["mediatype"] = media_type
-        # if encoding:
-        #    meta["encoding"] = encoding
+        if media_type:
+            meta["mediatype"] = media_type
+        if encoding:
+            meta["encoding"] = encoding
 
         meta["hash"] = f'sha256:{get_hash(self.location, "sha256")}'
         meta["bytes"] = get_size_bytes(self.location)
 
-        logging.info(meta["hash"])
+        logging.info(meta)
 
 
 @dataclass(frozen=True)
@@ -551,7 +561,8 @@ class MetadataStorage:
             ByteContext(
                 filepath=self.location,
                 exit_stack=self.repository._exit_stack,
-                default=create_obj_to_bytes()({}),
+                get_data=lambda: create_obj_to_bytes()(self._data),
+                get_default=lambda: create_obj_to_bytes()({}),
             ),
         )
         object.__setattr__(self, "_data", create_bytes_to_obj()(self._file.byte_data))
