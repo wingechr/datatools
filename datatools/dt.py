@@ -1,17 +1,15 @@
 """
 
 """
-import argparse
 import hashlib
 import json
 import logging
 import os
 import re
 import socket
-
-# import os
 import subprocess as sp
 import sys
+from argparse import ArgumentParser
 from contextlib import ExitStack
 from http import HTTPStatus
 from io import BytesIO
@@ -21,13 +19,13 @@ from urllib.parse import parse_qs, quote
 from wsgiref.simple_server import make_server
 
 import jsonpath_ng as jp
-import requests
+import requests as req
 
-logging.basicConfig(
-    format="[%(asctime)s %(levelname)7s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    level=logging.DEBUG,
-)
+# logging.basicConfig(
+#    format="[%(asctime)s %(levelname)7s] %(message)s",
+#    datefmt="%Y-%m-%d %H:%M:%S",
+#    level=logging.DEBUG,
+# )
 
 
 def get_free_port():
@@ -87,13 +85,13 @@ class Main(ExitStack):
         server = self.enter_context(server)
         server.serve_forever()
 
-    def check(self, source: str) -> str:
+    def exists(self, source: str) -> str:
         pass
 
     def load(self, source: str) -> bytes:
         if self.is_remote:
             url = self.location + "/data/" + source
-            res = requests.request(method="GET", url=url)
+            res = req.request(method="GET", url=url)
             res.raise_for_status()
             bdata = res.content
 
@@ -131,10 +129,10 @@ class Main(ExitStack):
         if self.is_remote:
             if dest:
                 url = self.location + "/data/" + dest
-                res = requests.request(method="PUT", url=url, data=bdata)
+                res = req.request(method="PUT", url=url, data=bdata)
             else:
                 url = self.location + "/data"
-                res = requests.request(method="POST", url=url, data=bdata)
+                res = req.request(method="POST", url=url, data=bdata)
 
             if not res.ok:
                 raise Exception(res.json())
@@ -166,9 +164,7 @@ class Main(ExitStack):
         logging.info(f"saving metadata {source}: {key} = {value}")
         if self.is_remote:
             url = self.location + "/metadata/" + source
-            res = requests.request(
-                method="PATCH", url=url, json=value, params={"key": key}
-            )
+            res = req.request(method="PATCH", url=url, json=value, params={"key": key})
             res.raise_for_status()
         else:
             jp_expr = jp.parse(key)
@@ -195,7 +191,7 @@ class Main(ExitStack):
 
         if self.is_remote:
             url = self.location + "/metadata/" + source
-            res = requests.request(method="GET", url=url, params={"key": key})
+            res = req.request(method="GET", url=url, params={"key": key})
             res.raise_for_status()
 
             value = res.json()
@@ -221,17 +217,16 @@ class Main(ExitStack):
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
+    ap = ArgumentParser()
     ap.add_argument(
         "cmd",
-        choices=["test", "serve", "check", "save", "load", "meta-set", "meta-get"],
+        choices=["test", "serve", "exists", "save", "load", "meta-set", "meta-get"],
     )
     ap.add_argument("--location", default=".data")
-    ap.add_argument("--port", type=int, default=8888)
+    ap.add_argument("--port", type=int, default=80)
     ap.add_argument("--hash-method", choices=["md5", "sha256"], default="md5")
     ap.add_argument("source", nargs="?")
     ap.add_argument("destination", nargs="?")
-    # ap.add_argument("key", nargs="?")
     ap.add_argument("value", nargs="?")
 
     kwargs = vars(ap.parse_args())
@@ -329,9 +324,6 @@ if __name__ == "__main__":
             ]
             logging.info(cmd_args)
             proc = sp.Popen(cmd_args)
-
-            # import time
-            # time.sleep(2)
 
             # remote test
             with Main(location=f"http://localhost:{port}") as main:
@@ -439,23 +431,14 @@ if __name__ == "__main__":
 
                 output_content_type = ""
 
-                # response_messages = [{"level": "DEBUG", "data": "test"}]
-
                 response_headers = []
                 response_headers += [
                     ("Content-type", output_content_type),
                     ("Content-Length", str(content_length_result)),
                 ]
 
-                # response_headers.append(
-                #    ("Messages", json.dumps(response_messages, ensure_ascii=True))
-                # )
-
                 start_response(status, response_headers)
 
-                # logging.warning(status)
-                # logging.warning(response_headers)
-                # logging.warning(result)
                 return [result]
 
             main.serve(port=kwargs["port"], application=application)
@@ -489,9 +472,11 @@ if __name__ == "__main__":
                         key=kwargs["destination"],
                         value=value,
                     )
-                elif cmd == "check":
-                    res = main.check(source=kwargs["source"])
-                    logging.info(res)
+                elif cmd == "exists":
+                    res = main.exists(source=kwargs["source"])
+                    print(res)
+                    if not res:
+                        sys.exit(1)
                 else:
                     raise NotImplementedError(cmd)
 
