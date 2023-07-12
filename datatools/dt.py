@@ -250,8 +250,9 @@ class MainRemote(MainBase):
         if not res.ok:
             try:
                 message = res.json()
-            except Exception:
-                message = ""
+            except Exception as exc:
+                # FXIME: only debug
+                message = str(exc)
             raise Exception(message)
         return res.content
 
@@ -291,30 +292,100 @@ class MainRemote(MainBase):
         return json.loads(res)
 
 
-def run_test(main):
-    data_in = b"test"
-    d_id = main.save(source=data_in)
-    assert main.exists(d_id)
-    data_out = main.load(d_id)
-    assert data_in == data_out, (data_in, data_out)
+def run_all_tests():
+    def run_test(main):
+        data_in = b"test"
+        d_id = main.save(source=data_in)
+        assert main.exists(d_id)
+        data_out = main.load(d_id)
+        assert data_in == data_out, (data_in, data_out)
 
-    d_id = "test/file.txt"
-    assert not main.exists(d_id)
-    d_id = main.save(source=data_in, dest=d_id)
-    assert main.exists(d_id)
-    data_out = main.load(d_id)
-    assert data_in == data_out, (data_in, data_out)
+        d_id = "test/file.txt"
+        assert not main.exists(d_id)
+        d_id = main.save(source=data_in, dest=d_id)
+        assert main.exists(d_id)
+        data_out = main.load(d_id)
+        assert data_in == data_out, (data_in, data_out)
 
-    data_in = [1, 2]
-    key = "a.x.y"
-    main.meta_set(source=d_id, key=key, value=data_in)
-    data_out = main.meta_get(source=d_id, key=key)
-    assert data_in == data_out, (data_in, data_out)
+        data_in = [1, 2]
+        key = "a.x.y"
+        main.meta_set(source=d_id, key=key, value=data_in)
+        data_out = main.meta_get(source=d_id, key=key)
+        assert data_in == data_out, (data_in, data_out)
 
-    data_out = main.meta_get(source=d_id)
+        data_out = main.meta_get(source=d_id)
+
+    # local test
+    with TemporaryDirectory() as location:
+        with Main(location=location) as main:
+            run_test(main)
+    # CLI
+    with TemporaryDirectory() as location:
+        with MainCliTest(location=location) as main:
+            run_test(main)
+
+    # remote test
+    with TemporaryDirectory() as location, MainServerTestProcess(location) as srv:
+        # remote test
+        with MainRemote(location=srv.url) as main:
+            run_test(main)
 
 
-class MainTestCli(AbstractMain):
+class MainCli:
+    def __init__(self, main):
+        self.main = main
+
+    def save(self, source, destination, hash_method, **_kwargs):
+        path = self.main.save(
+            source=source,
+            dest=destination,
+            hash_method=hash_method,
+        )
+        print(path)
+
+    def load(self, source, destination, **_kwargs):
+        bdata = self.main.load(source=source)
+        self.main.write_resource(bdata, destination=destination)
+
+    def exists(self, source, **_kwargs):
+        res = self.main.exists(source=source)
+        print(res)
+        if not res:
+            sys.exit(1)
+
+    def meta_set(self, source, destination, value, **_kwargs):
+        try:
+            value = json.loads(value)
+        except Exception:
+            pass
+        self.main.meta_set(
+            source=source,
+            key=destination,
+            value=value,
+        )
+
+    def meta_get(self, source, destination, **_kwargs):
+        res = self.main.meta_get(source=source, key=destination)
+        res = json.dumps(res, indent=4, ensure_ascii=False)
+        print(res)
+
+    def __call__(self, cmd, kwargs):
+        # routing
+        if cmd == "save":
+            self.save(**kwargs)
+        elif cmd == "load":
+            self.load(**kwargs)
+        elif cmd == "meta-get":
+            self.meta_get(**kwargs)
+        elif cmd == "meta-set":
+            self.meta_set(**kwargs)
+        elif cmd == "exists":
+            self.exists(**kwargs)
+        else:
+            raise NotImplementedError(cmd)
+
+
+class MainCliTest(AbstractMain):
     def __init__(self, location):
         self.script = Script(__file__, ["--location", location])
 
@@ -381,7 +452,7 @@ class MainTestCli(AbstractMain):
         return True
 
 
-class MainRemoteTestServer:
+class MainServerTestProcess:
     """run testserver in subprocess"""
 
     host = "localhost"  # "0.0.0.0" sometimes causes problems in Windows
@@ -441,87 +512,82 @@ class MainServer:
             logging.info(server.server_address)
             server.serve_forever()
 
-    def application(environ, start_response):
+    @staticmethod
+    def _remove_prefix(path, prefix):
+        lp = len(prefix)
+        assert path.startswith(prefix)
+        path = path[lp:]
+        return path
+
+    def save(self, data, path=None):
+        return {"path": main.save(source=data, dest=path)}
+
+    def load(self, path):
+        return self.main.load(source=path)
+
+    def meta_set(self, path, key, value):
+        return self.main.meta_set(source=path, key=key, value=value)
+
+    def meta_get(self, path, key):
+        return self.main.meta_get(source=path, key=key)
+
+    # TODO
+    # def exists(self, path):
+    #    return self.main.exists(source=path)
+
+    def application(self, environ, start_response):
         method = environ["REQUEST_METHOD"].upper()
         path = environ["PATH_INFO"]
         query = parse_qs(environ["QUERY_STRING"], strict_parsing=False)
         content_length = int(environ["CONTENT_LENGTH"] or "0")
+        if content_length:
+            # TODO: we would want to just pass
+            # input to main.save, but we need to specify the number of bytes
+            # in advance
+            input = environ["wsgi.input"]
+            bdata = input.read(content_length)
+        else:
+            bdata = b""
 
+        status_code = 200
+        result = b""
+
+        # routing: TODO
         if method == "POST" and path == "/data":
-            input = environ["wsgi.input"]
-            # TODO: we would want to just pass
-            # input to main.save, but we need to specify the number of bytes
-            # in advance
-            bdata = input.read(content_length)
-            path = main.save(source=bdata)
-
-            result = {"path": path}
-            result = json.dumps(result).encode()
-            status_code = 200
+            result = self.save(data=bdata)
         elif method == "PUT" and path.startswith("/data/"):
-            lp = len("/data/")
-            path = path[lp:]  # remove left "/data/"
-            input = environ["wsgi.input"]
-            # TODO: we would want to just pass
-            # input to main.save, but we need to specify the number of bytes
-            # in advance
-            bdata = input.read(content_length)
-            path = main.save(source=bdata, dest=path)
-
-            result = {"path": path}
-            result = json.dumps(result).encode()
-            status_code = 200
-
+            path = self._remove_prefix(path, "/data/")
+            result = self.save(data=bdata, path=path)
         elif method == "GET" and path.startswith("/data/"):
-            lp = len("/data/")
-            path = path[lp:]  # remove left "/data/":
-            result = main.load(source=path)
-
-            status_code = 200
+            path = self._remove_prefix(path, "/data/")
+            result = self.load(path=path)
         elif method == "PATCH" and path.startswith("/metadata/"):
-            lp = len("/metadata/")
-            path = path[lp:]  # remove left "/data/"
-
+            path = self._remove_prefix(path, "/metadata/")
             key = query["key"][0]  # TODO validate for multiple
-
-            input = environ["wsgi.input"]
-            # TODO: we would want to just pass
-            # input to main.save, but we need to specify the number of bytes
-            # in advance
-            bdata = input.read(content_length)
             value = json.loads(bdata.decode())  # todo use encoding encoding
-
-            main.meta_set(source=path, key=key, value=value)
-
-            result = b""
-            status_code = 200
+            result = self.meta_set(path=path, key=key, value=value)
         elif method == "GET" and path.startswith("/metadata/"):
-            lp = len("/metadata/")
-            path = path[lp:]  # remove left "/data/"
+            path = self._remove_prefix(path, "/metadata/")
             key = query.get("key", [None])[0]
-
-            res = main.meta_get(source=path, key=key)
-
-            result = json.dumps(res, indent=4, ensure_ascii=False).encode()
-            status_code = 200
+            result = self.meta_get(path=path, key=key)
         else:
             status_code = 400
             result = {"error": f"{method} {path}"}
+
+        if isinstance(result, str):
+            result = result.encode()
+        if not isinstance(result, bytes):
             result = json.dumps(result).encode()
 
         content_length_result = len(result)
-
         # TODO get other success codes
         status = "%s %s" % (status_code, HTTPStatus(status_code).phrase)
-
-        output_content_type = ""
-
+        output_content_type = ""  # TODO
         response_headers = []
         response_headers += [
             ("Content-type", output_content_type),
             ("Content-Length", str(content_length_result)),
         ]
-
         start_response(status, response_headers)
 
         return [result]
@@ -543,20 +609,7 @@ if __name__ == "__main__":
     kwargs = vars(ap.parse_args())
 
     if kwargs["cmd"] == "test":
-        # local test
-        with TemporaryDirectory() as location:
-            with Main(location=location) as main:
-                run_test(main)
-        # CLI
-        with TemporaryDirectory() as location:
-            with MainTestCli(location=location) as main:
-                run_test(main)
-
-        # remote test
-        with TemporaryDirectory() as location, MainRemoteTestServer(location) as srv:
-            # remote test
-            with MainRemote(location=srv.url) as main:
-                run_test(main)
+        run_all_tests()
 
     elif kwargs["cmd"] == "serve":
         with Main(location=kwargs["location"]) as main:
@@ -564,40 +617,4 @@ if __name__ == "__main__":
 
     else:
         with Main(location=kwargs["location"]) as main:
-
-            def cli(cmd, kwargs):
-                if cmd == "save":
-                    path = main.save(
-                        source=kwargs["source"],
-                        dest=kwargs["destination"],
-                        hash_method=kwargs["hash_method"],
-                    )
-                    print(path)
-                elif cmd == "load":
-                    bdata = main.load(source=kwargs["source"])
-                    main.write_resource(bdata, destination=kwargs["destination"])
-                elif cmd == "meta-get":
-                    res = main.meta_get(
-                        source=kwargs["source"], key=kwargs["destination"]
-                    )
-                    res = json.dumps(res, indent=4, ensure_ascii=False)
-                    print(res)
-                elif cmd == "meta-set":
-                    try:
-                        value = json.loads(kwargs["value"])
-                    except Exception:
-                        value = kwargs["value"]
-                    main.meta_set(
-                        source=kwargs["source"],
-                        key=kwargs["destination"],
-                        value=value,
-                    )
-                elif cmd == "exists":
-                    res = main.exists(source=kwargs["source"])
-                    print(res)
-                    if not res:
-                        sys.exit(1)
-                else:
-                    raise NotImplementedError(cmd)
-
-            cli(kwargs["cmd"], kwargs)
+            MainCli(main)(kwargs["cmd"], kwargs)
