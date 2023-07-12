@@ -21,12 +21,6 @@ from wsgiref.simple_server import make_server
 import jsonpath_ng as jp
 import requests as req
 
-logging.basicConfig(
-    format="[%(asctime)s %(levelname)7s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    level=logging.DEBUG,
-)
-
 
 class NonzeroReturncode(Exception):
     pass
@@ -39,7 +33,7 @@ class Script:
 
     def __call__(self, args: list, binput: bytes = None) -> bytes:
         cmd_args = ["python", self.script] + self.default_args + list(args)
-        logging.info(" ".join(cmd_args))
+        logging.debug(" ".join(cmd_args))
         proc = sp.Popen(
             cmd_args,
             stdout=sp.PIPE,
@@ -112,7 +106,7 @@ class MainBase(ExitStack, AbstractMain):
         if not source or source == "-":
             data = sys.stdin.buffer.read()
         else:
-            logging.info(f"read from {source}")
+            logging.debug(f"read from {source}")
             with open(source, "rb") as file:
                 data = file.read()
             dest = source
@@ -122,10 +116,10 @@ class MainBase(ExitStack, AbstractMain):
 
     def write_resource(self, bdata, destination=None):
         if not destination or destination == "-":
-            logging.info("write to stdout")
+            logging.debug("write to stdout")
             destination = sys.stdout.buffer
         else:
-            logging.info(f"write to {destination}")
+            logging.debug(f"write to {destination}")
             # assert not os.path.exists(destination)
             os.makedirs(os.path.dirname(destination), exist_ok=True)
             destination = self.enter_context(open(destination, "wb"))
@@ -184,7 +178,7 @@ class Main(MainBase):
 
         metadata["hash"] = f"{hash_method}:{hashsum}"
 
-        logging.info(f"saving {len(source)} bytes to {path}")
+        logging.debug(f"saving {len(source)} bytes to {path}")
 
         destination = self.location + "/" + path
         self.write_resource(source, destination=destination)
@@ -509,7 +503,7 @@ class MainServer:
 
     def serve(self) -> None:
         with make_server("localhost", self.port, self.application) as server:
-            logging.info(server.server_address)
+            logging.debug(server.server_address)
             server.serve_forever()
 
     @staticmethod
@@ -530,10 +524,6 @@ class MainServer:
 
     def meta_get(self, path, key):
         return self.main.meta_get(source=path, key=key)
-
-    # TODO
-    # def exists(self, path):
-    #    return self.main.exists(source=path)
 
     def application(self, environ, start_response):
         method = environ["REQUEST_METHOD"].upper()
@@ -560,7 +550,12 @@ class MainServer:
             result = self.save(data=bdata, path=path)
         elif method == "GET" and path.startswith("/data/"):
             path = self._remove_prefix(path, "/data/")
-            result = self.load(path=path)
+            try:
+                result = self.load(path=path)
+            except Exception:
+                # TODO: better way to do check exists
+                result = None
+                status_code = 404
         elif method == "PATCH" and path.startswith("/metadata/"):
             path = self._remove_prefix(path, "/metadata/")
             key = query["key"][0]  # TODO validate for multiple
@@ -607,6 +602,12 @@ if __name__ == "__main__":
     ap.add_argument("value", nargs="?")
 
     kwargs = vars(ap.parse_args())
+
+    logging.basicConfig(
+        format="[%(asctime)s %(levelname)7s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        level=logging.WARNING,
+    )
 
     if kwargs["cmd"] == "test":
         run_all_tests()
