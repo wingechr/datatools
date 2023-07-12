@@ -1,55 +1,5 @@
 """
 
-# save binary data
-## REST
-
-POST /?hashmethod=path=,,, < BYTES > /uri
-
-## CLI
-save --hash-method=md5 local_uri > /uri
-
-## PY
-save(bdata:bytes|local_uri, path:str=None, hash_method:str="md5") -> str
-
-
-# load  binary data
-## REST
-GET /uri > BYTES
-
-## CLI
-load /uri > BYTES
-
-## PY
-load(uri:str) -> bytes
-
-# load meta data
-## REST
-GET meta/uri?key=key > JSON
-or
-GET /uri?metadata=key > JSON
-
-## CLI
-meta load /uri [/key] -> string[json]
-or
-load /uri --metadata=key > string[json]
-
-## PY
-meta_load(uri:str, key:str=None) -> object[json]
-
-
-# update meta data
-## REST
-PATCH /uri?key=key < JSON
-chator
-PATCH /uri?metadata=key < JSON
-
-## CLI
-meta save /uri /key string[json]
-
-## PY
-meta_save(uri:str, key:str, value:object[json])
-
-
 """
 import argparse
 import hashlib
@@ -66,8 +16,6 @@ from contextlib import ExitStack
 from http import HTTPStatus
 from io import BytesIO
 from tempfile import TemporaryDirectory
-
-# from threading import Thread
 from typing import Tuple
 from urllib.parse import parse_qs, quote
 from wsgiref.simple_server import make_server
@@ -240,7 +188,9 @@ class Main(ExitStack):
             with open(metadata_file, "wb") as file:
                 file.write(metadatab)
 
-    def meta_load(self, source, key="$"):
+    def meta_load(self, source, key=None):
+        if not key:
+            key = "$"  # root
         logging.info(f"loading metadata {source}: {key}")
 
         if self.is_remote:
@@ -281,7 +231,7 @@ if __name__ == "__main__":
     ap.add_argument("--hash-method", choices=["md5", "sha256"], default="md5")
     ap.add_argument("source", nargs="?")
     ap.add_argument("destination", nargs="?")
-    ap.add_argument("key", nargs="?")
+    # ap.add_argument("key", nargs="?")
     ap.add_argument("value", nargs="?")
 
     kwargs = vars(ap.parse_args())
@@ -296,24 +246,77 @@ if __name__ == "__main__":
                 logging.info(d_id)
                 data_out = main.load(d_id)
                 logging.info(data_out)
-                logging.info(data_in == data_out)
+                assert data_in == data_out
 
                 d_id = "test/file.txt"
                 d_id = main.save(source=data_in, dest=d_id)
+                data_out = main.load(d_id)
+                logging.info(data_out)
+                assert data_in == data_out
 
                 data_in = [1, 2]
                 key = "a.x.y"
                 main.meta_save(source=d_id, key=key, value=data_in)
                 data_out = main.meta_load(source=d_id, key=key)
                 logging.info(data_out)
-                logging.info(data_in == data_out)
+                assert data_in == data_out
 
                 data_out = main.meta_load(source=d_id)
                 logging.info(data_out)
+        # CLI
+        with TemporaryDirectory() as location:
+
+            def run_cmd(args, binput=None):
+                cmd_args = ["python", __file__, "--location", location] + list(args)
+                proc = sp.Popen(
+                    cmd_args,
+                    stdout=sp.PIPE,
+                    stderr=sp.PIPE,
+                    stdin=sp.PIPE if binput else None,
+                )
+                out, _err = proc.communicate(input=binput)
+                if proc.returncode:
+                    raise Exception(_err.decode())
+                return out
+
+            data_in = b"test"
+            # remove newline from print
+            d_id = run_cmd(["save", "-"], data_in).decode().rstrip()
+            logging.info(d_id)
+
+            data_out = run_cmd(["load", d_id, "-"])
+            logging.info(data_out)
+            assert data_in == data_out
+
+            d_id = "test/file.txt"
+            # remove newline from print
+            d_id = run_cmd(["save", "-", d_id], data_in).decode().rstrip()
+            data_out = run_cmd(["load", d_id, "-"])
+            logging.info(data_out)
+            assert data_in == data_out
+
+            data_in = [1, 2]
+            key = "a.x.y"
+            run_cmd(
+                [
+                    "meta-set",
+                    d_id,
+                    key,
+                    json.dumps(data_in),
+                ]
+            )
+
+            data_out = run_cmd(["meta-get", d_id, key])  # .decode().rstrip()
+            logging.info(data_out)
+            data_out = json.loads(data_out)
+            logging.info(data_out)
+            assert data_in == data_out
+
+            data_out = run_cmd(["meta-get", d_id])  # .decode().rstrip()
+            logging.info(data_out)
 
         # remote test
         with TemporaryDirectory() as location:
-            location = os.path.abspath(".test")
             # start server
             cmd_args = [
                 "python",
@@ -330,23 +333,28 @@ if __name__ == "__main__":
             # import time
             # time.sleep(2)
 
+            # remote test
             with Main(location=f"http://localhost:{port}") as main:
                 data_in = b"test"
                 d_id = main.save(source=data_in)
                 logging.info(d_id)
                 data_out = main.load(d_id)
                 logging.info(data_out)
-                logging.info(data_in == data_out)
+                assert data_in == data_out
 
                 d_id = "test/file.txt"
                 d_id = main.save(source=data_in, dest=d_id)
+
+                data_out = main.load(d_id)
+                logging.info(data_out)
+                assert data_in == data_out
 
                 data_in = [1, 2]
                 key = "a.x.y"
                 main.meta_save(source=d_id, key=key, value=data_in)
                 data_out = main.meta_load(source=d_id, key=key)
                 logging.info(data_out)
-                logging.info(data_in == data_out)
+                assert data_in == data_out
 
                 data_out = main.meta_load(source=d_id)
                 logging.info(data_out)
@@ -360,21 +368,7 @@ if __name__ == "__main__":
                 method = environ["REQUEST_METHOD"].upper()
                 path = environ["PATH_INFO"]
                 query = parse_qs(environ["QUERY_STRING"], strict_parsing=False)
-                # content_type = environ["CONTENT_TYPE"].lower()  # also for encoding
                 content_length = int(environ["CONTENT_LENGTH"] or "0")
-
-                # authorization = environ.get("HTTP_AUTHORIZATION")
-
-                # request_messages = environ.get("HTTP_MESSAGES")
-                # if request_messages:
-                #    request_messages = json.loads(request_messages)
-
-                # if authorization:  # <auth-scheme> <authorisation-parameters>
-                #    token = re.match(
-                #        "^Token:? +(?P<token>[^ ]+)$", authorization, re.IGNORECASE
-                #    ).group(1)
-                # else:
-                #    token = None
 
                 if method == "POST" and path == "/data":
                     input = environ["wsgi.input"]
@@ -475,18 +469,25 @@ if __name__ == "__main__":
                         dest=kwargs["destination"],
                         hash_method=kwargs["hash_method"],
                     )
-                    logging.info(path)
+                    print(path)
                 elif cmd == "load":
                     bdata = main.load(source=kwargs["source"])
                     main.write_resource(bdata, destination=kwargs["destination"])
-                elif cmd == "meta-load":
-                    res = main.meta_load(source=kwargs["source"], key=kwargs["key"])
-                    logging.info(res)
-                elif cmd == "meta-save":
+                elif cmd == "meta-get":
+                    res = main.meta_load(
+                        source=kwargs["source"], key=kwargs["destination"]
+                    )
+                    res = json.dumps(res, indent=4, ensure_ascii=False)
+                    print(res)
+                elif cmd == "meta-set":
+                    try:
+                        value = json.loads(kwargs["value"])
+                    except Exception:
+                        value = kwargs["value"]
                     main.meta_save(
                         source=kwargs["source"],
-                        key=kwargs["key"],
-                        value=kwargs["value"],
+                        key=kwargs["destination"],
+                        value=value,
                     )
                 elif cmd == "check":
                     res = main.check(source=kwargs["source"])
