@@ -53,23 +53,47 @@ meta_save(uri:str, key:str, value:object[json])
 """
 import argparse
 import hashlib
+import json
+import logging
+import os
+import re
+import socket
 
 # import os
 import subprocess as sp
 import sys
 from contextlib import ExitStack
+from http import HTTPStatus
 from io import BytesIO
+from tempfile import TemporaryDirectory
 
 # from threading import Thread
 from typing import Tuple
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote
 from wsgiref.simple_server import make_server
 
-# import requests
+import jsonpath_ng as jp
+import requests
+
+logging.basicConfig(
+    format="[%(asctime)s %(levelname)7s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    level=logging.DEBUG,
+)
+
+
+def get_free_port():
+    sock = socket.socket()
+    sock.bind(("", 0))
+    return sock.getsockname()[1]
 
 
 class Main(ExitStack):
     def __init__(self, location=".data") -> None:
+        # decide if remote or local
+        self.is_remote = bool(re.match("http[s]?://", location, re.IGNORECASE))
+        self.location = location
+
         ExitStack.__init__(self)
 
     def get_path(self, dest):
@@ -87,30 +111,48 @@ class Main(ExitStack):
         metadata = {}
         dest = None
         if not source or source == "-":
-            data = sys.stdin.buffer
+            data = sys.stdin.buffer.read()
         else:
-            data = self.enter_context(open(source, "rb"))
+            logging.info(f"read from {source}")
+            with open(source, "rb") as file:
+                data = file.read()
             dest = source
         # TODO: http, ...
+
         return data, dest, metadata
 
     def write_resource(self, bdata, destination=None):
         if not destination or destination == "-":
+            logging.info("write to stdout")
             destination = sys.stdout.buffer
         else:
+            logging.info(f"write to {destination}")
+            # assert not os.path.exists(destination)
+            os.makedirs(os.path.dirname(destination), exist_ok=True)
             destination = self.enter_context(open(destination, "wb"))
         destination.write(bdata)
         destination.close()
 
     def serve(self, port: int, application) -> None:
-        server = self.enter_context(make_server("", port, application))
+        server = make_server("", port, application)
+        logging.info(server.server_address)
+        server = self.enter_context(server)
         server.serve_forever()
 
     def check(self, source: str) -> str:
         pass
 
     def load(self, source: str) -> bytes:
-        bdata = b"todo"
+        if self.is_remote:
+            url = self.location + "/data/" + source
+            res = requests.request(method="GET", url=url)
+            res.raise_for_status()
+            bdata = res.content
+
+        else:
+            source = self.location + "/" + source
+            bdata, _dest, _metadata = self.load_resource(source)
+
         return bdata
 
     def save(
@@ -137,26 +179,94 @@ class Main(ExitStack):
 
         # assert now that data is bytes buffer / file
         bdata = source.read()
-        hashsum = getattr(hashlib, hash_method)(bdata).hexdigest()
 
-        if not dest:
-            path = f"hash/{hash_method}/{hashsum}"
+        if self.is_remote:
+            if dest:
+                url = self.location + "/data/" + dest
+                res = requests.request(method="PUT", url=url, data=bdata)
+            else:
+                url = self.location + "/data"
+                res = requests.request(method="POST", url=url, data=bdata)
+
+            if not res.ok:
+                raise Exception(res.json())
+
+            res = res.json()
+            path = res["path"]
+
         else:
-            path = self.get_path(dest)
-        metadata["hash"] = f"{hash_method}:{hashsum}"
+            hashsum = getattr(hashlib, hash_method)(bdata).hexdigest()
 
-        print(f"saving {len(bdata)} bytes to {path}")
-        for k, v in metadata.items():
-            self.meta_save(path, k, v)
+            if dest:
+                path = self.get_path(dest)
+            else:
+                path = f"hash/{hash_method}/{hashsum}"
+
+            metadata["hash"] = f"{hash_method}:{hashsum}"
+
+            logging.info(f"saving {len(bdata)} bytes to {path}")
+
+            destination = self.location + "/" + path
+            self.write_resource(bdata, destination=destination)
+
+            for k, v in metadata.items():
+                self.meta_save(path, k, v)
 
         return path
 
-    def meta_save(self, path, key, value):
-        print(f"saving metadata {path}: {key} = {value}")
+    def meta_save(self, source, key, value):
+        logging.info(f"saving metadata {source}: {key} = {value}")
+        if self.is_remote:
+            url = self.location + "/metadata/" + source
+            res = requests.request(
+                method="PATCH", url=url, json=value, params={"key": key}
+            )
+            res.raise_for_status()
+        else:
+            jp_expr = jp.parse(key)
 
-    def meta_load(self, path, key, value):
-        value = None
-        print(f"loading metadata {path}: {key} = {value}")
+            metadata_file = self.location + "/" + source + ".metadata.json"
+            if os.path.isfile(metadata_file):
+                with open(metadata_file, "rb") as file:
+                    metadata = json.load(file)
+            else:
+                metadata = {}
+
+            jp_expr.update_or_create(metadata, value)
+
+            metadatas = json.dumps(metadata, indent=4, ensure_ascii=False)
+            metadatab = metadatas.encode()
+            os.makedirs(os.path.dirname(metadata_file), exist_ok=True)
+            with open(metadata_file, "wb") as file:
+                file.write(metadatab)
+
+    def meta_load(self, source, key="$"):
+        logging.info(f"loading metadata {source}: {key}")
+
+        if self.is_remote:
+            url = self.location + "/metadata/" + source
+            res = requests.request(method="GET", url=url, params={"key": key})
+            res.raise_for_status()
+
+            value = res.json()
+        else:
+            jp_expr = jp.parse(key)
+
+            metadata_file = self.location + "/" + source + ".metadata.json"
+            if os.path.isfile(metadata_file):
+                with open(metadata_file, "rb") as file:
+                    metadata = json.load(file)
+            else:
+                metadata = {}
+
+            match = jp_expr.find(metadata)
+
+            if not match:
+                value = None
+            elif len(match) > 1:
+                logging.warning("multiple matches")  # TODO
+            value = match[0].value
+
         return value
 
 
@@ -175,23 +285,188 @@ if __name__ == "__main__":
     ap.add_argument("value", nargs="?")
 
     kwargs = vars(ap.parse_args())
+    if kwargs["cmd"] == "test":
+        port = get_free_port()
 
-    with Main(location=kwargs["location"]) as main:
-        cmd = kwargs.pop("cmd")
-        if cmd == "test":
-            cmd_args = ["python", __file__, "serve", "--port", str(kwargs["port"])]
-            print(cmd_args)
+        # local test
+        with TemporaryDirectory() as location:
+            with Main(location=location) as main:
+                data_in = b"test"
+                d_id = main.save(source=data_in)
+                logging.info(d_id)
+                data_out = main.load(d_id)
+                logging.info(data_out)
+                logging.info(data_in == data_out)
+
+                d_id = "test/file.txt"
+                d_id = main.save(source=data_in, dest=d_id)
+
+                data_in = [1, 2]
+                key = "a.x.y"
+                main.meta_save(source=d_id, key=key, value=data_in)
+                data_out = main.meta_load(source=d_id, key=key)
+                logging.info(data_out)
+                logging.info(data_in == data_out)
+
+                data_out = main.meta_load(source=d_id)
+                logging.info(data_out)
+
+        # remote test
+        with TemporaryDirectory() as location:
+            location = os.path.abspath(".test")
+            # start server
+            cmd_args = [
+                "python",
+                __file__,
+                "serve",
+                "--port",
+                str(port),
+                "--location",
+                location,
+            ]
+            logging.info(cmd_args)
             proc = sp.Popen(cmd_args)
 
-        elif cmd == "serve":
+            # import time
+            # time.sleep(2)
+
+            with Main(location=f"http://localhost:{port}") as main:
+                data_in = b"test"
+                d_id = main.save(source=data_in)
+                logging.info(d_id)
+                data_out = main.load(d_id)
+                logging.info(data_out)
+                logging.info(data_in == data_out)
+
+                d_id = "test/file.txt"
+                d_id = main.save(source=data_in, dest=d_id)
+
+                data_in = [1, 2]
+                key = "a.x.y"
+                main.meta_save(source=d_id, key=key, value=data_in)
+                data_out = main.meta_load(source=d_id, key=key)
+                logging.info(data_out)
+                logging.info(data_in == data_out)
+
+                data_out = main.meta_load(source=d_id)
+                logging.info(data_out)
+
+            proc.kill()
+
+    elif kwargs["cmd"] == "serve":
+        with Main(location=kwargs["location"]) as main:
 
             def application(environ, start_response):
-                cmd = environ["PATH"]
-                print(cmd)
+                method = environ["REQUEST_METHOD"].upper()
+                path = environ["PATH_INFO"]
+                query = parse_qs(environ["QUERY_STRING"], strict_parsing=False)
+                # content_type = environ["CONTENT_TYPE"].lower()  # also for encoding
+                content_length = int(environ["CONTENT_LENGTH"] or "0")
+
+                # authorization = environ.get("HTTP_AUTHORIZATION")
+
+                # request_messages = environ.get("HTTP_MESSAGES")
+                # if request_messages:
+                #    request_messages = json.loads(request_messages)
+
+                # if authorization:  # <auth-scheme> <authorisation-parameters>
+                #    token = re.match(
+                #        "^Token:? +(?P<token>[^ ]+)$", authorization, re.IGNORECASE
+                #    ).group(1)
+                # else:
+                #    token = None
+
+                if method == "POST" and path == "/data":
+                    input = environ["wsgi.input"]
+                    # TODO: we would want to just pass
+                    # input to main.save, but we need to specify the number of bytes
+                    # in advance
+                    bdata = input.read(content_length)
+                    path = main.save(source=bdata)
+
+                    result = {"path": path}
+                    result = json.dumps(result).encode()
+                    status_code = 200
+                elif method == "PUT" and path.startswith("/data/"):
+                    lp = len("/data/")
+                    path = path[lp:]  # remove left "/data/"
+                    input = environ["wsgi.input"]
+                    # TODO: we would want to just pass
+                    # input to main.save, but we need to specify the number of bytes
+                    # in advance
+                    bdata = input.read(content_length)
+                    path = main.save(source=bdata, dest=path)
+
+                    result = {"path": path}
+                    result = json.dumps(result).encode()
+                    status_code = 200
+
+                elif method == "GET" and path.startswith("/data/"):
+                    lp = len("/data/")
+                    path = path[lp:]  # remove left "/data/":
+                    result = main.load(source=path)
+
+                    status_code = 200
+                elif method == "PATCH" and path.startswith("/metadata/"):
+                    lp = len("/metadata/")
+                    path = path[lp:]  # remove left "/data/"
+
+                    key = query["key"][0]  # TODO validate for multiple
+
+                    input = environ["wsgi.input"]
+                    # TODO: we would want to just pass
+                    # input to main.save, but we need to specify the number of bytes
+                    # in advance
+                    bdata = input.read(content_length)
+                    value = json.loads(bdata.decode())  # todo use encoding encoding
+
+                    main.meta_save(source=path, key=key, value=value)
+
+                    result = b""
+                    status_code = 200
+                elif method == "GET" and path.startswith("/metadata/"):
+                    lp = len("/metadata/")
+                    path = path[lp:]  # remove left "/data/"
+                    key = query.get("key", [None])[0]
+
+                    res = main.meta_load(source=path, key=key)
+
+                    result = json.dumps(res, indent=4, ensure_ascii=False).encode()
+                    status_code = 200
+                else:
+                    status_code = 400
+                    result = {"error": f"{method} {path}"}
+                    result = json.dumps(result).encode()
+
+                content_length_result = len(result)
+
+                # TODO get other success codes
+                status = "%s %s" % (status_code, HTTPStatus(status_code).phrase)
+
+                output_content_type = ""
+
+                # response_messages = [{"level": "DEBUG", "data": "test"}]
+
+                response_headers = []
+                response_headers += [
+                    ("Content-type", output_content_type),
+                    ("Content-Length", str(content_length_result)),
+                ]
+
+                # response_headers.append(
+                #    ("Messages", json.dumps(response_messages, ensure_ascii=True))
+                # )
+
+                start_response(status, response_headers)
+
+                # logging.warning(status)
+                # logging.warning(response_headers)
+                # logging.warning(result)
+                return [result]
 
             main.serve(port=kwargs["port"], application=application)
-
-        else:
+    else:
+        with Main(location=kwargs["location"]) as main:
 
             def cli(cmd, kwargs):
                 if cmd == "save":
@@ -200,17 +475,23 @@ if __name__ == "__main__":
                         dest=kwargs["destination"],
                         hash_method=kwargs["hash_method"],
                     )
-                    print(path)
+                    logging.info(path)
                 elif cmd == "load":
                     bdata = main.load(source=kwargs["source"])
                     main.write_resource(bdata, destination=kwargs["destination"])
                 elif cmd == "meta-load":
-                    pass
+                    res = main.meta_load(source=kwargs["source"], key=kwargs["key"])
+                    logging.info(res)
                 elif cmd == "meta-save":
-                    pass
+                    main.meta_save(
+                        source=kwargs["source"],
+                        key=kwargs["key"],
+                        value=kwargs["value"],
+                    )
                 elif cmd == "check":
-                    pass
+                    res = main.check(source=kwargs["source"])
+                    logging.info(res)
                 else:
                     raise NotImplementedError(cmd)
 
-            cli(cmd, kwargs)
+            cli(kwargs["cmd"], kwargs)
