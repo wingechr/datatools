@@ -22,28 +22,30 @@ from wsgiref.simple_server import make_server
 import jsonpath_ng as jp
 import requests as req
 
-# logging.basicConfig(
-#    format="[%(asctime)s %(levelname)7s] %(message)s",
-#    datefmt="%Y-%m-%d %H:%M:%S",
-#    level=logging.DEBUG,
-# )
+logging.basicConfig(
+    format="[%(asctime)s %(levelname)7s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    level=logging.DEBUG,
+)
 
 
 def get_free_port():
-    sock = socket.socket()
-    sock.bind(("", 0))
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("localhost", 0))
     return sock.getsockname()[1]
 
 
 def wait_for_port(port, timeout_s=30):
-    sock = socket.socket(socket.AF_INET)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     time_wait_total_s = 0
     time_wait_step_s = 0.1
     while True:
         try:
-            sock.connect(("", port))
+            # use "localhost". "0.0.0.0" or "" did not work in windows sometimes
+            sock.connect(("localhost", port))
             break
-        except Exception:
+        except Exception as exc:
+            logging.info(f"wait for port {port}, {exc}")
             sleep(time_wait_step_s)
             time_wait_total_s += time_wait_step_s
             if timeout_s is not None and time_wait_total_s >= timeout_s:
