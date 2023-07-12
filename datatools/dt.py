@@ -16,6 +16,7 @@ from contextlib import ExitStack
 from http import HTTPStatus
 from io import BytesIO
 from tempfile import TemporaryDirectory
+from time import sleep
 from typing import Tuple
 from urllib.parse import parse_qs, quote
 from wsgiref.simple_server import make_server
@@ -34,6 +35,23 @@ def get_free_port():
     sock = socket.socket()
     sock.bind(("", 0))
     return sock.getsockname()[1]
+
+
+def wait_for_port(port, timeout_s=30):
+    sock = socket.socket(socket.AF_INET)
+    time_wait_total_s = 0
+    time_wait_step_s = 0.1
+    while True:
+        try:
+            sock.connect(("", port))
+            break
+        except Exception:
+            sleep(time_wait_step_s)
+            time_wait_total_s += time_wait_step_s
+            if timeout_s is not None and time_wait_total_s >= timeout_s:
+                raise
+
+    sock.close()
 
 
 class Main(ExitStack):
@@ -330,8 +348,7 @@ if __name__ == "__main__":
             logging.info(cmd_args)
             proc = sp.Popen(cmd_args)
 
-            # import time
-            # time.sleep(2)
+            wait_for_port(port)
 
             # remote test
             with Main(location=f"http://localhost:{port}") as main:
