@@ -17,6 +17,8 @@ if __name__ == "__main__":
             # "pyyaml",
             "requests",
             # "tzlocal",
+            "unidecode",
+            "flask",
         ],
         name="datatools",
         description=None,
