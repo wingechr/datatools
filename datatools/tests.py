@@ -1,6 +1,7 @@
 # coding: utf-8
 import json
 import logging
+import subprocess as sp
 import unittest
 from tempfile import TemporaryDirectory
 from threading import Thread
@@ -9,6 +10,7 @@ from datatools.classes import (
     HASHED_DATA_PATH_PREFIX,
     LocalStorage,
     RemoteStorage,
+    Storage,
     StorageServer,
     TestCliStorage,
 )
@@ -111,7 +113,8 @@ class TestDatatoolsRemote(TestDatatools):
     def setUp(self) -> None:
         self.tempdir = TemporaryDirectory()
         port = get_free_port()
-        self.server = StorageServer(location=self.tempdir.__enter__(), port=port)
+        storage = Storage(location=self.tempdir.__enter__())
+        self.server = StorageServer(storage=storage, port=port)
         self.server_thread = Thread(target=self.server.serve_forever, daemon=True)
         self.server_thread.start()
         self.storage = RemoteStorage(location=f"http://localhost:{port}")
@@ -123,12 +126,30 @@ class TestDatatoolsRemote(TestDatatools):
 class TestDatatoolsRemoteCli(TestDatatools):
     def setUp(self) -> None:
         self.tempdir = TemporaryDirectory()
-        # port = get_free_port()
-        # self.server = StorageServer(location=self.tempdir.__enter__(), port=port)
+        port = get_free_port()
+        location = self.tempdir.__enter__()
+        # start server also via cls
+        cmd = [
+            "python",
+            "-m",
+            "datatools",
+            "-d",
+            location,
+            "serve",
+            "--port",
+            str(port),
+        ]
+
+        self.server_proc = sp.Popen(cmd)
+
+        # storage = Storage(location=location)
+        # self.server = StorageServer(storage=storage, port=port)
         # self.server_thread = Thread(target=self.server.serve_forever, daemon=True)
         # self.server_thread.start()
-        # self.storage = TestCliStorage(location=f"http://localhost:{port}")
-        self.storage = TestCliStorage(location=self.tempdir.__enter__())
+
+        self.storage = TestCliStorage(location=f"http://localhost:{port}")
 
     def tearDown(self) -> None:
+        self.server_proc.kill()
+        # FIXME: ResourceWarning: subprocess 25460 is still running
         self.tempdir.__exit__(None, None, None)

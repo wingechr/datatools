@@ -5,6 +5,7 @@ import sys
 import click
 
 from . import Storage, __version__
+from .classes import StorageServer
 from .exceptions import DatatoolsException
 from .utils import file_to_data_path
 
@@ -120,6 +121,14 @@ def metadata_put(storage: Storage, data_path, key_values):
         metadata[key] = value
 
     storage.metadata_put(data_path=data_path, metadata=metadata)
+
+
+@main.command
+@click.pass_obj
+@click.option("--port", "-p", type=int)
+def serve(storage: Storage, port: int):
+    server = StorageServer(storage=storage, port=port)
+    server.serve_forever()
 
 
 if __name__ == "__main__":

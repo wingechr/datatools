@@ -262,15 +262,15 @@ class RemoteStorage(AbstractStorage):
 
 
 class StorageServerRoutes:
-    def __init__(self, location=None):
-        self._storage = Storage(location=location)
+    def __init__(self, storage):
+        self._storage = storage
 
     def data_put(self, data, args, kwargs):
         if args:
             data_path = args[0]
         else:
             data_path = None
-        hash_method = kwargs.get(PARAM_HASH_METHOD)
+        hash_method = kwargs.get(PARAM_HASH_METHOD)[0]
         data_path = self._storage.data_put(
             data=data, data_path=data_path, hash_method=hash_method
         )
@@ -303,12 +303,12 @@ class StorageServerRoutes:
 
 
 class StorageServer:
-    def __init__(self, location=None, port=None):
+    def __init__(self, storage, port=None):
         self._port = port or DEFAULT_PORT
         self._host = "localhost"
         self._server = make_server(self._host, self._port, self.application)
 
-        routes = StorageServerRoutes(location=location)
+        routes = StorageServerRoutes(storage)
         self._routes = [
             (re.compile("PUT (.+)"), routes.data_put),
             (re.compile("POST"), routes.data_put),
