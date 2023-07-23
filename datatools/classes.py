@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+import subprocess as sp
 from http import HTTPStatus
 from typing import Union
 from urllib.parse import parse_qs, unquote_plus
@@ -260,19 +261,9 @@ class RemoteStorage(AbstractStorage):
         return res
 
 
-class StorageServer:
-    def __init__(self, location=None, port=None):
-        self._port = port or DEFAULT_PORT
-        self._host = "localhost"
-        self._server = make_server(self._host, self._port, self.application)
+class StorageServerRoutes:
+    def __init__(self, location=None):
         self._storage = Storage(location=location)
-        self._routes = [
-            (re.compile("PUT (.+)"), self.data_put),
-            (re.compile("POST"), self.data_put),
-            (re.compile("GET (.+)"), self.data_get_or_metadata_get),
-            (re.compile("DELETE (.+)"), self.data_delete),
-            (re.compile("PATCH (.+)"), self.metadata_put),
-        ]
 
     def data_put(self, data, args, kwargs):
         if args:
@@ -309,6 +300,22 @@ class StorageServer:
     def data_delete(self, _data, args, _kwargs):
         data_path = args[0]
         self._storage.data_delete(data_path=data_path)
+
+
+class StorageServer:
+    def __init__(self, location=None, port=None):
+        self._port = port or DEFAULT_PORT
+        self._host = "localhost"
+        self._server = make_server(self._host, self._port, self.application)
+
+        routes = StorageServerRoutes(location=location)
+        self._routes = [
+            (re.compile("PUT (.+)"), routes.data_put),
+            (re.compile("POST"), routes.data_put),
+            (re.compile("GET (.+)"), routes.data_get_or_metadata_get),
+            (re.compile("DELETE (.+)"), routes.data_delete),
+            (re.compile("PATCH (.+)"), routes.metadata_put),
+        ]
 
     def serve_forever(self):
         logging.debug(f"Start serving on {self._port}")
@@ -375,3 +382,70 @@ class StorageServer:
         start_response(status, response_headers)
 
         return [result]
+
+
+class TestCliStorage(AbstractStorage):
+    def __init__(self, location):
+        self.location = location
+        # self.path_main = os.path.join(
+        #    os.path.dirname(datatools.__file__), "__main__.py"
+        # )
+        # assert os.path.isfile(self.path_main)
+
+    def _call(self, data, args):
+        cmd = ["python", "-m", "datatools", "-d", self.location, "-l", "debug"] + args
+        logging.debug(" ".join(cmd))
+        proc = sp.Popen(cmd, stdout=sp.PIPE, stdin=sp.PIPE, stderr=sp.PIPE)
+        out, err = proc.communicate(data)
+        if proc.returncode:
+            try:
+                # try to get erro class / message
+                err = err.decode().splitlines()
+                # last line
+                err = err[-1]
+                err_cls, err_msg = re.match(".* ([a-zA-Z]+): (.+)$", err).groups()
+                err_cls = getattr(exceptions, err_cls)
+            except Exception:
+                err_cls = Exception
+                err_msg = err
+            raise err_cls(err_msg)
+
+        return out
+
+    def metadata_get(self, data_path: str, metadata_path: str = None) -> object:
+        args = ["metadata-get", data_path]
+        if metadata_path:
+            args += [metadata_path]
+        res = self._call(b"", args)
+        res = json.loads(res.decode().strip())
+        return res
+
+    def metadata_put(self, data_path: str, metadata: dict) -> None:
+        meta_key_vals = []
+        for key, val in metadata.items():
+            meta_key_vals.append(f"{key}={val}")
+        args = ["metadata-put", data_path] + meta_key_vals
+        self._call(b"", args)
+
+    def data_put(
+        self, data: bytes, data_path: str = None, hash_method: str = None
+    ) -> str:
+        file_path = "-"
+        args = ["data-put", file_path]
+        if data_path:
+            args += [data_path]
+        if hash_method:
+            args += ["-h", hash_method]
+
+        res = self._call(data, args)
+        return res.decode().strip()
+
+    def data_get(self, data_path: str) -> bytes:
+        file_path = "-"
+        args = ["data-get", data_path, file_path]
+        res = self._call(b"", args)
+        return res
+
+    def data_delete(self, data_path: str) -> bytes:
+        args = ["data-delete", data_path]
+        self._call(b"", args)

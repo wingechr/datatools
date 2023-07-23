@@ -4,9 +4,9 @@ import sys
 
 import click
 
-from datatools import Storage, __version__
-from datatools.exceptions import DataDoesNotExists, DataExists
-from datatools.utils import file_to_data_path
+from . import Storage, __version__
+from .exceptions import DatatoolsException
+from .utils import file_to_data_path
 
 
 def read_uri(uri) -> bytes:
@@ -55,11 +55,7 @@ def main(ctx, loglevel, location):
 @click.argument("data_path")
 @click.argument("file_path")
 def data_get(storage: Storage, data_path: str, file_path: str):
-    try:
-        data = storage.data_get(data_path=data_path)
-    except DataDoesNotExists:
-        logging.error(f"Data not found: {data_path}")
-        sys.exit(1)
+    data = storage.data_get(data_path=data_path)
     if file_path == "-":
         file_path = None
     if not file_path:
@@ -92,13 +88,9 @@ def data_put(storage: Storage, file_path, data_path: str, hash_method: str):
     if not data_path and file_path:
         data_path = file_to_data_path(file_path)
 
-    try:
-        data_path = storage.data_put(
-            data=data, data_path=data_path, hash_method=hash_method
-        )
-    except DataExists:
-        logging.error(f"Data already exists: {data_path}")
-        sys.exit(1)
+    data_path = storage.data_put(
+        data=data, data_path=data_path, hash_method=hash_method
+    )
     print(data_path)
 
 
@@ -131,4 +123,10 @@ def metadata_put(storage: Storage, data_path, key_values):
 
 
 if __name__ == "__main__":
-    main(prog_name="datatools")
+    try:
+        main(prog_name="datatools")
+    except DatatoolsException as exc:
+        logging.error(f"{exc.__class__.__name__}: {str(exc)}")
+        sys.exit(1)
+    except Exception:
+        raise

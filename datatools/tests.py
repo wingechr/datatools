@@ -10,6 +10,7 @@ from datatools.classes import (
     LocalStorage,
     RemoteStorage,
     StorageServer,
+    TestCliStorage,
 )
 from datatools.exceptions import DataDoesNotExists, DataExists, InvalidPath
 from datatools.utils import get_free_port, normalize_path
@@ -114,6 +115,20 @@ class TestDatatoolsRemote(TestDatatools):
         self.server_thread = Thread(target=self.server.serve_forever, daemon=True)
         self.server_thread.start()
         self.storage = RemoteStorage(location=f"http://localhost:{port}")
+
+    def tearDown(self) -> None:
+        self.tempdir.__exit__(None, None, None)
+
+
+class TestDatatoolsRemoteCli(TestDatatools):
+    def setUp(self) -> None:
+        self.tempdir = TemporaryDirectory()
+        # port = get_free_port()
+        # self.server = StorageServer(location=self.tempdir.__enter__(), port=port)
+        # self.server_thread = Thread(target=self.server.serve_forever, daemon=True)
+        # self.server_thread.start()
+        # self.storage = TestCliStorage(location=f"http://localhost:{port}")
+        self.storage = TestCliStorage(location=self.tempdir.__enter__())
 
     def tearDown(self) -> None:
         self.tempdir.__exit__(None, None, None)
