@@ -6,3 +6,4 @@ node_modules
 dist
 _pages
 *.egg-info
+build

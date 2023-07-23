@@ -1,9 +1,21 @@
+import os
 import re
+import socket
 from urllib.parse import unquote_plus
 
+import appdirs
 import unidecode
 
 from .exceptions import InvalidPath
+
+
+def get_free_port():
+    """Get a free port by binding to port 0 and releasing it."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("localhost", 0))
+    _, port = sock.getsockname()
+    sock.close()
+    return port
 
 
 def normalize_path(path: str) -> str:
@@ -28,3 +40,15 @@ def normalize_path(path: str) -> str:
     if not path:
         raise InvalidPath(_path)
     return path
+
+
+def get_default_storage_location() -> str:
+    return appdirs.user_data_dir(
+        appname="datatools", appauthor=None, version=None, roaming=True
+    )
+
+
+def file_to_data_path(file_path: str) -> str:
+    data_path = os.path.abspath(file_path)
+    # TODO: add host
+    return data_path

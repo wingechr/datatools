@@ -8,14 +8,15 @@ import os
 import re
 from http import HTTPStatus
 from typing import Union
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, unquote_plus
 from wsgiref.simple_server import make_server
 
 import jsonpath_ng
 import requests
 
+from . import exceptions
 from .exceptions import DataDoesNotExists, DataExists, DatatoolsException, InvalidPath
-from .utils import normalize_path
+from .utils import get_default_storage_location, normalize_path
 
 # remote
 PARAM_HASH_METHOD = "hash"
@@ -25,11 +26,10 @@ PARAM_VALUE = "value"
 HASHED_DATA_PATH_PREFIX = "hash/"
 DEFAULT_HASH_METHOD = "md5"
 ROOT_METADATA_PATH = "$"  # root
-DEFAULT_LOCATION = "./data"
-DEFAULT_PORT = 80
+DEFAULT_PORT = 8000
 
 
-class DatatoolsAbstract(abc.ABC):
+class AbstractStorage(abc.ABC):
     def __init__(self, location):
         self._location = location
         logging.debug(f"Location: {self._location}")
@@ -48,7 +48,7 @@ class DatatoolsAbstract(abc.ABC):
             raise InvalidPath(data_path)
         return norm_path
 
-    def metadata_get(self, data_path: str, metadata_path: str = None) -> list:
+    def metadata_get(self, data_path: str, metadata_path: str = None) -> object:
         raise NotImplementedError()
 
     def metadata_put(self, data_path: str, metadata: dict) -> None:
@@ -66,20 +66,20 @@ class DatatoolsAbstract(abc.ABC):
         raise NotImplementedError()
 
 
-class Datatools(DatatoolsAbstract):
+class Storage(AbstractStorage):
     def __new__(self, location):
         """Switch"""
         if re.match("https?://", location or ""):
             logging.debug("REMOTE INSTANCE")
-            return DatatoolsRemote(location=location)
+            return RemoteStorage(location=location)
         else:
-            location = os.path.abspath(location or DEFAULT_LOCATION)
+            location = os.path.abspath(location or get_default_storage_location())
             logging.debug("LOCAL INSTANCE")
-            return DatatoolsLocal(location=location)
+            return LocalStorage(location=location)
 
 
-class DatatoolsLocal(DatatoolsAbstract):
-    def metadata_get(self, data_path: str, metadata_path: str = None) -> list:
+class LocalStorage(AbstractStorage):
+    def metadata_get(self, data_path: str, metadata_path: str = None) -> object:
         metadata_path_pattern = self._create_metadata_path_pattern(metadata_path)
         metadata_filepath = self._get_metadata_filepath(data_path=data_path)
         if not os.path.exists(metadata_filepath):
@@ -88,8 +88,11 @@ class DatatoolsLocal(DatatoolsAbstract):
         with open(metadata_filepath, "rb") as file:
             metadata = json.load(file)
         match = metadata_path_pattern.find(metadata)
-        # TODO: alyways return list?
         result = [x.value for x in match]
+        # TODO: we always get a list (multiple matches),
+        # but most of the time, we want only one
+        if len(result) == 1:
+            result = result[0]
         logging.debug(f"get metadata: {metadata_path} => {result}")
         return result
 
@@ -183,20 +186,20 @@ class DatatoolsLocal(DatatoolsAbstract):
         return metadata_filepath
 
 
-class DatatoolsRemote(DatatoolsAbstract):
+class RemoteStorage(AbstractStorage):
     """ """
 
-    def metadata_get(self, data_path: str, metadata_path: str = None) -> list:
+    def metadata_get(self, data_path: str, metadata_path: str = None) -> object:
         metadata_path = metadata_path or ROOT_METADATA_PATH
         result = self._request(
             method="GET",
-            path=data_path,
+            data_path=data_path,
             params={PARAM_METADATA_PATH: metadata_path},
         ).json()
         return result[PARAM_VALUE]
 
     def metadata_put(self, data_path: str, metadata: dict) -> None:
-        self._request(method="PACH", path=data_path, data=metadata)
+        self._request(method="PATCH", data_path=data_path, data=metadata)
 
     def data_put(
         self, data: bytes, data_path: str = None, hash_method: str = None
@@ -204,24 +207,24 @@ class DatatoolsRemote(DatatoolsAbstract):
         if data_path:
             result = self._request(
                 method="PUT",
-                path=data_path,
+                data_path=data_path,
                 data=data,
                 params={PARAM_HASH_METHOD: hash_method},
             )
         else:
             result = self._request(
                 method="POST",
-                path="",
+                data_path="",
                 data=data,
                 params={PARAM_HASH_METHOD: hash_method},
             )
         return result.json()[PARAM_DATA_PATH]
 
     def data_get(self, data_path: str) -> bytes:
-        return self._request(method="GET", path=data_path).content
+        return self._request(method="GET", data_path=data_path).content
 
     def data_delete(self, data_path: str) -> None:
-        self._request("DELETE", data_path)
+        self._request("DELETE", data_path=data_path)
         return None
 
     def _request(
@@ -231,40 +234,85 @@ class DatatoolsRemote(DatatoolsAbstract):
         data: Union[bytes, object] = None,
         params: dict = None,
     ) -> bytes:
-        norm_data_path = self._normalize_data_path(data_path)
+        if data_path:
+            norm_data_path = self._normalize_data_path(data_path)
+        else:
+            norm_data_path = ""
         url_path = "/" + norm_data_path
-        url = self.location + url_path
+        url = self._location + url_path
         # make sure data is bytes
         if not (data is None or isinstance(data, bytes)):
             data = json.dumps(data).encode()
+        logging.debug(f"CLI REQ: {method} {norm_data_path}")
         res = requests.request(method=method, url=url, data=data, params=params)
+        logging.debug(f"CLI RES: {res.status_code}")
         if not res.ok:
             try:
                 message = res.json()
-            except Exception as exc:
+                error_msg = message["error_msg"]
+                error_cls = getattr(exceptions, message["error_cls"])
+            except Exception:
                 # FXIME: only debug
-                message = str(exc)
-            raise Exception(message)
+                error_msg = res.content
+                error_cls = Exception
+            logging.error(f"{error_cls.__name__}: {error_msg}")
+            raise error_cls(error_msg)
         return res
 
 
-class DatatoolsServer:
+class StorageServer:
     def __init__(self, location=None, port=None):
         self._port = port or DEFAULT_PORT
         self._host = "localhost"
         self._server = make_server(self._host, self._port, self.application)
-        self._instance = Datatools(location=location)
-        self._routes = {}
+        self._storage = Storage(location=location)
+        self._routes = [
+            (re.compile("PUT (.+)"), self.data_put),
+            (re.compile("POST"), self.data_put),
+            (re.compile("GET (.+)"), self.data_get_or_metadata_get),
+            (re.compile("DELETE (.+)"), self.data_delete),
+            (re.compile("PATCH (.+)"), self.metadata_put),
+        ]
+
+    def data_put(self, data, args, kwargs):
+        if args:
+            data_path = args[0]
+        else:
+            data_path = None
+        hash_method = kwargs.get(PARAM_HASH_METHOD)
+        data_path = self._storage.data_put(
+            data=data, data_path=data_path, hash_method=hash_method
+        )
+        return {PARAM_DATA_PATH: data_path}
+
+    def metadata_put(self, data, args, _kwargs):
+        data_path = args[0]
+        metadata = json.loads(data.decode())
+        self._storage.metadata_put(data_path, metadata=metadata)
+
+    def data_get_or_metadata_get(self, _data, args, kwargs):
+        data_path = args[0]
+        metadata_path = kwargs.get(PARAM_METADATA_PATH)
+        if metadata_path:
+            # is list
+            metadata_path = metadata_path[0]
+            metadata_path = unquote_plus(metadata_path)
+            metadata = self._storage.metadata_get(
+                data_path=data_path, metadata_path=metadata_path
+            )
+            data = {PARAM_VALUE: metadata}
+        else:
+            data = self._storage.data_get(data_path=data_path)
+
+        return data
+
+    def data_delete(self, _data, args, _kwargs):
+        data_path = args[0]
+        self._storage.data_delete(data_path=data_path)
 
     def serve_forever(self):
+        logging.debug(f"Start serving on {self._port}")
         self._server.serve_forever()
-
-    def __enter__(self):
-        self._instance.__enter__()
-        return self
-
-    def __exit__(self, *args):
-        self._instance.__exit__(*args)
 
     def application(self, environ, start_response):
         method = environ["REQUEST_METHOD"].upper()
@@ -280,28 +328,32 @@ class DatatoolsServer:
         else:
             bdata = b""
 
-        status_code = 200
+        status_code = 404
         result = b""
 
         # routing
         routing_pattern = f"{method} {path}"
         selected_handler = None
         path_args = tuple()
-        for pat, handler in self._routes.items():
-            match = pat.matches(routing_pattern)
+        logging.debug(f"SRV REQ: {routing_pattern}")
+        for pat, handler in self._routes:
+            match = pat.match(routing_pattern)
             if match:
                 path_args = match.groups()
                 selected_handler = handler
                 break
-        if not selected_handler:
-            raise NotImplementedError(routing_pattern)
 
-        try:
-            result = selected_handler(bdata, *path_args, **query)
-        except DatatoolsException:
-            status = 400
-        except Exception:
-            status = 500
+        if selected_handler:
+            try:
+                result = selected_handler(bdata, path_args, query)
+                status_code = 200
+            except DatatoolsException as exc:
+                logging.warning(exc)
+                status_code = 400
+                result = {"error_msg": str(exc), "error_cls": exc.__class__.__name__}
+            except Exception as exc:
+                logging.error(exc)
+                status_code = 500
 
         if isinstance(result, str):
             result = result.encode()
@@ -317,6 +369,9 @@ class DatatoolsServer:
             ("Content-type", output_content_type),
             ("Content-Length", str(content_length_result)),
         ]
+
+        logging.debug(f"SRV RES: {status}")
+
         start_response(status, response_headers)
 
         return [result]

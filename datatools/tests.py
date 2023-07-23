@@ -3,11 +3,16 @@ import json
 import logging
 import unittest
 from tempfile import TemporaryDirectory
+from threading import Thread
 
-from datatools import Datatools
-from datatools.classes import HASHED_DATA_PATH_PREFIX
+from datatools.classes import (
+    HASHED_DATA_PATH_PREFIX,
+    LocalStorage,
+    RemoteStorage,
+    StorageServer,
+)
 from datatools.exceptions import DataDoesNotExists, DataExists, InvalidPath
-from datatools.utils import normalize_path
+from datatools.utils import get_free_port, normalize_path
 
 logging.basicConfig(
     format="[%(asctime)s %(levelname)7s] %(message)s", level=logging.DEBUG
@@ -40,7 +45,7 @@ class TestUtils(unittest.TestCase):
 class TestDatatools(unittest.TestCase):
     def setUp(self) -> None:
         self.tempdir = TemporaryDirectory()
-        self.dt = Datatools(location=self.tempdir.__enter__())
+        self.storage = LocalStorage(location=self.tempdir.__enter__())
 
     def tearDown(self) -> None:
         self.tempdir.__exit__(None, None, None)
@@ -53,55 +58,62 @@ class TestDatatools(unittest.TestCase):
 
         # cannot save save data to hash subdir
         self.assertRaises(
-            InvalidPath, self.dt.data_put, data=data, data_path=invalid_path
+            InvalidPath, self.storage.data_put, data=data, data_path=invalid_path
         )
         # save data without path
-        data_path = self.dt.data_put(data=data)
+        data_path = self.storage.data_put(data=data)
         self.assertTrue(data_path.startswith(HASHED_DATA_PATH_PREFIX))
 
         # save data
-        data_path = self.dt.data_put(data=data, data_path=data_path_user)
+        data_path = self.storage.data_put(data=data, data_path=data_path_user)
         self.assertEqual(normalize_path(data_path_user), data_path)
         # save again will fail
         self.assertRaises(
-            DataExists, self.dt.data_put, data=data, data_path=data_path_user
+            DataExists, self.storage.data_put, data=data, data_path=data_path_user
         )
         # read it
-        res = self.dt.data_get(data_path=data_path_user)
+        res = self.storage.data_get(data_path=data_path_user)
         self.assertEqual(data, res)
         # delete it ...
-        self.dt.data_delete(data_path=data_path_user)
+        self.storage.data_delete(data_path=data_path_user)
         # ... and deleting again does NOT raise an error ...
-        self.dt.data_delete(data_path=data_path_user)
+        self.storage.data_delete(data_path=data_path_user)
         # reading now will raise error
-        self.assertRaises(DataDoesNotExists, self.dt.data_get, data_path=data_path_user)
+        self.assertRaises(
+            DataDoesNotExists, self.storage.data_get, data_path=data_path_user
+        )
         # ... and now we can save it again
-        self.dt.data_put(data=data, data_path=data_path_user)
+        self.storage.data_put(data=data, data_path=data_path_user)
 
         # metadata can be saved independent of data
         metadata = {"a": [1, 2, 3], "b.c[0]": "test"}
-        self.dt.metadata_put(data_path=data_path_user, metadata=metadata)
+        self.storage.metadata_put(data_path=data_path_user, metadata=metadata)
 
         # partial update
         metadata = {"b.c[1]": "test2"}
-        self.dt.metadata_put(data_path=data_path_user, metadata=metadata)
+        self.storage.metadata_put(data_path=data_path_user, metadata=metadata)
 
         # get all metadata (in a list)
-        metadata2 = self.dt.metadata_get(data_path=data_path_user)
+        metadata2 = self.storage.metadata_get(data_path=data_path_user)
         self.assertTrue(
-            objects_euqal(metadata2[0], {"a": [1, 2, 3], "b": {"c": ["test", "test2"]}})
+            objects_euqal(metadata2, {"a": [1, 2, 3], "b": {"c": ["test", "test2"]}})
         )
 
         # get partial
-        metadata2 = self.dt.metadata_get(data_path=data_path_user, metadata_path="b.c")
-        self.assertTrue(objects_euqal(metadata2[0], ["test", "test2"]))
+        metadata2 = self.storage.metadata_get(
+            data_path=data_path_user, metadata_path="b.c"
+        )
+        self.assertTrue(objects_euqal(metadata2, ["test", "test2"]))
 
 
-# class TestDatatoolsRemote(TestDatatools):
-#    def setUp(self) -> None:
-#        # self.server = TODO
-#        self.dt = Datatools(location="http://localhost:8000").__enter__()#
+class TestDatatoolsRemote(TestDatatools):
+    def setUp(self) -> None:
+        self.tempdir = TemporaryDirectory()
+        port = get_free_port()
+        self.server = StorageServer(location=self.tempdir.__enter__(), port=port)
+        self.server_thread = Thread(target=self.server.serve_forever, daemon=True)
+        self.server_thread.start()
+        self.storage = RemoteStorage(location=f"http://localhost:{port}")
 
-#    def tearDown(self) -> None:
-#        self.dt.__exit__(None, None, None)
-#        # self.server.__exit__(None, None, None)
+    def tearDown(self) -> None:
+        self.tempdir.__exit__(None, None, None)
