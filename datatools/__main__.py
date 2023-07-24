@@ -1,22 +1,75 @@
 import json
 import logging
+import os
+import re
 import sys
+from pathlib import Path
+from typing import Tuple
+from urllib.parse import urlsplit
 
 import click
+import requests
 
 from . import Storage, __version__
 from .classes import StorageServer
 from .exceptions import DatatoolsException
-from .utils import file_to_data_path
+from .utils import file_uri_to_path, normalize_path, path_to_file_uri, uri_to_data_path
 
 
-def read_uri(uri) -> bytes:
-    with open(uri, "rb") as file:
-        return file.read()
+def read_uri(uri: str) -> Tuple[bytes, str, dict]:
+    if not re.match(".+://", uri, re.IGNORECASE):
+        # assume local path
+        uri = path_to_file_uri(Path(uri).absolute())
+
+    url = urlsplit(uri)
+    # protocol routing
+    if url.scheme == "file":
+        file_path = file_uri_to_path(uri)
+        with open(file_path, "rb") as file:
+            data = file.read()
+    elif url.scheme in ["http", "https"]:
+        res = requests.get(uri)
+        res.raise_for_status()
+        data = res.content
+    else:
+        raise NotImplementedError(url.scheme)
+
+    data_path = normalize_path(uri_to_data_path(uri))
+
+    return data, data_path, None
 
 
 def write_uri(uri, data: bytes):
-    raise NotImplementedError()
+    if not re.match(".+://", uri, re.IGNORECASE):
+        # assume local path
+        uri = path_to_file_uri(Path(uri).absolute())
+
+    url = urlsplit(uri)
+    # protocol routing
+    if url.scheme == "file":
+        file_path = file_uri_to_path(uri)
+        if os.path.exist(file_path):
+            raise FileExistsError(file_path)
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        with open(file_path, "wb") as file:
+            file.write(data)
+    else:
+        raise NotImplementedError(url.scheme)
+
+
+def parse_cli_metadata(metadata_key_vals):
+    """cli: list of key=value"""
+    metadata = {}
+    for key_value in metadata_key_vals:
+        key, value = key_value.split("=")
+        key = key.strip()
+        value = value.strip()
+        try:
+            value = json.loads(value)
+        except Exception:
+            pass
+        metadata[key] = value
+    return metadata
 
 
 @click.group()
@@ -83,15 +136,20 @@ def data_put(storage: Storage, file_path, data_path: str, hash_method: str):
     if file_path == "-":
         file_path = None
         data = sys.stdin.buffer.read()
+        metadata = None
     else:
-        data = read_uri(file_path)
+        data, _data_path, metadata = read_uri(file_path)
 
-    if not data_path and file_path:
-        data_path = file_to_data_path(file_path)
+        if data_path is None:  # ! explicitly use is None, so we can manually set ""
+            data_path = _data_path
 
     data_path = storage.data_put(
         data=data, data_path=data_path, hash_method=hash_method
     )
+
+    if metadata:
+        storage.metadata_put(data_path=data_path, metadata=metadata)
+
     print(data_path)
 
 
@@ -107,19 +165,9 @@ def metadata_get(storage: Storage, data_path, metadata_path):
 @main.command
 @click.pass_obj
 @click.argument("data_path")
-@click.argument("key_values", nargs=-1, required=True)
-def metadata_put(storage: Storage, data_path, key_values):
-    metadata = {}
-    for key_value in key_values:
-        key, value = key_value.split("=")
-        key = key.strip()
-        value = value.strip()
-        try:
-            value = json.loads(value)
-        except Exception:
-            pass
-        metadata[key] = value
-
+@click.argument("metadata_key_vals", nargs=-1, required=True)
+def metadata_put(storage: Storage, data_path, metadata_key_vals):
+    metadata = parse_cli_metadata(metadata_key_vals)
     storage.metadata_put(data_path=data_path, metadata=metadata)
 
 
