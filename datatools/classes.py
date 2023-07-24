@@ -126,11 +126,12 @@ class LocalStorage(AbstractStorage):
     def data_put(
         self, data: bytes, data_path: str = None, hash_method: str = None
     ) -> str:
+        hash_method = hash_method or DEFAULT_HASH_METHOD
+        hasher = getattr(hashlib, hash_method)()
+        hasher.update(data)
+        hashsum = hasher.hexdigest()
+
         if not data_path:
-            hash_method = hash_method or DEFAULT_HASH_METHOD
-            hasher = getattr(hashlib, hash_method)()
-            hasher.update(data)
-            hashsum = hasher.hexdigest()
             data_path = f"{HASHED_DATA_PATH_PREFIX}{hash_method}/{hashsum}"
             norm_data_path = self._normalize_data_path(data_path=data_path)
             data_filepath = self._get_data_filepath(norm_data_path=norm_data_path)
@@ -148,6 +149,9 @@ class LocalStorage(AbstractStorage):
         logging.debug(f"WRITING {data_filepath}")
         with open(data_filepath, "wb") as file:
             file.write(data)
+
+        metadata = {f"hash.{hash_method}": hashsum}
+        self.metadata_put(data_path=norm_data_path, metadata=metadata)
         return norm_data_path
 
     def data_get(self, data_path: str) -> bytes:

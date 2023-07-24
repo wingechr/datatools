@@ -1,11 +1,15 @@
 # coding: utf-8
 import logging
+import os
 import unittest
 from pathlib import PurePosixPath, PureWindowsPath
+from tempfile import TemporaryDirectory
 
 from datatools.utils import (
     file_uri_to_path,
     get_hostname,
+    make_file_readonly,
+    make_file_writable,
     normalize_path,
     path_to_file_uri,
     uri_to_data_path,
@@ -62,5 +66,31 @@ class TestUtils(unittest.TestCase):
             ("http/a/b.x", "https://a/b?a=1#.x"),
             ("http/a.comx", "http://a.com#x"),
             ("http/a.com/x", "http://a.com#/x"),
+            ("http/a.com", "http://user:pass@a.com"),
         ]:
             self.assertEqual(data_path, uri_to_data_path(uri))
+
+    def test_make_file_readonly(self):
+        with TemporaryDirectory() as dir:
+            # create a file
+            filepath = f"{dir}/test.txt"
+
+            with open(filepath, "wb"):
+                pass
+
+            make_file_readonly(filepath)
+
+            # reading should be ok
+            with open(filepath, "rb"):
+                pass
+
+            # but not writing
+            self.assertRaises(PermissionError, open, filepath, "wb")
+
+            # or deleting
+            self.assertRaises(PermissionError, os.remove, filepath)
+
+            # but we can revers it:
+            make_file_writable(filepath)
+
+            os.remove(filepath)

@@ -147,7 +147,17 @@ class TestStorageTestCli(TestLocalStorage):
         self.assertEqual(expected_path, data_path)
 
         # read http://
-        url = f"http://localhost:{self.port}/{filename}#.anchor"
+        url = f"http://user:passwd@localhost:{self.port}/{filename}#.anchor"
         expected_path = "http/localhost/test.txt.anchor"
         data_path = self.storage.data_put(data=url)
         self.assertEqual(expected_path, data_path)
+
+        # this should auto save the source
+        source = self.storage.metadata_get(
+            data_path=data_path, metadata_path="source.path"
+        )
+        # url without credentials
+        exp_source = f"http://localhost:{self.port}/{filename}#.anchor"
+        self.assertEqual(source, exp_source)
+
+        print(self.storage.metadata_get(data_path=data_path))

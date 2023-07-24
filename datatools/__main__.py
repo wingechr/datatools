@@ -13,13 +13,26 @@ import requests
 from . import Storage, __version__
 from .classes import StorageServer
 from .exceptions import DatatoolsException
-from .utils import file_uri_to_path, normalize_path, path_to_file_uri, uri_to_data_path
+from .utils import (
+    file_uri_to_path,
+    get_now_str,
+    get_user_w_host,
+    normalize_path,
+    path_to_file_uri,
+    remove_auth_from_uri,
+    uri_to_data_path,
+)
 
 
 def read_uri(uri: str) -> Tuple[bytes, str, dict]:
     if not re.match(".+://", uri, re.IGNORECASE):
         # assume local path
         uri = path_to_file_uri(Path(uri).absolute())
+
+    metadata = {}
+    metadata["source.path"] = remove_auth_from_uri(uri)
+    metadata["source.user"] = get_user_w_host()
+    metadata["source.datetime"] = get_now_str()
 
     url = urlsplit(uri)
     # protocol routing
@@ -36,7 +49,7 @@ def read_uri(uri: str) -> Tuple[bytes, str, dict]:
 
     data_path = normalize_path(uri_to_data_path(uri))
 
-    return data, data_path, None
+    return data, data_path, metadata
 
 
 def write_uri(uri, data: bytes):

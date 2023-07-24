@@ -18,7 +18,13 @@ import requests
 
 from . import exceptions
 from .exceptions import DataDoesNotExists, DataExists, DatatoolsException, InvalidPath
-from .utils import get_default_storage_location, get_query_arg, normalize_path
+from .utils import (
+    get_default_storage_location,
+    get_query_arg,
+    make_file_readonly,
+    make_file_writable,
+    normalize_path,
+)
 
 # remote
 PARAM_HASH_METHOD = "hash"
@@ -148,6 +154,7 @@ class LocalStorage(AbstractStorage):
         logging.debug(f"WRITING {data_filepath}")
         with open(data_filepath, "wb") as file:
             file.write(data)
+        make_file_readonly(data_filepath)
         return norm_data_path
 
     def data_get(self, data_path: str) -> bytes:
@@ -167,6 +174,7 @@ class LocalStorage(AbstractStorage):
         norm_data_path = self._normalize_data_path(data_path=data_path)
         data_filepath = self._get_data_filepath(norm_data_path=norm_data_path)
         if os.path.exists(data_filepath):
+            make_file_writable(data_filepath)
             logging.debug(f"DELETING {data_filepath}")
             os.remove(data_filepath)
         return None
