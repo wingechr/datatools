@@ -13,9 +13,14 @@ from datatools.storage import (
     RemoteStorage,
     Storage,
     StorageServer,
-    StorageTestCli,
+    TestCliStorage,
 )
-from datatools.utils import get_free_port, normalize_path, path_to_file_uri
+from datatools.utils import (
+    get_free_port,
+    normalize_path,
+    path_to_file_uri,
+    wait_for_server,
+)
 
 from . import objects_euqal
 
@@ -87,34 +92,44 @@ class TestRemoteStorage(TestLocalStorage):
         self.tempdir = TemporaryDirectory()
         port = get_free_port()
         storage = Storage(location=self.tempdir.__enter__())
+        remote_location = f"http://localhost:{port}"
         self.server = StorageServer(storage=storage, port=port)
         self.server_thread = Thread(target=self.server.serve_forever, daemon=True)
         self.server_thread.start()
-        self.storage = RemoteStorage(location=f"http://localhost:{port}")
+        wait_for_server(remote_location)
+        self.storage = RemoteStorage(location=remote_location)
 
     def tearDown(self) -> None:
         self.tempdir.__exit__(None, None, None)
 
 
-class TestStorageTestCli(TestLocalStorage):
+class TestTestCliStorage(TestLocalStorage):
     def setUp(self) -> None:
         self.tempdir = TemporaryDirectory()
         self.location = self.tempdir.__enter__()
-        port = get_free_port()
-        self.storage = StorageTestCli(location=f"http://localhost:{port}")
-        self.server_proc = self.storage.serve(location=self.location, port=port)
-        # test static server
-        self.port = get_free_port()
+        # create server process
+        server_port = get_free_port()
+        remote_location = f"http://localhost:{server_port}"
+        self.server_storage = TestCliStorage(location=self.location)
+        self.server_proc = self.server_storage.serve(port=server_port)
+        wait_for_server(remote_location)
+
+        # test static server process (to serve test files)
+        self.static_port = get_free_port()
         self.http_proc = sp.Popen(
             [
                 "python",
                 "-m",
                 "http.server",
-                str(self.port),
+                str(self.static_port),
                 "--directory",
                 self.location,
             ]
         )
+        wait_for_server(f"http://localhost:{self.static_port}")
+
+        # create client
+        self.storage = TestCliStorage(location=remote_location)
 
     def tearDown(self) -> None:
         # shutdown server
@@ -141,7 +156,7 @@ class TestStorageTestCli(TestLocalStorage):
         self.assertEqual(expected_path, data_path)
 
         # read http://
-        url = f"http://user:passwd@localhost:{self.port}/{filename}#.anchor"
+        url = f"http://user:passwd@localhost:{self.static_port}/{filename}#.anchor"
         expected_path = "http/localhost/test.txt.anchor"
         data_path = self.storage.data_put(data=url)
         self.assertEqual(expected_path, data_path)
@@ -151,7 +166,7 @@ class TestStorageTestCli(TestLocalStorage):
             data_path=data_path, metadata_path="source.path"
         )
         # url without credentials
-        exp_source = f"http://localhost:{self.port}/{filename}#.anchor"
+        exp_source = f"http://localhost:{self.static_port}/{filename}#.anchor"
         self.assertEqual(source, exp_source)
 
         print(self.storage.metadata_get(data_path=data_path))

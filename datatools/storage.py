@@ -319,12 +319,16 @@ class StorageServer:
 
         routes = StorageServerRoutes(storage)
         self._routes = [
+            (re.compile("HEAD"), self.head),
             (re.compile("PUT (.+)"), routes.data_put),
             (re.compile("POST"), routes.data_put),
             (re.compile("GET (.+)"), routes.data_get_or_metadata_get),
             (re.compile("DELETE (.+)"), routes.data_delete),
             (re.compile("PATCH (.+)"), routes.metadata_put),
         ]
+
+    def head(self, *args, **kwargs):
+        pass
 
     def serve_forever(self):
         logging.debug(f"Start serving on {self._port}")
@@ -400,7 +404,7 @@ class StorageServer:
         return [result]
 
 
-class StorageTestCli(AbstractStorage):
+class TestCliStorage(AbstractStorage):
     def __init__(self, location):
         self.location = location
         # self.path_main = os.path.join(
@@ -473,13 +477,13 @@ class StorageTestCli(AbstractStorage):
         args = ["data-delete", data_path]
         self._call(b"", args)
 
-    def serve(self, location=None, port=None):
+    def serve(self, port=None):
         cmd = [
             "python",
             "-m",
             "datatools",
             "-d",
-            location,
+            self.location,
             "serve",
             "--port",
             str(port),

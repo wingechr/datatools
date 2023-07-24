@@ -4,10 +4,12 @@ import logging
 import os
 import re
 import socket
+import time
 from pathlib import Path
 from urllib.parse import unquote, unquote_plus, urlsplit
 
 import appdirs
+import requests
 import tzlocal
 import unidecode
 
@@ -25,6 +27,28 @@ def get_free_port():
     _, port = sock.getsockname()
     sock.close()
     return port
+
+
+def wait_for_server(url, timeout_s=5):
+    wait_s = 0.5
+
+    time_start = time.time()
+    while True:
+        try:
+            res = requests.head(url)
+            if res.ok:
+                return True
+            else:
+                raise Exception("HEAD failed")
+        except requests.exceptions.ConnectionError:
+            pass
+
+        time_waited = time.time() - time_start
+        logging.debug(f"checking server ({time_waited}): {url}")
+        if timeout_s is not None and time_waited >= timeout_s:
+            break
+        time.sleep(wait_s)
+    raise Exception("Timeout")
 
 
 def normalize_path(path: str) -> str:

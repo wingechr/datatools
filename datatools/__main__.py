@@ -13,8 +13,8 @@ import click
 import requests
 
 from . import Storage, __version__
-from .classes import StorageServer
 from .exceptions import DatatoolsException
+from .storage import StorageServer
 from .utils import (
     file_uri_to_path,
     get_now_str,
