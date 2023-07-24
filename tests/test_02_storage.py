@@ -2,6 +2,7 @@
 import logging
 import os
 import subprocess as sp
+import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -129,7 +130,7 @@ class Test_03_TestCliStorage(Test_01_LocalStorage):
         self.static_port = get_free_port()
         self.http_proc = sp.Popen(
             [
-                "python",
+                sys.executable,
                 "-m",
                 "http.server",
                 str(self.static_port),

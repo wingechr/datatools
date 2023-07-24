@@ -1,5 +1,4 @@
 import datetime
-import getpass
 import logging
 import os
 import re
@@ -18,6 +17,7 @@ from .exceptions import InvalidPath
 DATETIMETZ_FMT = "%Y-%m-%dT%H:%M:%S%z"
 
 FILEMOD_WRITE = 0o222
+ANONYMOUS_USER = "Anonymous"
 
 
 def get_free_port():
@@ -102,7 +102,8 @@ def get_hostname():
 
 
 def get_username():
-    return getpass.getuser()
+    # getpass.getuser() does not always work
+    return os.environ.get("USER", ANONYMOUS_USER)
 
 
 def get_user_w_host():

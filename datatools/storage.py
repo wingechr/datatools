@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import subprocess as sp
+import sys
 import traceback
 from http import HTTPStatus
 from typing import Union
@@ -413,7 +414,15 @@ class TestCliStorage(AbstractStorage):
         # assert os.path.isfile(self.path_main)
 
     def _call(self, data, args):
-        cmd = ["python", "-m", "datatools", "-d", self.location, "-l", "debug"] + args
+        cmd = [
+            sys.executable,
+            "-m",
+            "datatools",
+            "-d",
+            self.location,
+            "-l",
+            "debug",
+        ] + args
         proc = sp.Popen(cmd, stdout=sp.PIPE, stdin=sp.PIPE, stderr=sp.PIPE)
         logging.debug(" ".join(cmd) + f" ({proc.pid})")
         out, err = proc.communicate(data)
@@ -479,7 +488,7 @@ class TestCliStorage(AbstractStorage):
 
     def serve(self, port=None):
         cmd = [
-            "python",
+            sys.executable,
             "-m",
             "datatools",
             "-d",

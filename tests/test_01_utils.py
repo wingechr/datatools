@@ -10,6 +10,7 @@ from datatools.utils import (
     file_uri_to_path,
     get_hostname,
     get_now_str,
+    get_user_w_host,
     make_file_readonly,
     make_file_writable,
     normalize_path,
@@ -101,5 +102,10 @@ class TestUtils(unittest.TestCase):
 
     def test_get_now_str(self):
         now_str = get_now_str()
-        p = "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[+-][0-9]{2}:[0-9]{2}$"
-        self.assertTrue(re.match(p, now_str))
+        n2 = "[0-9]{2}"
+        pattern = f"^{n2}{n2}-{n2}-{n2}T{n2}:{n2}:{n2}[+-]{n2}:{n2}$"
+        self.assertTrue(re.match(pattern, now_str))
+
+    def test_get_user_w_host(self):
+        user = get_user_w_host()
+        self.assertTrue(re.match(".+@.+", user))
