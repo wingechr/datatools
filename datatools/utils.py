@@ -1,4 +1,5 @@
 import datetime
+import json
 import logging
 import os
 import re
@@ -220,3 +221,18 @@ def uri_to_data_path(uri: str) -> str:
     uri = uri.replace("#", "")
 
     return uri
+
+
+def parse_cli_metadata(metadata_key_vals):
+    """cli: list of key=value"""
+    metadata = {}
+    for key_value in metadata_key_vals:
+        key, value = key_value.split("=")
+        key = key.strip()
+        value = value.strip()
+        try:
+            value = json.loads(value)
+        except Exception:
+            pass
+        metadata[key] = value
+    return metadata

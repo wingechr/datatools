@@ -14,10 +14,13 @@ from datatools.utils import (
     make_file_readonly,
     make_file_writable,
     normalize_path,
+    parse_cli_metadata,
     path_to_file_uri,
     platform_is_windows,
     uri_to_data_path,
 )
+
+from . import objects_euqal
 
 logging.basicConfig(
     format="[%(asctime)s %(levelname)7s] %(message)s", level=logging.DEBUG
@@ -109,3 +112,8 @@ class TestUtils(unittest.TestCase):
     def test_get_user_w_host(self):
         user = get_user_w_host()
         self.assertTrue(re.match(".+@.+", user))
+
+    def test_parse_cli_metadata(self):
+        self.assertTrue(
+            objects_euqal(parse_cli_metadata(["a=b", "c=1"]), {"a": "b", "c": 1})
+        )
