@@ -7,3 +7,4 @@ dist
 _pages
 *.egg-info
 build
+.tox
