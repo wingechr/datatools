@@ -20,8 +20,11 @@ import requests
 from . import exceptions
 from .exceptions import DataDoesNotExists, DataExists, DatatoolsException, InvalidPath
 from .utils import (
+    LOCALHOST,
     get_default_storage_location,
+    get_now_str,
     get_query_arg,
+    get_user_w_host,
     make_file_readonly,
     make_file_writable,
     normalize_path,
@@ -40,8 +43,8 @@ DEFAULT_PORT = 8000
 
 class AbstractStorage(abc.ABC):
     def __init__(self, location):
-        self._location = location
-        logging.debug(f"Location: {self._location}")
+        self.location = location
+        logging.debug(f"Location: {self.location}")
 
     def __enter__(self):
         return self
@@ -55,6 +58,7 @@ class AbstractStorage(abc.ABC):
         # TODO: maybe later: remove double check:
         if norm_path != normalize_path(norm_path):
             raise InvalidPath(data_path)
+        logging.debug(f"Translating {data_path} => {norm_path}")
         return norm_path
 
     def metadata_get(self, data_path: str, metadata_path: str = None) -> object:
@@ -76,9 +80,9 @@ class AbstractStorage(abc.ABC):
 
 
 class Storage(AbstractStorage):
-    def __new__(self, location):
+    def __new__(self, location=None):
         """Switch"""
-        if re.match("https?://", location or ""):
+        if location and re.match("https?://", location or ""):
             logging.debug("REMOTE INSTANCE")
             return RemoteStorage(location=location)
         else:
@@ -133,11 +137,12 @@ class LocalStorage(AbstractStorage):
     def data_put(
         self, data: bytes, data_path: str = None, hash_method: str = None
     ) -> str:
+        hash_method = hash_method or DEFAULT_HASH_METHOD
+        hasher = getattr(hashlib, hash_method)()
+        hasher.update(data)
+        hashsum = hasher.hexdigest()
+
         if not data_path:
-            hash_method = hash_method or DEFAULT_HASH_METHOD
-            hasher = getattr(hashlib, hash_method)()
-            hasher.update(data)
-            hashsum = hasher.hexdigest()
             data_path = f"{HASHED_DATA_PATH_PREFIX}{hash_method}/{hashsum}"
             norm_data_path = self._normalize_data_path(data_path=data_path)
             data_filepath = self._get_data_filepath(norm_data_path=norm_data_path)
@@ -156,6 +161,17 @@ class LocalStorage(AbstractStorage):
         with open(data_filepath, "wb") as file:
             file.write(data)
         make_file_readonly(data_filepath)
+
+        # write metadata
+        metadata = {
+            f"hash.{hash_method}": hashsum,
+            "size": len(data),
+            "source.user": get_user_w_host(),
+            "source.datetime": get_now_str(),
+            "source.name": norm_data_path,
+        }
+        self.metadata_put(data_path=norm_data_path, metadata=metadata)
+
         return norm_data_path
 
     def data_get(self, data_path: str) -> bytes:
@@ -186,7 +202,7 @@ class LocalStorage(AbstractStorage):
         return metadata_path
 
     def _get_data_filepath(self, norm_data_path: str):
-        filepath = os.path.join(self._location, norm_data_path)
+        filepath = os.path.join(self.location, norm_data_path)
         return filepath
 
     def _get_metadata_filepath(self, data_path: str):
@@ -250,7 +266,7 @@ class RemoteStorage(AbstractStorage):
         else:
             norm_data_path = ""
         url_path = "/" + norm_data_path
-        url = self._location + url_path
+        url = self.location + url_path
         # make sure data is bytes
         if not (data is None or isinstance(data, bytes)):
             data = json.dumps(data).encode()
@@ -314,9 +330,8 @@ class StorageServerRoutes:
 
 class StorageServer:
     def __init__(self, storage, port=None):
-        self._port = port or DEFAULT_PORT
-        self._host = "localhost"
-        self._server = make_server(self._host, self._port, self.application)
+        self.port = port or DEFAULT_PORT
+        self.server = make_server(LOCALHOST, self.port, self.application)
 
         routes = StorageServerRoutes(storage)
         self._routes = [
@@ -332,8 +347,8 @@ class StorageServer:
         pass
 
     def serve_forever(self):
-        logging.debug(f"Start serving on {self._port}")
-        self._server.serve_forever()
+        logging.debug(f"Start serving on {self.port}")
+        self.server.serve_forever()
 
     def application(self, environ, start_response):
         method = environ["REQUEST_METHOD"].upper()
@@ -405,14 +420,7 @@ class StorageServer:
         return [result]
 
 
-class TestCliStorage(AbstractStorage):
-    def __init__(self, location):
-        self.location = location
-        # self.path_main = os.path.join(
-        #    os.path.dirname(datatools.__file__), "__main__.py"
-        # )
-        # assert os.path.isfile(self.path_main)
-
+class _TestCliStorage(AbstractStorage):
     def _call(self, data, args):
         cmd = [
             sys.executable,

@@ -18,12 +18,13 @@ DATETIMETZ_FMT = "%Y-%m-%dT%H:%M:%S%z"
 
 FILEMOD_WRITE = 0o222
 ANONYMOUS_USER = "Anonymous"
+LOCALHOST = "localhost"
 
 
 def get_free_port():
     """Get a free port by binding to port 0 and releasing it."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.bind(("localhost", 0))
+    sock.bind((LOCALHOST, 0))
     _, port = sock.getsockname()
     sock.close()
     return port
@@ -66,11 +67,12 @@ def normalize_path(path: str) -> str:
     path = unidecode.unidecode(path)
     path = path.replace("\\", "/")
     path = re.sub("/+", "/", path)
-    # explicitly delete "":"
-    path = path.replace(":", "")
-    path = re.sub(r"[^a-z0-9/_.\-#]+", " ", path)
+    # explicitly delete some
+    path = re.sub(r"[#:]+", "", path)
+    path = re.sub(r"[^a-z0-9/_.\-]+", " ", path)
     path = path.strip()
     path = re.sub(r"\s+", "_", path)
+    path = re.sub(r"_+", "_", path)
     path = path.strip("/")
     if not path:
         raise InvalidPath(_path)
@@ -101,13 +103,17 @@ def get_hostname():
     return socket.gethostname()
 
 
+def get_fqhostname():
+    return socket.getfqdn()
+
+
 def get_username():
     # getpass.getuser() does not always work
-    return os.environ.get("USER", ANONYMOUS_USER)
+    return os.environ.get("USERNAME") or os.environ.get("USER") or ANONYMOUS_USER
 
 
 def get_user_w_host():
-    return f"{get_username()}@{get_hostname()}"
+    return f"{get_username()}@{get_fqhostname()}"
 
 
 def get_now() -> datetime.datetime:

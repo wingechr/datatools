@@ -30,7 +30,7 @@ class TestUtils(unittest.TestCase):
             ("/my/path//", "my/path"),
             ("c:/my/path//", "c/my/path"),
             ("file://a/b/", "file/a/b"),
-            ("file://a/b#x", "file/a/b#x"),
+            ("file://a/b#x", "file/a/bx"),
             ("Lower  Case with SPACE ! ", "lower_case_with_space"),
             (
                 "François fährt Straßenbahn zum Café Málaga",

@@ -13,7 +13,7 @@ if __name__ == "__main__":
             "tzlocal",
             "unidecode",
         ],
-        name="datatools",
+        name="wingechr-datatools",
         description=None,
         long_description=None,
         long_description_content_type="text/markdown",

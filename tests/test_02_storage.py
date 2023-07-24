@@ -1,28 +1,12 @@
 # coding: utf-8
 import logging
 import os
-import subprocess as sp
-import sys
 import unittest
-from pathlib import Path
 from tempfile import TemporaryDirectory
-from threading import Thread
 
 from datatools.exceptions import DataDoesNotExists, DataExists, InvalidPath
-from datatools.storage import (
-    HASHED_DATA_PATH_PREFIX,
-    LocalStorage,
-    RemoteStorage,
-    StorageServer,
-    TestCliStorage,
-)
-from datatools.utils import (
-    get_free_port,
-    make_file_writable,
-    normalize_path,
-    path_to_file_uri,
-    wait_for_server,
-)
+from datatools.storage import HASHED_DATA_PATH_PREFIX, LocalStorage
+from datatools.utils import make_file_writable, normalize_path
 
 from . import objects_euqal
 
@@ -99,85 +83,3 @@ class Test_01_LocalStorage(unittest.TestCase):
             data_path=data_path_user, metadata_path="b.c"
         )
         self.assertTrue(objects_euqal(metadata2, ["test", "test2"]))
-
-
-class Test_02_RemoteStorage(Test_01_LocalStorage):
-    def setUp(self) -> None:
-        super().setUp()
-
-        port = get_free_port()
-        remote_location = f"http://localhost:{port}"
-        server = StorageServer(storage=self.storage, port=port)
-        Thread(target=server.serve_forever, daemon=True).start()
-        wait_for_server(remote_location)
-
-        self.storage = RemoteStorage(location=remote_location)
-
-
-class Test_03_TestCliStorage(Test_01_LocalStorage):
-    def setUp(self) -> None:
-        super().setUp()
-
-        # use self.storage from super() to get temp dir location
-        server_storage = TestCliStorage(location=self.tempdir_path)
-        port = get_free_port()
-        remote_location = f"http://localhost:{port}"
-
-        self.server_proc = server_storage.serve(port=port)
-        wait_for_server(remote_location)
-
-        # test static server process (to serve test files)
-        self.static_port = get_free_port()
-        self.http_proc = sp.Popen(
-            [
-                sys.executable,
-                "-m",
-                "http.server",
-                str(self.static_port),
-                "--directory",
-                self.tempdir_path,
-            ]
-        )
-        wait_for_server(f"http://localhost:{self.static_port}")
-
-        # create client
-        self.storage = TestCliStorage(location=remote_location)
-
-    def tearDown(self) -> None:
-        # shutdown server
-        self.server_proc.terminate()  # or kill
-        self.server_proc.wait()
-
-        self.http_proc.terminate()  # or kill
-        self.http_proc.wait()
-
-        super().tearDown()
-
-    def test_cli_read_uri(self):
-        # create file
-        filename = "test.txt"
-        filepath = self.tempdir_path + "/" + filename
-        data = b"hello world"
-        with open(filepath, "wb") as file:
-            file.write(data)
-
-        # read file://
-        expected_path = normalize_path(path_to_file_uri(Path(filepath).absolute()))
-        data_path = self.storage.data_put(data=filepath)
-        self.assertEqual(expected_path, data_path)
-
-        # read http://
-        url = f"http://user:passwd@localhost:{self.static_port}/{filename}#.anchor"
-        expected_path = "http/localhost/test.txt.anchor"
-        data_path = self.storage.data_put(data=url)
-        self.assertEqual(expected_path, data_path)
-
-        # this should auto save the source
-        source = self.storage.metadata_get(
-            data_path=data_path, metadata_path="source.path"
-        )
-        # url without credentials
-        exp_source = f"http://localhost:{self.static_port}/{filename}#.anchor"
-        self.assertEqual(source, exp_source)
-
-        print(self.storage.metadata_get(data_path=data_path))

@@ -17,8 +17,6 @@ from .exceptions import DatatoolsException
 from .storage import StorageServer
 from .utils import (
     file_uri_to_path,
-    get_now_str,
-    get_user_w_host,
     normalize_path,
     path_to_file_uri,
     remove_auth_from_uri,
@@ -33,8 +31,6 @@ def read_uri(uri: str) -> Tuple[bytes, str, dict]:
 
     metadata = {}
     metadata["source.path"] = remove_auth_from_uri(uri)
-    metadata["source.user"] = get_user_w_host()
-    metadata["source.datetime"] = get_now_str()
 
     url = urlsplit(uri)
     # protocol routing
