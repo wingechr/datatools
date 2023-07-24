@@ -16,8 +16,6 @@ from .exceptions import InvalidPath
 DATETIMETZ_FMT = "%Y-%m-%dT%H:%M:%S%z"
 
 FILEMOD_WRITE = 0o222
-FILEMOD_EXEC = 0o0333
-FILEMOD_EDIT = FILEMOD_WRITE | FILEMOD_EXEC
 
 
 def get_free_port():
@@ -110,13 +108,13 @@ def platform_is_windows():
 
 def make_file_readonly(file_path):
     current_permissions = os.stat(file_path).st_mode
-    readonly_permissions = current_permissions & ~FILEMOD_EDIT
+    readonly_permissions = current_permissions & ~FILEMOD_WRITE
     os.chmod(file_path, readonly_permissions)
 
 
 def make_file_writable(file_path):
     current_permissions = os.stat(file_path).st_mode
-    readonly_permissions = current_permissions | FILEMOD_EDIT
+    readonly_permissions = current_permissions | FILEMOD_WRITE
     os.chmod(file_path, readonly_permissions)
 
 

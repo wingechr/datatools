@@ -12,6 +12,7 @@ from datatools.utils import (
     make_file_writable,
     normalize_path,
     path_to_file_uri,
+    platform_is_windows,
     uri_to_data_path,
 )
 
@@ -87,8 +88,9 @@ class TestUtils(unittest.TestCase):
             # but not writing
             self.assertRaises(PermissionError, open, filepath, "wb")
 
-            # or deleting
-            self.assertRaises(PermissionError, os.remove, filepath)
+            # or deleting (only windows)
+            if platform_is_windows():
+                self.assertRaises(PermissionError, os.remove, filepath)
 
             # but we can revers it:
             make_file_writable(filepath)
