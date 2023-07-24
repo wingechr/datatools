@@ -15,7 +15,9 @@ from .exceptions import InvalidPath
 
 DATETIMETZ_FMT = "%Y-%m-%dT%H:%M:%S%z"
 
-FILEMOD_EDIT = 0o222
+FILEMOD_WRITE = 0o222
+FILEMOD_EXEC = 0o0333
+FILEMOD_EDIT = FILEMOD_WRITE | FILEMOD_EXEC
 
 
 def get_free_port():

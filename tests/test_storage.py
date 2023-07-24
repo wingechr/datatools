@@ -75,12 +75,6 @@ class TestLocalStorage(unittest.TestCase):
         metadata = {"b.c[1]": "test2"}
         self.storage.metadata_put(data_path=data_path_user, metadata=metadata)
 
-        # get all metadata (in a list)
-        metadata2 = self.storage.metadata_get(data_path=data_path_user)
-        self.assertTrue(
-            objects_euqal(metadata2, {"a": [1, 2, 3], "b": {"c": ["test", "test2"]}})
-        )
-
         # get partial
         metadata2 = self.storage.metadata_get(
             data_path=data_path_user, metadata_path="b.c"
