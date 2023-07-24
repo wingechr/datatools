@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 import socket
@@ -52,3 +53,14 @@ def file_to_data_path(file_path: str) -> str:
     data_path = os.path.abspath(file_path)
     # TODO: add host
     return data_path
+
+
+def get_query_arg(kwargs: dict, key: str, default=None) -> str:
+    """kwargs only come as lists"""
+    values = kwargs.get(key)
+    if not values:
+        return default
+    if len(values) > 1:
+        logging.warning("multiple values defined")
+    value = values[0]
+    return unquote_plus(value)

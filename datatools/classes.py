@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import subprocess as sp
+import traceback
 from http import HTTPStatus
 from typing import Union
 from urllib.parse import parse_qs, unquote_plus
@@ -17,7 +18,7 @@ import requests
 
 from . import exceptions
 from .exceptions import DataDoesNotExists, DataExists, DatatoolsException, InvalidPath
-from .utils import get_default_storage_location, normalize_path
+from .utils import get_default_storage_location, get_query_arg, normalize_path
 
 # remote
 PARAM_HASH_METHOD = "hash"
@@ -270,7 +271,7 @@ class StorageServerRoutes:
             data_path = args[0]
         else:
             data_path = None
-        hash_method = kwargs.get(PARAM_HASH_METHOD)[0]
+        hash_method = get_query_arg(kwargs, PARAM_HASH_METHOD)
         data_path = self._storage.data_put(
             data=data, data_path=data_path, hash_method=hash_method
         )
@@ -337,6 +338,7 @@ class StorageServer:
 
         status_code = 404
         result = b""
+        output_content_type = "application/octet-stream"
 
         # routing
         routing_pattern = f"{method} {path}"
@@ -352,32 +354,38 @@ class StorageServer:
 
         if selected_handler:
             try:
+                logging.debug(
+                    f"SRV: {selected_handler.__name__}"
+                    f"({len(bdata)}, {path_args}, {query})"
+                )
                 result = selected_handler(bdata, path_args, query)
                 status_code = 200
             except DatatoolsException as exc:
                 logging.warning(exc)
                 status_code = 400
                 result = {"error_msg": str(exc), "error_cls": exc.__class__.__name__}
-            except Exception as exc:
-                logging.error(exc)
+            except Exception:
+                logging.error(traceback.format_exc())
                 status_code = 500
 
         if isinstance(result, str):
+            output_content_type = "text/plain"
             result = result.encode()
         if not isinstance(result, bytes):
+            output_content_type = "application/json"
             result = json.dumps(result).encode()
 
         content_length_result = len(result)
         # TODO get other success codes
         status = "%s %s" % (status_code, HTTPStatus(status_code).phrase)
-        output_content_type = ""  # TODO
+
         response_headers = []
         response_headers += [
-            ("Content-type", output_content_type),
+            ("Content-Type", output_content_type),
             ("Content-Length", str(content_length_result)),
         ]
 
-        logging.debug(f"SRV RES: {status}")
+        logging.debug(f"SRV RES: {status} {response_headers}")
 
         start_response(status, response_headers)
 
@@ -394,18 +402,21 @@ class TestCliStorage(AbstractStorage):
 
     def _call(self, data, args):
         cmd = ["python", "-m", "datatools", "-d", self.location, "-l", "debug"] + args
-        logging.debug(" ".join(cmd))
         proc = sp.Popen(cmd, stdout=sp.PIPE, stdin=sp.PIPE, stderr=sp.PIPE)
+        logging.debug(" ".join(cmd) + f" ({proc.pid})")
         out, err = proc.communicate(data)
         if proc.returncode:
             try:
                 # try to get erro class / message
-                err = err.decode().splitlines()
+                err_text = err.decode().splitlines()
                 # last line
-                err = err[-1]
-                err_cls, err_msg = re.match(".* ([a-zA-Z]+): (.+)$", err).groups()
+                err_text = [x.strip() for x in err_text if x.strip()]
+                err_text = err_text[-1]
+                err_cls, err_msg = re.match(".*<([^:]+): ([^>]+)>", err_text).groups()
                 err_cls = getattr(exceptions, err_cls)
             except Exception:
+                logging.error("cannot parse error")
+                logging.error(err.decode().splitlines()[-1])
                 err_cls = Exception
                 err_msg = err
             raise err_cls(err_msg)
@@ -449,3 +460,18 @@ class TestCliStorage(AbstractStorage):
     def data_delete(self, data_path: str) -> bytes:
         args = ["data-delete", data_path]
         self._call(b"", args)
+
+    def serve(self, location=None, port=None):
+        cmd = [
+            "python",
+            "-m",
+            "datatools",
+            "-d",
+            location,
+            "serve",
+            "--port",
+            str(port),
+        ]
+        proc = sp.Popen(cmd)
+        logging.debug(" ".join(cmd) + f" ({proc.pid})")
+        return proc

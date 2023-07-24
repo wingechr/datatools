@@ -135,7 +135,8 @@ if __name__ == "__main__":
     try:
         main(prog_name="datatools")
     except DatatoolsException as exc:
-        logging.error(f"{exc.__class__.__name__}: {str(exc)}")
+        # format error in a way that we can read and decode again: <>
+        logging.error(f"<{exc.__class__.__name__}: {str(exc)}>")
         sys.exit(1)
     except Exception:
         raise
