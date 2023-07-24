@@ -78,8 +78,11 @@ def normalize_path(path: str) -> str:
 
 
 def get_default_storage_location() -> str:
-    return appdirs.user_data_dir(
-        appname="datatools", appauthor=None, version=None, roaming=True
+    return os.path.join(
+        appdirs.user_data_dir(
+            appname="datatools", appauthor=None, version=None, roaming=False
+        ),
+        "data",
     )
 
 
