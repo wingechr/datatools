@@ -8,9 +8,9 @@ from threading import Thread
 from datatools.storage import RemoteStorage, StorageServer, _TestCliStorage
 from datatools.utils import (
     LOCALHOST,
+    filepath_abs_to_uri,
     get_free_port,
     normalize_path,
-    path_to_file_uri,
     wait_for_server,
 )
 
@@ -82,7 +82,7 @@ class Test_03_TestCliStorage(Test_01_LocalStorage):
             file.write(data)
 
         # read file://
-        expected_path = normalize_path(path_to_file_uri(Path(filepath).absolute()))
+        expected_path = normalize_path(filepath_abs_to_uri(Path(filepath).absolute()))
         data_path = self.storage.data_put(data=filepath)
         self.assertEqual(expected_path, data_path)
 

@@ -153,12 +153,23 @@ def make_file_writable(file_path):
     os.chmod(file_path, readonly_permissions)
 
 
-def path_to_file_uri(abspath: Path) -> str:
+def as_uri(source: str):
+    if not re.match(".+://", source, re.IGNORECASE):
+        # assume local path
+        filepath_abs = Path(source).absolute()
+        uri = filepath_abs_to_uri(filepath_abs=filepath_abs)
+        logging.debug(f"Translate {source} => {uri}")
+    else:
+        uri = source
+    return uri
+
+
+def filepath_abs_to_uri(filepath_abs: Path) -> str:
     """
     Args:
         abspath(Path): must be already absolute path!
     """
-    uri = abspath.as_uri()
+    uri = filepath_abs.as_uri()
     uri = urlsplit(uri)
 
     if not uri.netloc:
@@ -172,11 +183,11 @@ def path_to_file_uri(abspath: Path) -> str:
     return uri
 
 
-def file_uri_to_path(uri: str) -> str:
+def uri_to_filepath_abs(uri: str) -> str:
     url = urlsplit(uri)
 
-    if url.scheme != "file":
-        raise Exception(f"Not a file path: {uri}")
+    # if url.scheme != "file":
+    #    raise Exception(f"Not a file path: {uri}")
 
     is_local = url.netloc == get_hostname()
     is_win = re.match("/[a-zA-Z]:/", url.path) or (not is_local)
@@ -236,3 +247,20 @@ def parse_cli_metadata(metadata_key_vals):
             pass
         metadata[key] = value
     return metadata
+
+
+def parse_content_type(ctype: str) -> dict:
+    result = {}
+    parts = [x.strip() for x in ctype.split(";")]
+    result["mediatype"] = parts[0]
+    for key_value in parts[1:]:
+        try:
+            key, value = key_value.split("=")
+            key = key.strip()
+            key = {"charset": "encoding"}.get(key, key)
+            value = value.strip()
+            result[key] = value
+        except Exception:
+            logging.warning(f"cannot parse {key_value}")
+
+    return result

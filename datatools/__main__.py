@@ -10,7 +10,7 @@ from . import Storage, __version__
 from .exceptions import DatatoolsException
 from .load import read_uri, write_uri
 from .storage import StorageServer
-from .utils import parse_cli_metadata
+from .utils import as_uri, parse_cli_metadata, uri_to_data_path
 
 
 @click.group()
@@ -68,21 +68,21 @@ def data_delete(storage: Storage, data_path: str):
 
 @main.command
 @click.pass_obj
-@click.argument("file_path")
+@click.argument("source")
 @click.argument("data_path", required=False)
 @click.option(
     "--hash_method", "-h", type=click.Choice(["md5", "sha256"]), default="md5"
 )
-def data_put(storage: Storage, file_path, data_path: str, hash_method: str):
-    if file_path == "-":
-        file_path = None
+def data_put(storage: Storage, source, data_path: str, hash_method: str):
+    if source == "-":
+        source = None
         data = sys.stdin.buffer.read()
         metadata = None
     else:
-        data, _data_path, metadata = read_uri(file_path)
-
+        uri = as_uri(source)
+        data, metadata = read_uri(uri)
         if data_path is None:  # ! explicitly use is None, so we can manually set ""
-            data_path = _data_path
+            data_path = uri_to_data_path(uri)
 
     data_path = storage.data_put(
         data=data, data_path=data_path, hash_method=hash_method
@@ -118,6 +118,27 @@ def metadata_put(storage: Storage, data_path, metadata_key_vals):
 def serve(storage: Storage, port: int):
     server = StorageServer(storage=storage, port=port)
     server.serve_forever()
+
+
+@main.command
+@click.pass_obj
+@click.argument("source")
+@click.argument("target", required=False)
+def cache(storage: Storage, source: str, target=None):
+    uri = as_uri(source)
+
+    def get_path(_fun, args, _kwargs):
+        uri = args[0]
+        data_path = uri_to_data_path(uri)
+        return data_path
+
+    cached_read_uri = storage.cache(get_path=get_path, split_data_metadata=lambda x: x)(
+        read_uri
+    )
+
+    data = cached_read_uri(uri)
+
+    # TODO
 
 
 if __name__ == "__main__":

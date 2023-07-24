@@ -8,3 +8,4 @@ _pages
 *.egg-info
 build
 .tox
+.test

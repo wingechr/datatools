@@ -15,7 +15,7 @@ logging.basicConfig(
 )
 
 
-class Test_01_LocalStorage(unittest.TestCase):
+class TestBase(unittest.TestCase):
     def setUp(self) -> None:
         self.tempdir = TemporaryDirectory()
         self.tempdir_path = self.tempdir.__enter__()
@@ -29,56 +29,64 @@ class Test_01_LocalStorage(unittest.TestCase):
                 make_file_writable(filepath)
         self.tempdir.__exit__(None, None, None)
 
+
+class Test_01_LocalStorage(TestBase):
     def test_storage(self):
         # create local instance in temporary dir
         data = b"hello world"
         data_path_user = "/My/path"
         invalid_path = HASHED_DATA_PATH_PREFIX + "my/path"
 
-        # cannot save save data to hash subdir
+        logging.debug("Step 1: cannot save save data to hash subdir")
         self.assertRaises(
             InvalidPath,
             self.storage.data_put,
             data=data,
             data_path=invalid_path,
         )
-        # save data without path
+
+        logging.debug("Step 2a: save data without path")
         data_path = self.storage.data_put(data=data)
         self.assertTrue(data_path.startswith(HASHED_DATA_PATH_PREFIX))
 
-        # save data
+        logging.debug("Step 2b: save data with path")
         data_path = self.storage.data_put(data=data, data_path=data_path_user)
         self.assertEqual(normalize_path(data_path_user), data_path)
-        # save again will fail
+
+        logging.debug("Step 2c: save again will fail")
         self.assertRaises(
             DataExists,
             self.storage.data_put,
             data=data,
             data_path=data_path_user,
         )
-        # read it
+
+        logging.debug("Step 3: read data")
         res = self.storage.data_get(data_path=data_path_user)
         self.assertEqual(data, res)
-        # delete it ...
+
+        logging.debug("Step 4a: delete")
         self.storage.data_delete(data_path=data_path_user)
-        # ... and deleting again does NOT raise an error ...
+
+        logging.debug("Step 4b: delete again")
         self.storage.data_delete(data_path=data_path_user)
         # reading now will raise error
         self.assertRaises(
             DataDoesNotExists, self.storage.data_get, data_path=data_path_user
         )
-        # ... and now we can save it again
+
+        logging.debug("Step 5: save again")
         self.storage.data_put(data=data, data_path=data_path_user)
 
-        # metadata can be saved independent of data
+        logging.debug("Step 5: save metadata")
         metadata = {"a": [1, 2, 3], "b.c[0]": "test"}
         self.storage.metadata_put(data_path=data_path_user, metadata=metadata)
 
-        # partial update
+        logging.debug("Step 5: update metadata")
         metadata = {"b.c[1]": "test2"}
         self.storage.metadata_put(data_path=data_path_user, metadata=metadata)
 
-        # get partial
+        logging.debug("Step 5: get metadata")
         metadata2 = self.storage.metadata_get(
             data_path=data_path_user, metadata_path="b.c"
         )

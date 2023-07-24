@@ -18,6 +18,7 @@ import jsonpath_ng
 import requests
 
 from . import exceptions
+from .cache import cache
 from .exceptions import DataDoesNotExists, DataExists, DatatoolsException, InvalidPath
 from .utils import (
     LOCALHOST,
@@ -60,6 +61,24 @@ class AbstractStorage(abc.ABC):
             raise InvalidPath(data_path)
         logging.debug(f"Translating {data_path} => {norm_path}")
         return norm_path
+
+    def cache(
+        self,
+        get_path=None,
+        split_data_metadata=None,
+        from_bytes=None,
+        to_bytes=None,
+        path_prefix: str = None,
+    ):
+        """decorator"""
+        return cache(
+            storage=self,
+            get_path=get_path,
+            split_data_metadata=split_data_metadata,
+            from_bytes=from_bytes,
+            to_bytes=to_bytes,
+            path_prefix=path_prefix,
+        )
 
     def metadata_get(self, data_path: str, metadata_path: str = None) -> object:
         raise NotImplementedError()
@@ -156,6 +175,7 @@ class LocalStorage(AbstractStorage):
             data_filepath = self._get_data_filepath(norm_data_path=norm_data_path)
             if os.path.exists(data_filepath):
                 raise DataExists(data_path)
+
         os.makedirs(os.path.dirname(data_filepath), exist_ok=True)
         logging.debug(f"WRITING {data_filepath}")
         with open(data_filepath, "wb") as file:
@@ -203,6 +223,7 @@ class LocalStorage(AbstractStorage):
 
     def _get_data_filepath(self, norm_data_path: str):
         filepath = os.path.join(self.location, norm_data_path)
+        filepath = os.path.abspath(filepath)
         return filepath
 
     def _get_metadata_filepath(self, data_path: str):
@@ -210,6 +231,7 @@ class LocalStorage(AbstractStorage):
         data_filepath = self._get_data_filepath(norm_data_path=norm_data_path)
         metadata_filepath = data_filepath + ".metadata.json"
         os.makedirs(os.path.dirname(metadata_filepath), exist_ok=True)
+        metadata_filepath = os.path.abspath(metadata_filepath)
         return metadata_filepath
 
 
@@ -435,19 +457,18 @@ class _TestCliStorage(AbstractStorage):
         logging.debug(" ".join(cmd) + f" ({proc.pid})")
         out, err = proc.communicate(data)
         if proc.returncode:
+            # try to get error class / message
+            err_text = err.decode().splitlines()
+            # last line
+            err_text = [x.strip() for x in err_text if x.strip()]
+            err_text = err_text[-1]
             try:
-                # try to get erro class / message
-                err_text = err.decode().splitlines()
-                # last line
-                err_text = [x.strip() for x in err_text if x.strip()]
-                err_text = err_text[-1]
                 err_cls, err_msg = re.match(".*<([^:]+): ([^>]+)>", err_text).groups()
                 err_cls = getattr(exceptions, err_cls)
             except Exception:
-                logging.error("cannot parse error")
-                logging.error(err.decode().splitlines()[-1])
+                logging.error(f"cannot parse error: {err_text}")
                 err_cls = Exception
-                err_msg = err
+                err_msg = err_text
             raise err_cls(err_msg)
 
         return out

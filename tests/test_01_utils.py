@@ -7,7 +7,7 @@ from pathlib import PurePosixPath, PureWindowsPath
 from tempfile import TemporaryDirectory
 
 from datatools.utils import (
-    file_uri_to_path,
+    filepath_abs_to_uri,
     get_hostname,
     get_now_str,
     get_user_w_host,
@@ -15,9 +15,9 @@ from datatools.utils import (
     make_file_writable,
     normalize_path,
     parse_cli_metadata,
-    path_to_file_uri,
     platform_is_windows,
     uri_to_data_path,
+    uri_to_filepath_abs,
 )
 
 from . import objects_euqal
@@ -63,8 +63,8 @@ class TestUtils(unittest.TestCase):
             ),  # windows unc shared
         ]
         for file_path, uri in examples:
-            self.assertEqual(uri, path_to_file_uri(file_path))
-            self.assertEqual(str(file_path), file_uri_to_path(uri))
+            self.assertEqual(uri, filepath_abs_to_uri(file_path))
+            self.assertEqual(str(file_path), uri_to_filepath_abs(uri))
 
         for data_path, uri in [
             ("http/a/b", "https://a/b/"),
