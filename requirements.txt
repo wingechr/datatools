@@ -7,3 +7,4 @@ isort
 flake8
 prettier
 bumpversion
+tox

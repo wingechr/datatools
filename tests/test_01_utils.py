@@ -101,9 +101,5 @@ class TestUtils(unittest.TestCase):
 
     def test_get_now_str(self):
         now_str = get_now_str()
-        self.assertTrue(
-            re.match(
-                "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[+-][0-9]{2}:[0-9]{2}$",
-                now_str,
-            )
-        )
+        p = "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[+-][0-9]{2}:[0-9]{2}$"
+        self.assertTrue(re.match(p, now_str))

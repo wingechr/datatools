@@ -1,5 +1,6 @@
 # coding: utf-8
 import logging
+import os
 import subprocess as sp
 import unittest
 from pathlib import Path
@@ -11,12 +12,12 @@ from datatools.storage import (
     HASHED_DATA_PATH_PREFIX,
     LocalStorage,
     RemoteStorage,
-    Storage,
     StorageServer,
     TestCliStorage,
 )
 from datatools.utils import (
     get_free_port,
+    make_file_writable,
     normalize_path,
     path_to_file_uri,
     wait_for_server,
@@ -29,12 +30,18 @@ logging.basicConfig(
 )
 
 
-class TestLocalStorage(unittest.TestCase):
+class Test_01_LocalStorage(unittest.TestCase):
     def setUp(self) -> None:
         self.tempdir = TemporaryDirectory()
-        self.storage = LocalStorage(location=self.tempdir.__enter__())
+        self.tempdir_path = self.tempdir.__enter__()
+        self.storage = LocalStorage(location=self.tempdir_path)
 
     def tearDown(self) -> None:
+        # make files writable so cleanup can delete them
+        for rt, _ds, fs in os.walk(self.tempdir_path):
+            for f in fs:
+                filepath = f"{rt}/{f}"
+                make_file_writable(filepath)
         self.tempdir.__exit__(None, None, None)
 
     def test_storage(self):
@@ -45,7 +52,10 @@ class TestLocalStorage(unittest.TestCase):
 
         # cannot save save data to hash subdir
         self.assertRaises(
-            InvalidPath, self.storage.data_put, data=data, data_path=invalid_path
+            InvalidPath,
+            self.storage.data_put,
+            data=data,
+            data_path=invalid_path,
         )
         # save data without path
         data_path = self.storage.data_put(data=data)
@@ -56,7 +66,10 @@ class TestLocalStorage(unittest.TestCase):
         self.assertEqual(normalize_path(data_path_user), data_path)
         # save again will fail
         self.assertRaises(
-            DataExists, self.storage.data_put, data=data, data_path=data_path_user
+            DataExists,
+            self.storage.data_put,
+            data=data,
+            data_path=data_path_user,
         )
         # read it
         res = self.storage.data_get(data_path=data_path_user)
@@ -87,31 +100,29 @@ class TestLocalStorage(unittest.TestCase):
         self.assertTrue(objects_euqal(metadata2, ["test", "test2"]))
 
 
-class TestRemoteStorage(TestLocalStorage):
+class Test_02_RemoteStorage(Test_01_LocalStorage):
     def setUp(self) -> None:
-        self.tempdir = TemporaryDirectory()
+        super().setUp()
+
         port = get_free_port()
-        storage = Storage(location=self.tempdir.__enter__())
         remote_location = f"http://localhost:{port}"
-        self.server = StorageServer(storage=storage, port=port)
-        self.server_thread = Thread(target=self.server.serve_forever, daemon=True)
-        self.server_thread.start()
+        server = StorageServer(storage=self.storage, port=port)
+        Thread(target=server.serve_forever, daemon=True).start()
         wait_for_server(remote_location)
+
         self.storage = RemoteStorage(location=remote_location)
 
-    def tearDown(self) -> None:
-        self.tempdir.__exit__(None, None, None)
 
-
-class TestTestCliStorage(TestLocalStorage):
+class Test_03_TestCliStorage(Test_01_LocalStorage):
     def setUp(self) -> None:
-        self.tempdir = TemporaryDirectory()
-        self.location = self.tempdir.__enter__()
-        # create server process
-        server_port = get_free_port()
-        remote_location = f"http://localhost:{server_port}"
-        self.server_storage = TestCliStorage(location=self.location)
-        self.server_proc = self.server_storage.serve(port=server_port)
+        super().setUp()
+
+        # use self.storage from super() to get temp dir location
+        server_storage = TestCliStorage(location=self.tempdir_path)
+        port = get_free_port()
+        remote_location = f"http://localhost:{port}"
+
+        self.server_proc = server_storage.serve(port=port)
         wait_for_server(remote_location)
 
         # test static server process (to serve test files)
@@ -123,7 +134,7 @@ class TestTestCliStorage(TestLocalStorage):
                 "http.server",
                 str(self.static_port),
                 "--directory",
-                self.location,
+                self.tempdir_path,
             ]
         )
         wait_for_server(f"http://localhost:{self.static_port}")
@@ -139,13 +150,12 @@ class TestTestCliStorage(TestLocalStorage):
         self.http_proc.terminate()  # or kill
         self.http_proc.wait()
 
-        # FIXME: ResourceWarning: subprocess 25460 is still running
-        self.tempdir.__exit__(None, None, None)
+        super().tearDown()
 
     def test_cli_read_uri(self):
         # create file
         filename = "test.txt"
-        filepath = self.location + "/" + filename
+        filepath = self.tempdir_path + "/" + filename
         data = b"hello world"
         with open(filepath, "wb") as file:
             file.write(data)
