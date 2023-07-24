@@ -16,6 +16,7 @@ if __name__ == "__main__":
             # "pandas>=1.5",
             # "pyyaml",
             "requests",
+            # "pytz"
             "tzlocal",
             "unidecode",
         ],

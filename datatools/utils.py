@@ -89,7 +89,7 @@ def get_now() -> datetime.datetime:
     # e.g. datetime.timezone(datetime.timedelta(seconds=3600))
     now = datetime.datetime.now()
     # convert unaware datetime to proper timezone...
-    now_tz = tz_local.localize(now)
+    now_tz = now.replace(tzinfo=tz_local)
     return now_tz
 
 

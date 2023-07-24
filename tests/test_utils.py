@@ -1,6 +1,7 @@
 # coding: utf-8
 import logging
 import os
+import re
 import unittest
 from pathlib import PurePosixPath, PureWindowsPath
 from tempfile import TemporaryDirectory
@@ -8,6 +9,7 @@ from tempfile import TemporaryDirectory
 from datatools.utils import (
     file_uri_to_path,
     get_hostname,
+    get_now_str,
     make_file_readonly,
     make_file_writable,
     normalize_path,
@@ -96,3 +98,12 @@ class TestUtils(unittest.TestCase):
             make_file_writable(filepath)
 
             os.remove(filepath)
+
+    def test_get_now_str(self):
+        now_str = get_now_str()
+        self.assertTrue(
+            re.match(
+                "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[+-][0-9]{2}:[0-9]{2}$",
+                now_str,
+            )
+        )
