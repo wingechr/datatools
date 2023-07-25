@@ -83,13 +83,15 @@ class Test_03_TestCliStorage(Test_01_LocalStorage):
 
         # read file://
         expected_path = normalize_path(filepath_abs_to_uri(Path(filepath).absolute()))
-        data_path = self.storage.data_put(data=filepath)
+        # NOTE: use _data_put directly for this test
+        data_path = self.storage._data_put(data=filepath, norm_data_path=None)
         self.assertEqual(expected_path, data_path)
 
         # read http://
         url = f"http://user:passwd@{LOCALHOST}:{self.static_port}/{filename}#.anchor"
         expected_path = f"http/{LOCALHOST}/test.txt.anchor"
-        data_path = self.storage.data_put(data=url)
+        # NOTE: use _data_put directly for this test
+        data_path = self.storage._data_put(data=url, norm_data_path=None)
         self.assertEqual(expected_path, data_path)
 
         # this should auto save the source
