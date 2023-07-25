@@ -9,3 +9,4 @@ _pages
 build
 .tox
 .test
+.vscode

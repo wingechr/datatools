@@ -24,7 +24,6 @@ from .utils import (
     LOCALHOST,
     get_default_storage_location,
     get_now_str,
-    get_query_arg,
     get_user_w_host,
     make_file_readonly,
     make_file_writable,
@@ -32,7 +31,6 @@ from .utils import (
 )
 
 # remote
-PARAM_HASH_METHOD = "hash"
 PARAM_METADATA_PATH = "p"
 PARAM_DATA_PATH = "path"
 PARAM_VALUE = "value"
@@ -40,6 +38,7 @@ HASHED_DATA_PATH_PREFIX = "hash/"
 DEFAULT_HASH_METHOD = "md5"
 ROOT_METADATA_PATH = "$"  # root
 DEFAULT_PORT = 8000
+ALLOWED_HASH_METHODS = ["md5", "sha256"]
 
 
 class AbstractStorage(abc.ABC):
@@ -59,13 +58,14 @@ class AbstractStorage(abc.ABC):
         # TODO: maybe later: remove double check:
         if norm_path != normalize_path(norm_path):
             raise InvalidPath(data_path)
+        if re.match(r".*\.metadata\..*", norm_path):
+            raise InvalidPath(data_path)
         logging.debug(f"Translating {data_path} => {norm_path}")
         return norm_path
 
     def cache(
         self,
         get_path=None,
-        split_data_metadata=None,
         from_bytes=None,
         to_bytes=None,
         path_prefix: str = None,
@@ -74,7 +74,6 @@ class AbstractStorage(abc.ABC):
         return cache(
             storage=self,
             get_path=get_path,
-            split_data_metadata=split_data_metadata,
             from_bytes=from_bytes,
             to_bytes=to_bytes,
             path_prefix=path_prefix,
@@ -86,9 +85,7 @@ class AbstractStorage(abc.ABC):
     def metadata_put(self, data_path: str, metadata: dict) -> None:
         raise NotImplementedError()
 
-    def data_put(
-        self, data: bytes, data_path: str = None, hash_method: str = None
-    ) -> str:
+    def data_put(self, data: bytes, data_path: str = None) -> str:
         raise NotImplementedError()
 
     def data_get(self, data_path: str) -> bytes:
@@ -153,10 +150,18 @@ class LocalStorage(AbstractStorage):
 
         return None
 
-    def data_put(
-        self, data: bytes, data_path: str = None, hash_method: str = None
-    ) -> str:
-        hash_method = hash_method or DEFAULT_HASH_METHOD
+    def data_put(self, data: bytes, data_path: str = None) -> str:
+        if not data_path:
+            data_path = f"{HASHED_DATA_PATH_PREFIX}{DEFAULT_HASH_METHOD}"
+        if data_path.startswith(HASHED_DATA_PATH_PREFIX):
+            offset = len(HASHED_DATA_PATH_PREFIX)
+            hash_method = data_path[offset:]
+            if hash_method not in ALLOWED_HASH_METHODS:
+                raise InvalidPath(data_path)
+            data_path = None
+        else:
+            hash_method = DEFAULT_HASH_METHOD
+
         hasher = getattr(hashlib, hash_method)()
         hasher.update(data)
         hashsum = hasher.hexdigest()
@@ -250,23 +255,19 @@ class RemoteStorage(AbstractStorage):
     def metadata_put(self, data_path: str, metadata: dict) -> None:
         self._request(method="PATCH", data_path=data_path, data=metadata)
 
-    def data_put(
-        self, data: bytes, data_path: str = None, hash_method: str = None
-    ) -> str:
-        if data_path:
-            result = self._request(
-                method="PUT",
-                data_path=data_path,
-                data=data,
-                params={PARAM_HASH_METHOD: hash_method},
-            )
+    def data_put(self, data: bytes, data_path: str = None) -> str:
+        if not data_path:
+            data_path = f"{HASHED_DATA_PATH_PREFIX}{DEFAULT_HASH_METHOD}"
+
+        if data_path.startswith(HASHED_DATA_PATH_PREFIX):
+            method = "POST"
         else:
-            result = self._request(
-                method="POST",
-                data_path="",
-                data=data,
-                params={PARAM_HASH_METHOD: hash_method},
-            )
+            method = "PUT"
+        result = self._request(
+            method=method,
+            data_path=data_path,
+            data=data,
+        )
         return result.json()[PARAM_DATA_PATH]
 
     def data_get(self, data_path: str) -> bytes:
@@ -313,24 +314,18 @@ class StorageServerRoutes:
     def __init__(self, storage):
         self._storage = storage
 
-    def data_put(self, data, args, kwargs):
-        if args:
-            data_path = args[0]
-        else:
-            data_path = None
-        hash_method = get_query_arg(kwargs, PARAM_HASH_METHOD)
-        data_path = self._storage.data_put(
-            data=data, data_path=data_path, hash_method=hash_method
-        )
+    def data_put(self, data, args, _kwargs):
+        data_path = args[0].lstrip("/")
+        data_path = self._storage.data_put(data=data, data_path=data_path)
         return {PARAM_DATA_PATH: data_path}
 
     def metadata_put(self, data, args, _kwargs):
-        data_path = args[0]
+        data_path = args[0].lstrip("/")
         metadata = json.loads(data.decode())
         self._storage.metadata_put(data_path, metadata=metadata)
 
     def data_get_or_metadata_get(self, _data, args, kwargs):
-        data_path = args[0]
+        data_path = args[0].lstrip("/")
         metadata_path = kwargs.get(PARAM_METADATA_PATH)
         if metadata_path:
             # is list
@@ -346,7 +341,7 @@ class StorageServerRoutes:
         return data
 
     def data_delete(self, _data, args, _kwargs):
-        data_path = args[0]
+        data_path = args[0].lstrip("/")
         self._storage.data_delete(data_path=data_path)
 
 
@@ -359,7 +354,7 @@ class StorageServer:
         self._routes = [
             (re.compile("HEAD"), self.head),
             (re.compile("PUT (.+)"), routes.data_put),
-            (re.compile("POST"), routes.data_put),
+            (re.compile("POST (.+)"), routes.data_put),
             (re.compile("GET (.+)"), routes.data_get_or_metadata_get),
             (re.compile("DELETE (.+)"), routes.data_delete),
             (re.compile("PATCH (.+)"), routes.metadata_put),
@@ -488,9 +483,7 @@ class _TestCliStorage(AbstractStorage):
         args = ["metadata-put", data_path] + meta_key_vals
         self._call(b"", args)
 
-    def data_put(
-        self, data: bytes, data_path: str = None, hash_method: str = None
-    ) -> str:
+    def data_put(self, data: bytes, data_path=None) -> str:
         if isinstance(data, str):
             file_path = data
             data = None
@@ -499,8 +492,6 @@ class _TestCliStorage(AbstractStorage):
         args = ["data-put", file_path]
         if data_path:
             args += [data_path]
-        if hash_method:
-            args += ["-h", hash_method]
 
         res = self._call(data, args)
         return res.decode().strip()

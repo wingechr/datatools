@@ -49,6 +49,14 @@ class Test_01_LocalStorage(TestBase):
         data_path = self.storage.data_put(data=data)
         self.assertTrue(data_path.startswith(HASHED_DATA_PATH_PREFIX))
 
+        logging.debug("Step 2c: save with invalid path")
+        self.assertRaises(
+            InvalidPath,
+            self.storage.data_put,
+            data=data,
+            data_path="/my/data/file.metadata.json",  # .metadata. is not allowed
+        )
+
         logging.debug("Step 2b: save data with path")
         data_path = self.storage.data_put(data=data, data_path=data_path_user)
         self.assertEqual(normalize_path(data_path_user), data_path)
