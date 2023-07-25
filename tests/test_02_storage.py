@@ -58,7 +58,9 @@ class Test_01_LocalStorage(TestBase):
         )
 
         logging.debug("Step 2b: save data with path")
+        self.assertFalse(self.storage.data_exists(data_path_user))
         data_path = self.storage.data_put(data=data, data_path=data_path_user)
+        self.assertTrue(self.storage.data_exists(data_path_user))
         self.assertEqual(normalize_path(data_path_user), data_path)
 
         logging.debug("Step 2c: save again will fail")

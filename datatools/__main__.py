@@ -7,7 +7,7 @@ import sys
 import click
 
 from . import Storage, __version__
-from .exceptions import DatatoolsException
+from .exceptions import DataDoesNotExists, DatatoolsException
 from .load import read_uri, write_uri
 from .storage import StorageServer
 from .utils import as_uri, parse_cli_metadata, uri_to_data_path
@@ -45,7 +45,7 @@ def main(ctx, loglevel, location):
     ctx.obj = Storage(location=location)
 
 
-@main.command
+@main.command("data-get")
 @click.pass_obj
 @click.argument("data_path")
 @click.argument("file_path")
@@ -59,14 +59,14 @@ def data_get(storage: Storage, data_path: str, file_path: str):
         write_uri(file_path, data)
 
 
-@main.command
+@main.command("data-delete")
 @click.pass_obj
 @click.argument("data_path")
 def data_delete(storage: Storage, data_path: str):
     storage.data_delete(data_path=data_path)
 
 
-@main.command
+@main.command("data-put")
 @click.pass_obj
 @click.argument("source")
 @click.argument("data_path", required=False)
@@ -89,7 +89,7 @@ def data_put(storage: Storage, source, data_path: str = None):
     print(data_path)
 
 
-@main.command
+@main.command("metadata-get")
 @click.pass_obj
 @click.argument("data_path")
 @click.argument("metadata_path", required=False)
@@ -98,7 +98,7 @@ def metadata_get(storage: Storage, data_path, metadata_path):
     print(json.dumps(results, indent=2, ensure_ascii=True))
 
 
-@main.command
+@main.command("metadata-put")
 @click.pass_obj
 @click.argument("data_path")
 @click.argument("metadata_key_vals", nargs=-1, required=True)
@@ -107,7 +107,15 @@ def metadata_put(storage: Storage, data_path, metadata_key_vals):
     storage.metadata_put(data_path=data_path, metadata=metadata)
 
 
-@main.command
+@main.command("data-exists")
+@click.pass_obj
+@click.argument("data_path")
+def data_exists(storage: Storage, data_path: str):
+    if not storage.data_exists(data_path=data_path):
+        raise DataDoesNotExists(data_path)
+
+
+@main.command("serve")
 @click.pass_obj
 @click.option("--port", "-p", type=int)
 def serve(storage: Storage, port: int):

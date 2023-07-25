@@ -94,6 +94,9 @@ class AbstractStorage(abc.ABC):
     def data_delete(self, data_path: str) -> None:
         raise NotImplementedError()
 
+    def data_exists(self, data_path: str) -> bool:
+        raise NotImplementedError()
+
 
 class Storage(AbstractStorage):
     def __new__(self, location=None):
@@ -221,6 +224,11 @@ class LocalStorage(AbstractStorage):
             os.remove(data_filepath)
         return None
 
+    def data_exists(self, data_path: str) -> bool:
+        norm_data_path = self._normalize_data_path(data_path=data_path)
+        data_filepath = self._get_data_filepath(norm_data_path=norm_data_path)
+        return os.path.exists(data_filepath)
+
     def _create_metadata_path_pattern(self, metadata_path: str) -> str:
         metadata_path = metadata_path or ROOT_METADATA_PATH
         metadata_path = jsonpath_ng.parse(metadata_path)
@@ -277,6 +285,13 @@ class RemoteStorage(AbstractStorage):
         self._request("DELETE", data_path=data_path)
         return None
 
+    def data_exists(self, data_path: str) -> bool:
+        try:
+            self._request("HEAD", data_path=data_path)
+            return True
+        except DataDoesNotExists:
+            return False
+
     def _request(
         self,
         method: str,
@@ -298,7 +313,11 @@ class RemoteStorage(AbstractStorage):
         logging.debug(f"CLI RES: {res.status_code}")
         if not res.ok:
             try:
-                message = res.json()
+                if method == "HEAD":
+                    # no body
+                    message = {"error_msg": "", "error_cls": DataDoesNotExists.__name__}
+                else:
+                    message = res.json()
                 error_msg = message["error_msg"]
                 error_cls = getattr(exceptions, message["error_cls"])
             except Exception:
@@ -344,6 +363,13 @@ class StorageServerRoutes:
         data_path = args[0].lstrip("/")
         self._storage.data_delete(data_path=data_path)
 
+    def data_exists(self, _data, args, _kwargs):
+        data_path = args[0].lstrip("/")
+        if not data_path:  # only for testing if server works
+            return None
+        if not self._storage.data_exists(data_path=data_path):
+            raise DataDoesNotExists(data_path)
+
 
 class StorageServer:
     def __init__(self, storage, port=None):
@@ -352,16 +378,13 @@ class StorageServer:
 
         routes = StorageServerRoutes(storage)
         self._routes = [
-            (re.compile("HEAD"), self.head),
+            (re.compile("HEAD (.+)"), routes.data_exists),
             (re.compile("PUT (.+)"), routes.data_put),
             (re.compile("POST (.+)"), routes.data_put),
             (re.compile("GET (.+)"), routes.data_get_or_metadata_get),
             (re.compile("DELETE (.+)"), routes.data_delete),
             (re.compile("PATCH (.+)"), routes.metadata_put),
         ]
-
-    def head(self, *args, **kwargs):
-        pass
 
     def serve_forever(self):
         logging.debug(f"Start serving on {self.port}")
@@ -406,12 +429,18 @@ class StorageServer:
                 result = selected_handler(bdata, path_args, query)
                 status_code = 200
             except DatatoolsException as exc:
-                logging.warning(exc)
-                status_code = 400
+                if isinstance(exc, DataDoesNotExists):
+                    status_code = 404
+                else:
+                    status_code = 400
                 result = {"error_msg": str(exc), "error_cls": exc.__class__.__name__}
             except Exception:
                 logging.error(traceback.format_exc())
                 status_code = 500
+
+        if method == "HEAD":
+            # HEAD: no body
+            result = None
 
         if isinstance(result, str):
             output_content_type = "text/plain"
@@ -505,6 +534,14 @@ class _TestCliStorage(AbstractStorage):
     def data_delete(self, data_path: str) -> bytes:
         args = ["data-delete", data_path]
         self._call(b"", args)
+
+    def data_exists(self, data_path: str) -> bool:
+        args = ["data-exists", data_path]
+        try:
+            self._call(b"", args)
+            return True
+        except DataDoesNotExists:
+            return False
 
     def serve(self, port=None):
         cmd = [
