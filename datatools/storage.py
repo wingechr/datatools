@@ -17,9 +17,14 @@ from wsgiref.simple_server import make_server
 import jsonpath_ng
 import requests
 
-from . import exceptions
 from .cache import cache
-from .exceptions import DataDoesNotExists, DataExists, DatatoolsException, InvalidPath
+from .exceptions import (
+    DataDoesNotExists,
+    DataExists,
+    DatatoolsException,
+    InvalidPath,
+    raise_err,
+)
 from .utils import (
     LOCALHOST,
     get_default_storage_location,
@@ -313,20 +318,8 @@ class RemoteStorage(AbstractStorage):
         res = requests.request(method=method, url=url, data=data, params=params)
         logging.debug(f"CLI RES: {res.status_code}")
         if not res.ok:
-            try:
-                if method == "HEAD":
-                    # no body
-                    message = {"error_msg": "", "error_cls": DataDoesNotExists.__name__}
-                else:
-                    message = res.json()
-                error_msg = message["error_msg"]
-                error_cls = getattr(exceptions, message["error_cls"])
-            except Exception:
-                # FXIME: only debug
-                error_msg = res.content
-                error_cls = Exception
-            logging.error(f"{error_cls.__name__}: {error_msg}")
-            raise error_cls(error_msg)
+            # get error from header
+            raise_err(res.headers.get("X-DATATOOLS-ERROR", ""))
         return res
 
 
@@ -423,6 +416,7 @@ class StorageServer:
                 selected_handler = handler
                 break
 
+        response_headers = []
         if selected_handler:
             try:
                 logging.debug(
@@ -434,9 +428,13 @@ class StorageServer:
             except DatatoolsException as exc:
                 if isinstance(exc, DataDoesNotExists):
                     status_code = 404
+                    response_headers.append(("X-DATATOOLS-PATH", f"{exc}"))
                 else:
                     status_code = 400
                 result = {"error_msg": str(exc), "error_cls": exc.__class__.__name__}
+                response_headers.append(
+                    ("X-DATATOOLS-ERROR", f"{exc.__class__.__name__}: {exc}")
+                )
             except Exception:
                 logging.error(traceback.format_exc())
                 status_code = 500
@@ -456,7 +454,6 @@ class StorageServer:
         # TODO get other success codes
         status = "%s %s" % (status_code, HTTPStatus(status_code).phrase)
 
-        response_headers = []
         response_headers += [
             ("Content-Type", output_content_type),
             ("Content-Length", str(content_length_result)),
@@ -486,17 +483,12 @@ class _TestCliStorage(AbstractStorage):
         if proc.returncode:
             # try to get error class / message
             err_text = err.decode().splitlines()
-            # last line
+            # last non empty line
             err_text = [x.strip() for x in err_text if x.strip()]
             err_text = err_text[-1]
-            try:
-                err_cls, err_msg = re.match(".*<([^:]+): ([^>]+)>", err_text).groups()
-                err_cls = getattr(exceptions, err_cls)
-            except Exception:
-                logging.error(f"cannot parse error: {err_text}")
-                err_cls = Exception
-                err_msg = err_text
-            raise err_cls(err_msg)
+            # strip
+            err_text = re.match(".*<([^:>]+: [^>]*)>", err_text).groups()[0]
+            raise_err(err_text)
 
         return out
 
