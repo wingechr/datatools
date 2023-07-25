@@ -4,8 +4,6 @@ import json
 import logging
 import pickle
 
-from .exceptions import DataDoesNotExists
-
 DEFAULT_FROM_BYTES = pickle.loads
 DEFAULT_TO_BYTES = pickle.dumps
 
@@ -51,11 +49,7 @@ def cache(
             # get data_path from function + arguments
             data_path = path_prefix + get_path(fun, args, kwargs)
             # try to get data from store
-            try:
-                byte_data = storage.data_get(data_path=data_path)
-                logging.debug("Loaded from cache")
-                data = from_bytes(byte_data)
-            except DataDoesNotExists:
+            if not storage.data_exists(data_path=data_path):
                 desc = get_job_description(fun, args, kwargs)
                 # actually call function
                 data = fun(*args, **kwargs)
@@ -63,6 +57,11 @@ def cache(
                 byte_data = to_bytes(data)
                 norm_data_path = storage.data_put(byte_data, data_path)
                 storage.metadata_put(data_path=norm_data_path, metadata=metadata)
+
+            byte_data = storage.data_get(data_path=data_path)
+            logging.debug("Loaded from cache")
+            data = from_bytes(byte_data)
+
             return data
 
         return _fun

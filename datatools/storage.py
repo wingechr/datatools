@@ -34,10 +34,10 @@ from .utils import (
 PARAM_METADATA_PATH = "p"
 PARAM_DATA_PATH = "path"
 PARAM_VALUE = "value"
-HASHED_DATA_PATH_PREFIX = "hash/"
-DEFAULT_HASH_METHOD = "md5"
 ROOT_METADATA_PATH = "$"  # root
 DEFAULT_PORT = 8000
+HASHED_DATA_PATH_PREFIX = "hash/"
+DEFAULT_HASH_METHOD = "md5"
 ALLOWED_HASH_METHODS = ["md5", "sha256"]
 
 
@@ -94,7 +94,7 @@ class AbstractStorage(abc.ABC):
     def data_delete(self, data_path: str) -> None:
         raise NotImplementedError()
 
-    def data_exists(self, data_path: str) -> bool:
+    def data_exists(self, data_path: str) -> str:
         raise NotImplementedError()
 
 
@@ -224,10 +224,11 @@ class LocalStorage(AbstractStorage):
             os.remove(data_filepath)
         return None
 
-    def data_exists(self, data_path: str) -> bool:
+    def data_exists(self, data_path: str) -> str:
         norm_data_path = self._normalize_data_path(data_path=data_path)
         data_filepath = self._get_data_filepath(norm_data_path=norm_data_path)
-        return os.path.exists(data_filepath)
+        if os.path.exists(data_filepath):
+            return norm_data_path
 
     def _create_metadata_path_pattern(self, metadata_path: str) -> str:
         metadata_path = metadata_path or ROOT_METADATA_PATH
@@ -285,12 +286,12 @@ class RemoteStorage(AbstractStorage):
         self._request("DELETE", data_path=data_path)
         return None
 
-    def data_exists(self, data_path: str) -> bool:
+    def data_exists(self, data_path: str) -> str:
         try:
             self._request("HEAD", data_path=data_path)
             return True
         except DataDoesNotExists:
-            return False
+            return None
 
     def _request(
         self,
@@ -367,8 +368,10 @@ class StorageServerRoutes:
         data_path = args[0].lstrip("/")
         if not data_path:  # only for testing if server works
             return None
-        if not self._storage.data_exists(data_path=data_path):
+        norm_data_path = self._storage.data_exists(data_path=data_path)
+        if not norm_data_path:
             raise DataDoesNotExists(data_path)
+        return norm_data_path  # NOTE: HEAD response will not send body
 
 
 class StorageServer:
@@ -535,13 +538,13 @@ class _TestCliStorage(AbstractStorage):
         args = ["data-delete", data_path]
         self._call(b"", args)
 
-    def data_exists(self, data_path: str) -> bool:
+    def data_exists(self, data_path: str) -> str:
         args = ["data-exists", data_path]
         try:
-            self._call(b"", args)
-            return True
+            out = self._call(b"", args)
+            return out.decode().strip()
         except DataDoesNotExists:
-            return False
+            return None
 
     def serve(self, port=None):
         cmd = [

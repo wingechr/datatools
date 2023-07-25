@@ -7,7 +7,7 @@ import sys
 import click
 
 from . import Storage, __version__
-from .exceptions import DataDoesNotExists, DatatoolsException
+from .exceptions import DataDoesNotExists, DataExists, DatatoolsException
 from .load import read_uri, write_uri
 from .storage import StorageServer
 from .utils import as_uri, parse_cli_metadata, uri_to_data_path
@@ -68,18 +68,26 @@ def data_delete(storage: Storage, data_path: str):
 
 @main.command("data-put")
 @click.pass_obj
+@click.option("--skip-existing", "-s", is_flag=True)
 @click.argument("source")
 @click.argument("data_path", required=False)
-def data_put(storage: Storage, source, data_path: str = None):
+def data_put(storage: Storage, source, data_path: str = None, skip_existing=False):
     if source == "-":
         source = None
         data = sys.stdin.buffer.read()
         metadata = None
     else:
         uri = as_uri(source)
-        data, metadata = read_uri(uri)
         if data_path is None:  # ! explicitly use is None, so we can manually set ""
             data_path = uri_to_data_path(uri)
+            norm_data_path = storage.data_exists(data_path=data_path)
+            if norm_data_path:
+                if not skip_existing:
+                    raise DataExists(data_path)
+                logging.info(f"Already in storage: {data_path}")
+                print(norm_data_path)
+
+        data, metadata = read_uri(uri)
 
     data_path = storage.data_put(data=data, data_path=data_path)
 
@@ -111,8 +119,10 @@ def metadata_put(storage: Storage, data_path, metadata_key_vals):
 @click.pass_obj
 @click.argument("data_path")
 def data_exists(storage: Storage, data_path: str):
-    if not storage.data_exists(data_path=data_path):
+    norm_data_path = storage.data_exists(data_path=data_path)
+    if not norm_data_path:
         raise DataDoesNotExists(data_path)
+    print(norm_data_path)
 
 
 @main.command("serve")
