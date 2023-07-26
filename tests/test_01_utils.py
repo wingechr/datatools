@@ -16,7 +16,6 @@ from datatools.utils import (
     normalize_path,
     parse_cli_metadata,
     platform_is_windows,
-    uri_to_data_path,
     uri_to_filepath_abs,
 )
 
@@ -34,10 +33,21 @@ class TestUtils(unittest.TestCase):
             ("c:/my/path//", "c/my/path"),
             ("file://a/b/", "file/a/b"),
             ("file://a/b#x", "file/a/bx"),
+            ("https://a/b/", "http/a/b"),
+            ("https://a:8000/b", "http/a/b"),
+            ("https://a/b/?a=1#x", "http/a/b/x"),
+            ("https://a/b?a=1#.x", "http/a/b.x"),
+            ("http://a.com#x", "http/a.comx"),
+            ("http://a.com#/x", "http/a.com/x"),
+            ("http://user:pass@a.com", "http/a.com"),
             ("Lower  Case with SPACE ! ", "lower_case_with_space"),
             (
                 "François fährt Straßenbahn zum Café Málaga",
                 "francois_faehrt_strassenbahn_zum_cafe_malaga",
+            ),
+            (
+                "https://www.domain-name.de/path%202021.pdf",
+                "http/www.domain-name.de/path_2021.pdf",
             ),
         ]:
             np = normalize_path(p)
@@ -62,20 +72,9 @@ class TestUtils(unittest.TestCase):
                 "file://UNC_HOST/path/file name.suffix",
             ),  # windows unc shared
         ]
-        for file_path, uri in examples:
-            self.assertEqual(uri, filepath_abs_to_uri(file_path))
-            self.assertEqual(str(file_path), uri_to_filepath_abs(uri))
-
-        for data_path, uri in [
-            ("http/a/b", "https://a/b/"),
-            ("http/a/b", "https://a:8000/b"),
-            ("http/a/b/x", "https://a/b/?a=1#x"),
-            ("http/a/b.x", "https://a/b?a=1#.x"),
-            ("http/a.comx", "http://a.com#x"),
-            ("http/a.com/x", "http://a.com#/x"),
-            ("http/a.com", "http://user:pass@a.com"),
-        ]:
-            self.assertEqual(data_path, uri_to_data_path(uri))
+        for file_path_abs, uri in examples:
+            self.assertEqual(uri, filepath_abs_to_uri(file_path_abs))
+            self.assertEqual(str(file_path_abs), uri_to_filepath_abs(uri))
 
     def test_make_file_readonly(self):
         with TemporaryDirectory() as dir:

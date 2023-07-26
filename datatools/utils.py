@@ -22,8 +22,12 @@ ANONYMOUS_USER = "Anonymous"
 LOCALHOST = "localhost"
 
 
-def get_free_port():
-    """Get a free port by binding to port 0 and releasing it."""
+def get_free_port() -> int:
+    """Get a free port by binding to port 0 and releasing it.
+
+    Returns:
+        int: free port
+    """
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind((LOCALHOST, 0))
     _, port = sock.getsockname()
@@ -31,7 +35,8 @@ def get_free_port():
     return port
 
 
-def wait_for_server(url, timeout_s=5):
+def wait_for_server(url, timeout_s=30) -> None:
+    """Wait for server to be responsive"""
     wait_s = 0.5
 
     time_start = time.time()
@@ -53,9 +58,29 @@ def wait_for_server(url, timeout_s=5):
     raise Exception("Timeout")
 
 
+def uri_to_path(uri: str) -> str:
+    url_parts = urlsplit(uri)
+    if url_parts.scheme == "https":
+        url_parts = url_parts._replace(scheme="http")
+    # remove query params
+    url_parts = url_parts._replace(query=None)
+    uri = url_parts.geturl()
+    # also remove passwords
+    uri = remove_auth_from_uri(uri)
+    # remove ports etc
+    uri = re.sub(":[^/]*", "", uri)
+    # remove fragment separator
+    uri = uri.replace("#", "")
+    path = uri
+    return path
+
+
 def normalize_path(path: str) -> str:
-    """should be all lowercase"""
+    """should be all lowercase ascii"""
     _path = path  # save original
+    if is_uri(path):
+        path = uri_to_path(uri=path)
+
     path = unquote_plus(path)
     path = path.lower()
     for cin, cout in [
@@ -68,8 +93,8 @@ def normalize_path(path: str) -> str:
     path = unidecode.unidecode(path)
     path = path.replace("\\", "/")
     path = re.sub("/+", "/", path)
-    # explicitly delete some
-    path = re.sub(r"[#:]+", "", path)
+    # delete : drive
+    path = re.sub(r"[:]+", "", path)
     path = re.sub(r"[^a-z0-9/_.\-]+", " ", path)
     path = path.strip()
     path = re.sub(r"\s+", "_", path)
@@ -100,20 +125,20 @@ def get_query_arg(kwargs: dict, key: str, default=None) -> str:
     return unquote_plus(value)
 
 
-def get_hostname():
+def get_hostname() -> str:
     return socket.gethostname()
 
 
-def get_fqhostname():
+def get_fqhostname() -> str:
     return socket.getfqdn()
 
 
-def get_username():
+def get_username() -> str:
     # getpass.getuser() does not always work
     return os.environ.get("USERNAME") or os.environ.get("USER") or ANONYMOUS_USER
 
 
-def get_user_w_host():
+def get_user_w_host() -> str:
     return f"{get_username()}@{get_fqhostname()}"
 
 
@@ -128,7 +153,7 @@ def get_now() -> datetime.datetime:
     return now_tz
 
 
-def get_now_str():
+def get_now_str() -> str:
     now = get_now()
     now_str = now.strftime(DATETIMETZ_FMT)
     # add ":" in offset
@@ -136,26 +161,31 @@ def get_now_str():
     return now_str
 
 
-def platform_is_windows():
+def platform_is_windows() -> bool:
     # os.name: 'posix', 'nt', 'java'
     return os.name == "nt"
 
 
-def make_file_readonly(file_path):
+def make_file_readonly(file_path: str) -> None:
     current_permissions = os.stat(file_path).st_mode
     readonly_permissions = current_permissions & ~FILEMOD_WRITE
     os.chmod(file_path, readonly_permissions)
 
 
-def make_file_writable(file_path):
+def make_file_writable(file_path: str) -> None:
     current_permissions = os.stat(file_path).st_mode
     readonly_permissions = current_permissions | FILEMOD_WRITE
     os.chmod(file_path, readonly_permissions)
 
 
-def as_uri(source: str):
-    if not re.match(".+://", source, re.IGNORECASE):
+def is_uri(source: str):
+    return bool(re.match(".+://", source))
+
+
+def as_uri(source: str) -> str:
+    if not is_uri(source):
         # assume local path
+        # uri must be absolute path
         filepath_abs = Path(source).absolute()
         uri = filepath_abs_to_uri(filepath_abs=filepath_abs)
         logging.debug(f"Translate {source} => {uri}")
@@ -170,12 +200,12 @@ def filepath_abs_to_uri(filepath_abs: Path) -> str:
         abspath(Path): must be already absolute path!
     """
     uri = filepath_abs.as_uri()
-    uri = urlsplit(uri)
+    url_parts = urlsplit(uri)
 
-    if not uri.netloc:
-        uri = uri._replace(netloc=get_hostname())
+    if not url_parts.netloc:
+        url_parts = url_parts._replace(netloc=get_hostname())
 
-    uri = uri.geturl()  # unsplit
+    uri = url_parts.geturl()  # unsplit
 
     # we dont want it quoted
     uri = unquote(uri)
@@ -192,46 +222,25 @@ def uri_to_filepath_abs(uri: str) -> str:
     is_local = url.netloc == get_hostname()
     is_win = re.match("/[a-zA-Z]:/", url.path) or (not is_local)
 
-    path = url.path
+    filepath_abs = url.path
     if is_win:
         if is_local:
             # remove starting /
-            path = path.lstrip("/")
+            filepath_abs = filepath_abs.lstrip("/")
 
         else:  # unc share
-            path = f"//{url.netloc}{path}"
-        path = path.replace("/", "\\")
+            filepath_abs = f"//{url.netloc}{filepath_abs}"
+        filepath_abs = filepath_abs.replace("/", "\\")
     else:  # posix
         if not is_local:
             raise NotImplementedError(f"unc share in posix: {uri}")
         pass
 
-    return path
+    return filepath_abs
 
 
 def remove_auth_from_uri(uri: str) -> str:
     return re.sub("[^/]*@", "", uri)
-
-
-def uri_to_data_path(uri: str) -> str:
-    url = urlsplit(uri)
-    if url.scheme == "https":
-        url = url._replace(scheme="http")
-    url = url._replace(query=None)
-    uri = url.geturl()
-    uri = uri.rstrip("/")
-    # also remove passwords
-    uri = remove_auth_from_uri(uri)
-
-    # remove ports etc
-    uri = re.sub(":[^/]*", "", uri)
-
-    uri = re.sub("/+", "/", uri)
-
-    # remove fragment separator
-    uri = uri.replace("#", "")
-
-    return uri
 
 
 def parse_cli_metadata(metadata_key_vals):

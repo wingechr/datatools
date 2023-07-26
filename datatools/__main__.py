@@ -10,7 +10,7 @@ from . import Storage, __version__
 from .exceptions import DataDoesNotExists, DataExists, DatatoolsException
 from .load import read_uri, write_uri
 from .storage import StorageServer
-from .utils import as_uri, parse_cli_metadata, uri_to_data_path
+from .utils import as_uri, parse_cli_metadata
 
 
 @click.group()
@@ -20,7 +20,7 @@ from .utils import as_uri, parse_cli_metadata, uri_to_data_path
     "--loglevel",
     "-l",
     type=click.Choice(["debug", "info", "warning", "error"], case_sensitive=False),
-    default="debug",
+    default="info",
     show_default=True,
 )
 @click.option("--location", "-d")
@@ -63,7 +63,7 @@ def data_get(storage: Storage, data_path: str, file_path: str):
 @click.pass_obj
 @click.argument("data_path")
 def data_delete(storage: Storage, data_path: str):
-    storage._data_delete(norm_data_path=data_path)
+    storage.data_delete(data_path=data_path)
 
 
 @main.command("data-put")
@@ -79,23 +79,21 @@ def data_put(storage: Storage, source, data_path: str = None, exist_ok=False):
     else:
         uri = as_uri(source)
         if data_path is None:  # ! explicitly use is None, so we can manually set ""
-            data_path = uri_to_data_path(uri)
-            norm_data_path = storage._data_exists(norm_data_path=data_path)
+            data_path = uri
+            norm_data_path = storage.data_exists(data_path=data_path)
             if norm_data_path:
                 if not exist_ok:
-                    raise DataExists(data_path)
-                logging.info(f"Already in storage: {data_path}")
+                    raise DataExists(norm_data_path)
+                logging.info(f"Already in storage: {norm_data_path}")
                 print(norm_data_path)
                 return
 
         data, metadata = read_uri(uri)
 
-    data_path = storage._data_put(
-        data=data, norm_data_path=data_path, exist_ok=exist_ok
-    )
+    data_path = storage.data_put(data=data, data_path=data_path, exist_ok=exist_ok)
 
     if metadata:
-        storage._metadata_put(norm_data_path=data_path, metadata=metadata)
+        storage.metadata_put(data_path=data_path, metadata=metadata)
 
     print(data_path)
 
@@ -105,9 +103,7 @@ def data_put(storage: Storage, source, data_path: str = None, exist_ok=False):
 @click.argument("data_path")
 @click.argument("metadata_path", required=False)
 def metadata_get(storage: Storage, data_path, metadata_path):
-    results = storage._metadata_get(
-        norm_data_path=data_path, metadata_path=metadata_path
-    )
+    results = storage.metadata_get(data_path=data_path, metadata_path=metadata_path)
     print(json.dumps(results, indent=2, ensure_ascii=True))
 
 
@@ -117,14 +113,14 @@ def metadata_get(storage: Storage, data_path, metadata_path):
 @click.argument("metadata_key_vals", nargs=-1, required=True)
 def metadata_put(storage: Storage, data_path, metadata_key_vals):
     metadata = parse_cli_metadata(metadata_key_vals)
-    storage._metadata_put(norm_data_path=data_path, metadata=metadata)
+    storage.metadata_put(data_path=data_path, metadata=metadata)
 
 
 @main.command("data-exists")
 @click.pass_obj
 @click.argument("data_path")
 def data_exists(storage: Storage, data_path: str):
-    norm_data_path = storage._data_exists(norm_data_path=data_path)
+    norm_data_path = storage.data_exists(data_path=data_path)
     if not norm_data_path:
         raise DataDoesNotExists(data_path)
     print(norm_data_path)

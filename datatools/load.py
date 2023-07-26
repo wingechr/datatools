@@ -19,14 +19,14 @@ def read_uri(uri: str) -> Tuple[bytes, str, dict]:
     metadata = {}
     metadata["source.path"] = remove_auth_from_uri(uri)
 
-    url = urlsplit(uri)
+    url_parts = urlsplit(uri)
 
     # protocol routing
-    if url.scheme == "file":
+    if url_parts.scheme == "file":
         file_path = uri_to_filepath_abs(uri)
         with open(file_path, "rb") as file:
             data = file.read()
-    elif url.scheme in ["http", "https"]:
+    elif url_parts.scheme in ["http", "https"]:
         res = requests.get(uri)
         res.raise_for_status()
         content_type = res.headers.get("Content-Type")
@@ -36,7 +36,7 @@ def read_uri(uri: str) -> Tuple[bytes, str, dict]:
             logging.info(_meta)
         data = res.content
     else:
-        raise NotImplementedError(url.scheme)
+        raise NotImplementedError(url_parts.scheme)
 
     return data, metadata
 
@@ -46,9 +46,9 @@ def write_uri(uri, data: bytes):
         # assume local path
         uri = filepath_abs_to_uri(Path(uri).absolute())
 
-    url = urlsplit(uri)
+    url_parts = urlsplit(uri)
     # protocol routing
-    if url.scheme == "file":
+    if url_parts.scheme == "file":
         file_path = uri_to_filepath_abs(uri)
         if os.path.exist(file_path):
             raise FileExistsError(file_path)
@@ -56,4 +56,4 @@ def write_uri(uri, data: bytes):
         with open(file_path, "wb") as file:
             file.write(data)
     else:
-        raise NotImplementedError(url.scheme)
+        raise NotImplementedError(url_parts.scheme)
