@@ -86,10 +86,13 @@ def data_put(storage: Storage, source, data_path: str = None, exist_ok=False):
                     raise DataExists(data_path)
                 logging.info(f"Already in storage: {data_path}")
                 print(norm_data_path)
+                return
 
         data, metadata = read_uri(uri)
 
-    data_path = storage._data_put(data=data, norm_data_path=data_path)
+    data_path = storage._data_put(
+        data=data, norm_data_path=data_path, exist_ok=exist_ok
+    )
 
     if metadata:
         storage._metadata_put(norm_data_path=data_path, metadata=metadata)

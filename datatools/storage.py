@@ -43,6 +43,7 @@ ROOT_METADATA_PATH = "$"  # root
 DEFAULT_PORT = 8000
 HASHED_DATA_PATH_PREFIX = "hash/"
 ALLOWED_HASH_METHODS = ["md5", "sha256"]
+
 DEFAULT_HASH_METHOD = ALLOWED_HASH_METHODS[0]
 
 
@@ -91,7 +92,7 @@ class AbstractStorage(abc.ABC):
     def _metadata_put(self, norm_data_path: str, metadata: dict) -> None:
         raise NotImplementedError()
 
-    def _data_put(self, norm_data_path: str, data: bytes) -> str:
+    def _data_put(self, norm_data_path: str, data: bytes, exist_ok: bool) -> str:
         """Returns norm_data_path"""
         raise NotImplementedError()
 
@@ -116,12 +117,22 @@ class AbstractStorage(abc.ABC):
         norm_data_path = self._normalize_data_path(data_path)
         return self._metadata_put(norm_data_path=norm_data_path, metadata=metadata)
 
-    def data_put(self, data: bytes, data_path: str = None) -> str:
+    def data_put(self, data: bytes, data_path: str = None, exist_ok=None) -> str:
         # if not datapath: map to default hash endpoint
         if not data_path:
-            data_path = f"{HASHED_DATA_PATH_PREFIX}{DEFAULT_HASH_METHOD}"
-        norm_data_path = self._normalize_data_path(data_path)
-        return self._data_put(data=data, norm_data_path=norm_data_path)
+            norm_data_path = self._normalize_data_path(
+                f"{HASHED_DATA_PATH_PREFIX}{DEFAULT_HASH_METHOD}"
+            )
+            if exist_ok is False:
+                logging.warning("without a data path, exist_ok = False will be ignored")
+            exist_ok = True
+        else:
+            exist_ok = bool(exist_ok)
+            norm_data_path = self._normalize_data_path(data_path)
+
+        return self._data_put(
+            data=data, norm_data_path=norm_data_path, exist_ok=exist_ok
+        )
 
     def data_get(self, data_path: str) -> bytes:
         norm_data_path = self._normalize_data_path(data_path)
@@ -149,9 +160,33 @@ class Storage(AbstractStorage):
 
 
 class LocalStorage(AbstractStorage):
+    # HELPER METHODS
+
+    def _create_metadata_path_pattern(self, metadata_path: str) -> str:
+        metadata_path_pattern = jsonpath_ng.parse(metadata_path)
+        return metadata_path_pattern
+
+    def _get_data_filepath(self, norm_data_path: str):
+        data_filepath = os.path.join(self.location, norm_data_path)
+        data_filepath = self._get_abs_path_with_parent(path=data_filepath)
+        return data_filepath
+
+    def _get_metadata_filepath(self, norm_data_path: str):
+        data_filepath = self._get_data_filepath(norm_data_path=norm_data_path)
+        metadata_filepath = data_filepath + ".metadata.json"
+        metadata_filepath = self._get_abs_path_with_parent(path=metadata_filepath)
+        return metadata_filepath
+
+    def _get_abs_path_with_parent(self, path):
+        path = os.path.abspath(path)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        return path
+
+    # METHODS FROM BASE CLASS
+
     def _metadata_get(self, norm_data_path: str, metadata_path: str) -> object:
         metadata_path_pattern = self._create_metadata_path_pattern(metadata_path)
-        metadata_filepath = self._get_metadata_filepath(data_path=norm_data_path)
+        metadata_filepath = self._get_metadata_filepath(norm_data_path=norm_data_path)
         if not os.path.exists(metadata_filepath):
             return None
         logging.debug(f"READING {metadata_filepath}")
@@ -167,14 +202,13 @@ class LocalStorage(AbstractStorage):
         return result
 
     def _metadata_put(self, norm_data_path: str, metadata: dict) -> None:
-        metadata_filepath = self._get_metadata_filepath(data_path=norm_data_path)
+        metadata_filepath = self._get_metadata_filepath(norm_data_path=norm_data_path)
 
         if not os.path.exists(metadata_filepath):
             _metadata = {}
         else:
             logging.debug(f"READING {metadata_filepath}")
-            mode = "rb"
-            with open(metadata_filepath, mode) as file:
+            with open(metadata_filepath, "rb") as file:
                 _metadata = json.load(file)
 
         for metadata_path, value in metadata.items():
@@ -185,42 +219,33 @@ class LocalStorage(AbstractStorage):
         metadata_bytes = json.dumps(_metadata, indent=2, ensure_ascii=False).encode()
 
         logging.debug(f"WRITING {metadata_filepath}")
-        mode = "wb"
-        with open(metadata_filepath, mode) as file:
+        with open(metadata_filepath, "wb") as file:
             file.write(metadata_bytes)
 
         return None
 
-    def _data_put(self, norm_data_path: str, data: bytes) -> str:
+    def _data_put(self, norm_data_path: str, data: bytes, exist_ok: bool) -> str:
         if norm_data_path.startswith(HASHED_DATA_PATH_PREFIX):
             offset = len(HASHED_DATA_PATH_PREFIX)
             hash_method = norm_data_path[offset:]
             if hash_method not in ALLOWED_HASH_METHODS:
                 raise InvalidPath(norm_data_path)
-            norm_data_path = None
         else:
             hash_method = DEFAULT_HASH_METHOD
 
+        # get data hashsum
         hasher = getattr(hashlib, hash_method)()
         hasher.update(data)
         hashsum = hasher.hexdigest()
 
-        if not norm_data_path:
-            norm_data_path = f"{HASHED_DATA_PATH_PREFIX}{hash_method}/{hashsum}"
-            norm_data_path = self._normalize_data_path(data_path=norm_data_path)
-            data_filepath = self._get_data_filepath(norm_data_path=norm_data_path)
-            if os.path.exists(data_filepath):
-                logging.info("data already existed")
-        else:
-            norm_data_path = self._normalize_data_path(data_path=norm_data_path)
-            if norm_data_path.startswith(HASHED_DATA_PATH_PREFIX):
-                raise InvalidPath(norm_data_path)
-
-            data_filepath = self._get_data_filepath(norm_data_path=norm_data_path)
-            if os.path.exists(data_filepath):
+        if self._data_exists(norm_data_path=norm_data_path):
+            if not exist_ok:
                 raise DataExists(norm_data_path)
+            logging.info(f"Skipping existing file: {norm_data_path}")
+            return norm_data_path
 
-        os.makedirs(os.path.dirname(data_filepath), exist_ok=True)
+        # write data
+        data_filepath = self._get_data_filepath(norm_data_path=norm_data_path)
         logging.debug(f"WRITING {data_filepath}")
         with open(data_filepath, "wb") as file:
             file.write(data)
@@ -239,7 +264,6 @@ class LocalStorage(AbstractStorage):
         return norm_data_path
 
     def _data_get(self, norm_data_path: str) -> bytes:
-        norm_data_path = self._normalize_data_path(data_path=norm_data_path)
         data_filepath = self._get_data_filepath(norm_data_path=norm_data_path)
         if not os.path.exists(data_filepath):
             raise DataDoesNotExists(norm_data_path)
@@ -252,7 +276,6 @@ class LocalStorage(AbstractStorage):
         """
         delete file (or do nothing if it soed not exist)
         """
-        norm_data_path = self._normalize_data_path(data_path=norm_data_path)
         data_filepath = self._get_data_filepath(norm_data_path=norm_data_path)
         if os.path.exists(data_filepath):
             make_file_writable(data_filepath)
@@ -261,35 +284,16 @@ class LocalStorage(AbstractStorage):
         return None
 
     def _data_exists(self, norm_data_path: str) -> str:
-        norm_data_path = self._normalize_data_path(data_path=norm_data_path)
         data_filepath = self._get_data_filepath(norm_data_path=norm_data_path)
         if os.path.exists(data_filepath):
             return norm_data_path
-
-    def _create_metadata_path_pattern(self, metadata_path: str) -> str:
-        metadata_path = metadata_path or ROOT_METADATA_PATH
-        metadata_path = jsonpath_ng.parse(metadata_path)
-        return metadata_path
-
-    def _get_data_filepath(self, norm_data_path: str):
-        filepath = os.path.join(self.location, norm_data_path)
-        filepath = os.path.abspath(filepath)
-        return filepath
-
-    def _get_metadata_filepath(self, data_path: str):
-        norm_data_path = self._normalize_data_path(data_path=data_path)
-        data_filepath = self._get_data_filepath(norm_data_path=norm_data_path)
-        metadata_filepath = data_filepath + ".metadata.json"
-        os.makedirs(os.path.dirname(metadata_filepath), exist_ok=True)
-        metadata_filepath = os.path.abspath(metadata_filepath)
-        return metadata_filepath
+        return None
 
 
 class RemoteStorage(AbstractStorage):
     """ """
 
     def _metadata_get(self, norm_data_path: str, metadata_path: str) -> object:
-        metadata_path = metadata_path or ROOT_METADATA_PATH
         result = self._request(
             method="GET",
             data_path=norm_data_path,
@@ -300,10 +304,7 @@ class RemoteStorage(AbstractStorage):
     def _metadata_put(self, norm_data_path: str, metadata: dict) -> None:
         self._request(method="PATCH", data_path=norm_data_path, data=metadata)
 
-    def _data_put(self, norm_data_path: str, data: bytes) -> str:
-        if not norm_data_path:
-            norm_data_path = f"{HASHED_DATA_PATH_PREFIX}{DEFAULT_HASH_METHOD}"
-
+    def _data_put(self, norm_data_path: str, data: bytes, exist_ok: bool) -> str:
         if norm_data_path.startswith(HASHED_DATA_PATH_PREFIX):
             method = "POST"
         else:
@@ -498,7 +499,7 @@ class StorageServer:
 
 
 class _TestCliStorage(AbstractStorage):
-    def _call(self, data, args):
+    def _proc(self, args, pipe=None):
         cmd = [
             sys.executable,
             "-m",
@@ -508,8 +509,12 @@ class _TestCliStorage(AbstractStorage):
             "-l",
             "debug",
         ] + args
-        proc = sp.Popen(cmd, stdout=sp.PIPE, stdin=sp.PIPE, stderr=sp.PIPE)
+        proc = sp.Popen(cmd, stdout=pipe, stdin=pipe, stderr=pipe)
         logging.debug(" ".join(cmd) + f" ({proc.pid})")
+        return proc
+
+    def _call(self, data, args):
+        proc = self._proc(args, sp.PIPE)
         out, err = proc.communicate(data)
         if proc.returncode:
             # try to get error class / message
@@ -518,10 +523,14 @@ class _TestCliStorage(AbstractStorage):
             err_text = [x.strip() for x in err_text if x.strip()]
             err_text = err_text[-1]
             # strip
+            # logging.error(err_text)
             err_text = re.match(".*<([^:>]+: [^>]*)>", err_text).groups()[0]
             raise_err(err_text)
 
         return out
+
+    def serve(self, port=None):
+        return self._proc(["serve", "--port", str(port)])
 
     def _metadata_get(self, norm_data_path: str, metadata_path: str) -> object:
         args = ["metadata-get", norm_data_path]
@@ -538,7 +547,7 @@ class _TestCliStorage(AbstractStorage):
         args = ["metadata-put", norm_data_path] + meta_key_vals
         self._call(b"", args)
 
-    def _data_put(self, norm_data_path: str, data: bytes) -> str:
+    def _data_put(self, norm_data_path: str, data: bytes, exist_ok: bool) -> str:
         if isinstance(data, str):
             file_path = data
             data = None
@@ -547,6 +556,8 @@ class _TestCliStorage(AbstractStorage):
         args = ["data-put", file_path]
         if norm_data_path:
             args += [norm_data_path]
+        if exist_ok:
+            args += ["--exist-ok"]
 
         res = self._call(data, args)
         return res.decode().strip()
@@ -568,18 +579,3 @@ class _TestCliStorage(AbstractStorage):
             return out.decode().strip()
         except DataDoesNotExists:
             return None
-
-    def serve(self, port=None):
-        cmd = [
-            sys.executable,
-            "-m",
-            "datatools",
-            "-d",
-            self.location,
-            "serve",
-            "--port",
-            str(port),
-        ]
-        proc = sp.Popen(cmd)
-        logging.debug(" ".join(cmd) + f" ({proc.pid})")
-        return proc

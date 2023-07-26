@@ -14,14 +14,15 @@ from datatools.utils import (
     wait_for_server,
 )
 
-from .test_02_storage import Test_01_LocalStorage
+# dont import Test_01_LocalStorage directly, or it will be run twice
+from . import test_02_storage as t
 
 logging.basicConfig(
     format="[%(asctime)s %(levelname)7s] %(message)s", level=logging.DEBUG
 )
 
 
-class Test_02_RemoteStorage(Test_01_LocalStorage):
+class Test_02_RemoteStorage(t.Test_01_LocalStorage):
     def setUp(self) -> None:
         super().setUp()
 
@@ -34,7 +35,7 @@ class Test_02_RemoteStorage(Test_01_LocalStorage):
         self.storage = RemoteStorage(location=remote_location)
 
 
-class Test_03_TestCliStorage(Test_01_LocalStorage):
+class Test_03_TestCliStorage(t.Test_01_LocalStorage):
     def setUp(self) -> None:
         super().setUp()
 
@@ -84,14 +85,18 @@ class Test_03_TestCliStorage(Test_01_LocalStorage):
         # read file://
         expected_path = normalize_path(filepath_abs_to_uri(Path(filepath).absolute()))
         # NOTE: use _data_put directly for this test
-        data_path = self.storage._data_put(data=filepath, norm_data_path=None)
+        data_path = self.storage._data_put(
+            data=filepath, norm_data_path=None, exist_ok=False
+        )
         self.assertEqual(expected_path, data_path)
 
         # read http://
         url = f"http://user:passwd@{LOCALHOST}:{self.static_port}/{filename}#.anchor"
         expected_path = f"http/{LOCALHOST}/test.txt.anchor"
         # NOTE: use _data_put directly for this test
-        data_path = self.storage._data_put(data=url, norm_data_path=None)
+        data_path = self.storage._data_put(
+            data=url, norm_data_path=None, exist_ok=False
+        )
         self.assertEqual(expected_path, data_path)
 
         # this should auto save the source
