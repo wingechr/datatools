@@ -273,6 +273,9 @@ def remove_auth_from_uri_or_path(uri_or_path):
         url_parts = url_parts._replace(
             netloc=remove_auth_from_url_netloc(url_parts.netloc)
         )
+    if not url_parts.netloc:
+        # usually, netloc is empty, and so geturl() drops the "//"" at the beginning
+        url_parts = url_parts._replace(path="//" + url_parts.path)
     return url_parts.geturl()
 
 
@@ -296,7 +299,9 @@ def parse_cli_metadata(metadata_key_vals):
     """cli: list of key=value"""
     metadata = {}
     for key_value in metadata_key_vals:
-        key, value = key_value.split("=")
+        parts = key_value.split("=")
+        key = parts[0]
+        value = "=".join(parts[1:])
         key = key.strip()
         value = value.strip()
         try:

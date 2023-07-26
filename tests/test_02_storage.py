@@ -3,6 +3,7 @@ import os
 import unittest
 from tempfile import TemporaryDirectory
 
+from datatools.cache import DEFAULT_FROM_BYTES
 from datatools.exceptions import DataDoesNotExists, DataExists, InvalidPath
 from datatools.storage import HASHED_DATA_PATH_PREFIX, LocalStorage
 from datatools.utils import make_file_writable, normalize_path
@@ -96,3 +97,10 @@ class Test_01_LocalStorage(TestBase):
             data_path=data_path_user, metadata_path="b.c"
         )
         self.assertTrue(objects_euqal(metadata2, ["test", "test2"]))
+
+    def test_storage_autoload(self):
+        uri = "sqlite:///:memory:?q=select 1"
+        self.assertRaises(DataDoesNotExists, self.storage.data_get, data_path=uri)
+        data = self.storage.data_get(data_path=uri, auto_load_uri=True)
+        df = DEFAULT_FROM_BYTES(data)
+        self.assertEqual(df.iloc[0, 0], 1)

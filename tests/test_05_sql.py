@@ -1,6 +1,5 @@
 # import logging
 
-
 from datatools.cache import DEFAULT_FROM_BYTES
 from datatools.load import read_uri
 
@@ -16,11 +15,11 @@ class Test_05_Sql(TestBase):
         uri = f"sqlite:///:memory:?q={query}"
         data, _metadata = read_uri(uri)
         df = DEFAULT_FROM_BYTES(data)
-        self.assertEqual(df.loc[0, "value"], 1)
+        self.assertEqual(df.iloc[0, 0], 1)
 
         # try sqlite3 database
         dbpath = self.tempdir_path.replace("\\", "/") + "/test.db"
         uri = f"sqlite:///{dbpath}?q={query}"
         data, _metadata = read_uri(uri)
         df = DEFAULT_FROM_BYTES(data)
-        self.assertEqual(df.loc[0, "value"], 1)
+        self.assertEqual(df.iloc[0, 0], 1)

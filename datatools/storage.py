@@ -25,11 +25,13 @@ from .exceptions import (
     InvalidPath,
     raise_err,
 )
+from .load import read_uri
 from .utils import (
     LOCALHOST,
     get_default_storage_location,
     get_now_str,
     get_user_w_host,
+    is_uri,
     json_serialize,
     make_file_readonly,
     make_file_writable,
@@ -133,7 +135,20 @@ class AbstractStorage(abc.ABC):
             data=data, norm_data_path=norm_data_path, exist_ok=exist_ok
         )
 
-    def data_get(self, data_path: str) -> bytes:
+    def data_get(self, data_path: str, auto_load_uri: bool = False) -> bytes:
+        if auto_load_uri and not self.data_exists(data_path=data_path):
+            if not is_uri(data_path):
+                raise NotImplementedError(
+                    "auto_load_uri only works if data_path is uri"
+                )
+            uri = data_path
+            data, metadata = read_uri(uri)
+            norm_data_path = self.data_put(
+                data=data, data_path=data_path, exist_ok=False
+            )
+            if metadata:
+                self._metadata_put(norm_data_path=norm_data_path, metadata=metadata)
+
         norm_data_path = self._normalize_data_path(data_path)
         return self._data_get(norm_data_path=norm_data_path)
 
@@ -520,7 +535,7 @@ class _TestCliStorage(AbstractStorage):
             "debug",
         ] + args
         proc = sp.Popen(cmd, stdout=pipe, stdin=pipe, stderr=pipe)
-        logging.debug(" ".join(cmd) + f" ({proc.pid})")
+        logging.debug(" ".join(cmd) + f" (pid={proc.pid})")
         return proc
 
     def _call(self, data, args):
@@ -533,9 +548,12 @@ class _TestCliStorage(AbstractStorage):
             err_text = [x.strip() for x in err_text if x.strip()]
             err_text = err_text[-1]
             # strip
-            # logging.error(err_text)
-            err_text = re.match(".*<([^:>]+: [^>]*)>", err_text).groups()[0]
-            raise_err(err_text)
+            err_text_match = re.match(".*<([^:>]+: [^>]*)>", err_text)
+            if err_text_match:
+                err_text = err_text_match.groups()[0]
+                raise_err(err_text)
+            else:
+                raise Exception(err_text)
 
         return out
 

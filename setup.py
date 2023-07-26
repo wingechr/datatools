@@ -15,7 +15,7 @@ if __name__ == "__main__":
             "sqlalchemy>=2.0",
             "sqlparse",
             "pyodbc",
-            "pandas>=2.0",
+            "pandas",
         ],
         name="wingechr-datatools",
         description=None,
