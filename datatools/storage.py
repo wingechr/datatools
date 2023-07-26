@@ -30,6 +30,7 @@ from .utils import (
     get_default_storage_location,
     get_now_str,
     get_user_w_host,
+    json_serialize,
     make_file_readonly,
     make_file_writable,
     normalize_path,
@@ -66,8 +67,6 @@ class AbstractStorage(abc.ABC):
             raise InvalidPath(data_path)
         if re.match(r".*\.metadata\..*", norm_path):
             raise InvalidPath(data_path)
-        if data_path != norm_path:
-            logging.debug(f"Translating {data_path} => {norm_path}")
         return norm_path
 
     def cache(
@@ -166,20 +165,25 @@ class LocalStorage(AbstractStorage):
         metadata_path_pattern = jsonpath_ng.parse(metadata_path)
         return metadata_path_pattern
 
-    def _get_data_filepath(self, norm_data_path: str):
+    def _get_data_filepath(self, norm_data_path: str, create_parent_dir=False):
         data_filepath = os.path.join(self.location, norm_data_path)
-        data_filepath = self._get_abs_path_with_parent(path=data_filepath)
+        data_filepath = self._get_abs_path_with_parent(
+            path=data_filepath, create_parent_dir=create_parent_dir
+        )
         return data_filepath
 
-    def _get_metadata_filepath(self, norm_data_path: str):
+    def _get_metadata_filepath(self, norm_data_path: str, create_parent_dir=False):
         data_filepath = self._get_data_filepath(norm_data_path=norm_data_path)
         metadata_filepath = data_filepath + ".metadata.json"
-        metadata_filepath = self._get_abs_path_with_parent(path=metadata_filepath)
+        metadata_filepath = self._get_abs_path_with_parent(
+            path=metadata_filepath, create_parent_dir=create_parent_dir
+        )
         return metadata_filepath
 
-    def _get_abs_path_with_parent(self, path):
+    def _get_abs_path_with_parent(self, path, create_parent_dir):
         path = os.path.abspath(path)
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if create_parent_dir:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
     # METHODS FROM BASE CLASS
@@ -202,7 +206,9 @@ class LocalStorage(AbstractStorage):
         return result
 
     def _metadata_put(self, norm_data_path: str, metadata: dict) -> None:
-        metadata_filepath = self._get_metadata_filepath(norm_data_path=norm_data_path)
+        metadata_filepath = self._get_metadata_filepath(
+            norm_data_path=norm_data_path, create_parent_dir=True
+        )
 
         if not os.path.exists(metadata_filepath):
             _metadata = {}
@@ -216,7 +222,9 @@ class LocalStorage(AbstractStorage):
             logging.debug(f"update metadata: {metadata_path} => {value}")
             metadata_path_pattern.update_or_create(_metadata, value)
 
-        metadata_bytes = json.dumps(_metadata, indent=2, ensure_ascii=False).encode()
+        metadata_bytes = json.dumps(
+            _metadata, indent=2, ensure_ascii=False, default=json_serialize
+        ).encode()
 
         logging.debug(f"WRITING {metadata_filepath}")
         with open(metadata_filepath, "wb") as file:
@@ -245,7 +253,9 @@ class LocalStorage(AbstractStorage):
             return norm_data_path
 
         # write data
-        data_filepath = self._get_data_filepath(norm_data_path=norm_data_path)
+        data_filepath = self._get_data_filepath(
+            norm_data_path=norm_data_path, create_parent_dir=True
+        )
         logging.debug(f"WRITING {data_filepath}")
         with open(data_filepath, "wb") as file:
             file.write(data)
@@ -345,7 +355,7 @@ class RemoteStorage(AbstractStorage):
         url = self.location + url_path
         # make sure data is bytes
         if not (data is None or isinstance(data, bytes)):
-            data = json.dumps(data).encode()
+            data = json.dumps(data, default=json_serialize).encode()
         logging.debug(f"CLI REQ: {method} {norm_data_path}")
         res = requests.request(method=method, url=url, data=data, params=params)
         logging.debug(f"CLI RES: {res.status_code}")
@@ -480,7 +490,7 @@ class StorageServer:
             result = result.encode()
         if not isinstance(result, bytes):
             output_content_type = "application/json"
-            result = json.dumps(result).encode()
+            result = json.dumps(result, default=json_serialize).encode()
 
         content_length_result = len(result)
         # TODO get other success codes

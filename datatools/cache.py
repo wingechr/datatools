@@ -8,7 +8,7 @@ DEFAULT_FROM_BYTES = pickle.loads
 DEFAULT_TO_BYTES = pickle.dumps
 
 
-def get_job_id(object):
+def get_hash(object):
     bytes = json.dumps(object, sort_keys=True, ensure_ascii=False).encode()
     job_id = hashlib.md5(bytes).hexdigest()
     return job_id
@@ -19,14 +19,17 @@ def get_job_description(fun, args, kwargs):
         "function": fun.__name__,
         "args": args,
         "kwargs": kwargs,
-        "description": fun.__doc__,  # todo: maybe cleanup doc before hashing?
+        "description": fun.__doc__,  # todo: maybe cleanup into plain text
     }
 
 
 def default_get_path(fun, args, kwargs):
     f_name = f"{fun.__name__}"
     job_desc = get_job_description(fun, args, kwargs)
-    job_id = get_job_id(job_desc)
+    # we only hash part of it:
+    job_id = get_hash({"args": job_desc["args"], "kwargs": job_desc["kwargs"]})
+    # we can shorten the hash: 8 to 10 chars should be enough
+    job_id = job_id[:8]
     return f"{f_name}_{job_id}"
 
 
@@ -50,10 +53,10 @@ def cache(
             data_path = path_prefix + get_path(fun, args, kwargs)
             # try to get data from store
             if not storage.data_exists(data_path=data_path):
-                desc = get_job_description(fun, args, kwargs)
+                job_description = get_job_description(fun, args, kwargs)
                 # actually call function
                 data = fun(*args, **kwargs)
-                metadata = {"source.creation": desc}
+                metadata = {"source.creation": job_description}
                 byte_data = to_bytes(data)
                 norm_data_path = storage.data_put(byte_data, data_path)
                 storage.metadata_put(data_path=norm_data_path, metadata=metadata)

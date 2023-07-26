@@ -1,4 +1,3 @@
-# coding: utf-8
 import logging
 import os
 import unittest
@@ -9,10 +8,6 @@ from datatools.storage import HASHED_DATA_PATH_PREFIX, LocalStorage
 from datatools.utils import make_file_writable, normalize_path
 
 from . import objects_euqal
-
-logging.basicConfig(
-    format="[%(asctime)s %(levelname)7s] %(message)s", level=logging.DEBUG
-)
 
 
 class TestBase(unittest.TestCase):

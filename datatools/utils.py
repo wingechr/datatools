@@ -10,16 +10,38 @@ from urllib.parse import unquote, unquote_plus, urlsplit
 
 import appdirs
 import requests
+import sqlparse
 import tzlocal
 import unidecode
 
 from .exceptions import InvalidPath
 
 DATETIMETZ_FMT = "%Y-%m-%dT%H:%M:%S%z"
+DATE_FMT = "%Y-%m-%d"
+TIME_FMT = "%H:%M:%S"
 
 FILEMOD_WRITE = 0o222
 ANONYMOUS_USER = "Anonymous"
 LOCALHOST = "localhost"
+
+
+def normalize_sql_query(query: str) -> str:
+    """
+    Prettify an SQL query.
+
+    Args:
+        query (str): The SQL query to be prettified.
+
+    Returns:
+        str: The prettified SQL query.
+    """
+    return sqlparse.format(
+        query,
+        reindent=False,
+        keyword_case="upper",
+        strip_comments=True,
+        strip_whitespace=True,
+    )
 
 
 def get_free_port() -> int:
@@ -62,13 +84,14 @@ def uri_to_path(uri: str) -> str:
     url_parts = urlsplit(uri)
     if url_parts.scheme == "https":
         url_parts = url_parts._replace(scheme="http")
+    if url_parts.netloc:
+        nl = url_parts.netloc
+        nl = remove_port_from_url_netloc(nl)
+        nl = remove_auth_from_url_netloc(nl)
+        url_parts = url_parts._replace(netloc=nl)
     # remove query params
     url_parts = url_parts._replace(query=None)
     uri = url_parts.geturl()
-    # also remove passwords
-    uri = remove_auth_from_uri(uri)
-    # remove ports etc
-    uri = re.sub(":[^/]*", "", uri)
     # remove fragment separator
     uri = uri.replace("#", "")
     path = uri
@@ -102,6 +125,9 @@ def normalize_path(path: str) -> str:
     path = path.strip("/")
     if not path:
         raise InvalidPath(_path)
+    if path != _path:
+        logging.debug(f"Translating {_path} => {path}")
+
     return path
 
 
@@ -239,8 +265,31 @@ def uri_to_filepath_abs(uri: str) -> str:
     return filepath_abs
 
 
-def remove_auth_from_uri(uri: str) -> str:
-    return re.sub("[^/]*@", "", uri)
+def remove_auth_from_uri_or_path(uri_or_path):
+    if not is_uri(uri_or_path):
+        return uri_or_path
+    url_parts = urlsplit(uri_or_path)
+    if url_parts.netloc:
+        url_parts = url_parts._replace(
+            netloc=remove_auth_from_url_netloc(url_parts.netloc)
+        )
+    return url_parts.geturl()
+
+
+def remove_auth_from_url_netloc(url_netloc: str) -> str:
+    """
+
+    url_path(str): path part of url
+    """
+    return re.sub("[^/@]+@", "", url_netloc)
+
+
+def remove_port_from_url_netloc(url_netloc: str) -> str:
+    """
+
+    url_path(str): path part of url
+    """
+    return re.sub(":[0-9]+$", "", url_netloc)
 
 
 def parse_cli_metadata(metadata_key_vals):
@@ -273,3 +322,17 @@ def parse_content_type(ctype: str) -> dict:
             logging.warning(f"cannot parse {key_value}")
 
     return result
+
+
+def json_serialize(x):
+    if isinstance(x, datetime.datetime):
+        return x.strftime(DATETIMETZ_FMT)
+    elif isinstance(x, datetime.date):
+        return x.strftime(DATE_FMT)
+    elif isinstance(x, datetime.time):
+        return x.strftime(TIME_FMT)
+    elif isinstance(x, type):
+        # classname
+        return x.__name__
+    else:
+        raise NotImplementedError(type(x))

@@ -1,5 +1,4 @@
-# coding: utf-8
-import logging
+# import logging
 import subprocess as sp
 import sys
 from pathlib import Path
@@ -16,10 +15,6 @@ from datatools.utils import (
 
 # dont import Test_01_LocalStorage directly, or it will be run twice
 from . import test_02_storage as t
-
-logging.basicConfig(
-    format="[%(asctime)s %(levelname)7s] %(message)s", level=logging.DEBUG
-)
 
 
 class Test_02_RemoteStorage(t.Test_01_LocalStorage):

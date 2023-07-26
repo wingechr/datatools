@@ -1,14 +1,9 @@
-# coding: utf-8
 import logging
 
 from .test_02_storage import TestBase
 
-logging.basicConfig(
-    format="[%(asctime)s %(levelname)7s] %(message)s", level=logging.DEBUG
-)
 
-
-class Test_01_Cache(TestBase):
+class Test_04_Cache(TestBase):
     def test_cache_decorator(self):
         context = {"counter": 0}
 

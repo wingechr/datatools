@@ -50,7 +50,7 @@ def main(ctx, loglevel, location):
 @click.argument("data_path")
 @click.argument("file_path")
 def data_get(storage: Storage, data_path: str, file_path: str):
-    data = storage._data_get(norm_data_path=data_path)
+    data = storage.data_get(data_path=data_path)
     if file_path == "-":
         file_path = None
     if not file_path:

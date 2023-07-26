@@ -1,5 +1,4 @@
-# coding: utf-8
-import logging
+# import logging
 import os
 import re
 import unittest
@@ -14,16 +13,13 @@ from datatools.utils import (
     make_file_readonly,
     make_file_writable,
     normalize_path,
+    normalize_sql_query,
     parse_cli_metadata,
     platform_is_windows,
     uri_to_filepath_abs,
 )
 
 from . import objects_euqal
-
-logging.basicConfig(
-    format="[%(asctime)s %(levelname)7s] %(message)s", level=logging.DEBUG
-)
 
 
 class TestUtils(unittest.TestCase):
@@ -51,10 +47,10 @@ class TestUtils(unittest.TestCase):
             ),
         ]:
             np = normalize_path(p)
-            self.assertEqual(exp_np, np)
+            self.assertEqual(exp_np, np, p)
             # also: normalized path should always normalize to self
             np = normalize_path(exp_np)
-            self.assertEqual(exp_np, np)
+            self.assertEqual(exp_np, np, exp_np)
 
     def test_path_to_file_uri(self):
         host = get_hostname()
@@ -116,3 +112,12 @@ class TestUtils(unittest.TestCase):
         self.assertTrue(
             objects_euqal(parse_cli_metadata(["a=b", "c=1"]), {"a": "b", "c": 1})
         )
+
+    def test_normalize_sql_query(self):
+        for q, eq in [
+            (
+                '\n select x,\n\t "y" /* comment*/   from [z];  ',
+                'SELECT x, "y" FROM [z];',
+            )
+        ]:
+            self.assertEqual(normalize_sql_query(q), eq)
