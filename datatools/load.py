@@ -9,7 +9,7 @@ import pandas as pd
 import requests
 import sqlalchemy as sa
 
-from .cache import DEFAULT_TO_BYTES
+from .cache import DEFAULT_MEDIA_TYPE, DEFAULT_TO_BYTES
 from .utils import (
     filepath_abs_to_uri,
     normalize_sql_query,
@@ -37,7 +37,7 @@ def get_table_schema(cursor):
     return {"fields": fields}
 
 
-def read_uri(uri: str) -> Tuple[bytes, str, dict]:
+def read_uri(uri: str) -> Tuple[bytes, dict]:
     metadata = {}
 
     metadata["source.path"] = remove_auth_from_uri_or_path(uri)
@@ -90,6 +90,7 @@ def read_uri(uri: str) -> Tuple[bytes, str, dict]:
 
         data = DEFAULT_TO_BYTES(df)
         metadata["schema"] = data_schema
+        metadata["mediatype"] = DEFAULT_MEDIA_TYPE
 
     else:
         raise NotImplementedError(url_parts.scheme)

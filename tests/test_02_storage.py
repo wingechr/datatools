@@ -99,8 +99,12 @@ class Test_01_LocalStorage(TestBase):
         self.assertTrue(objects_euqal(metadata2, ["test", "test2"]))
 
     def test_storage_autoload(self):
-        uri = "sqlite:///:memory:?q=select 1"
+        uri = "sqlite:///:memory:?q=select 1#/query1"
         self.assertRaises(DataDoesNotExists, self.storage.data_get, data_path=uri)
         data = self.storage.data_get(data_path=uri, auto_load_uri=True)
         df = DEFAULT_FROM_BYTES(data)
         self.assertEqual(df.iloc[0, 0], 1)
+
+        uri = "sqlite:///:memory:?q=select 2#/query2"
+        df2 = self.storage.data_get(data_path=uri, auto_load_uri=True, auto_decode=True)
+        self.assertEqual(df2.iloc[0, 0], 2)

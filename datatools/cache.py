@@ -6,6 +6,7 @@ import pickle
 
 DEFAULT_FROM_BYTES = pickle.loads
 DEFAULT_TO_BYTES = pickle.dumps
+DEFAULT_MEDIA_TYPE = "application/x-pickle"
 
 
 def get_hash(object):

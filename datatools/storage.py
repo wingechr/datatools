@@ -17,7 +17,7 @@ from wsgiref.simple_server import make_server
 import jsonpath_ng
 import requests
 
-from .cache import cache
+from .cache import DEFAULT_FROM_BYTES, DEFAULT_MEDIA_TYPE, cache
 from .exceptions import (
     DataDoesNotExists,
     DataExists,
@@ -135,7 +135,9 @@ class AbstractStorage(abc.ABC):
             data=data, norm_data_path=norm_data_path, exist_ok=exist_ok
         )
 
-    def data_get(self, data_path: str, auto_load_uri: bool = False) -> bytes:
+    def data_get(
+        self, data_path: str, auto_load_uri: bool = False, auto_decode: bool = False
+    ) -> Union[bytes, object]:
         if auto_load_uri and not self.data_exists(data_path=data_path):
             if not is_uri(data_path):
                 raise NotImplementedError(
@@ -150,7 +152,22 @@ class AbstractStorage(abc.ABC):
                 self._metadata_put(norm_data_path=norm_data_path, metadata=metadata)
 
         norm_data_path = self._normalize_data_path(data_path)
-        return self._data_get(norm_data_path=norm_data_path)
+        data = self._data_get(norm_data_path=norm_data_path)
+
+        if auto_decode:
+            # MUST provide mediatype
+            # TODO: select decode based on media type: right now: only default (pickle)
+            mediatype = self._metadata_get(
+                norm_data_path=norm_data_path, metadata_path="mediatype"
+            )
+            if mediatype == DEFAULT_MEDIA_TYPE:
+                data = DEFAULT_FROM_BYTES(data)
+            else:
+                raise NotImplementedError(
+                    "Can only auto_decode if mediatype is registered"
+                )
+
+        return data
 
     def data_delete(self, data_path: str) -> None:
         norm_data_path = self._normalize_data_path(data_path)
