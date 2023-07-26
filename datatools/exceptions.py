@@ -22,6 +22,10 @@ class DataDoesNotExists(DatatoolsException):
     pass
 
 
+class IntegrityError(DatatoolsException):
+    pass
+
+
 def raise_err(cls_name_and_msg: str):
     logging.error(cls_name_and_msg)
     try:

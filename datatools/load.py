@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+from io import BufferedReader
 from pathlib import Path
 from typing import Tuple
 from urllib.parse import parse_qs, urlencode, urlsplit
@@ -37,7 +38,7 @@ def get_table_schema(cursor):
     return {"fields": fields}
 
 
-def read_uri(uri: str) -> Tuple[bytes, dict]:
+def read_uri(uri: str) -> Tuple[BufferedReader, dict]:
     metadata = {}
 
     metadata["source.path"] = remove_auth_from_uri_or_path(uri)
@@ -98,7 +99,7 @@ def read_uri(uri: str) -> Tuple[bytes, dict]:
     return data, metadata
 
 
-def write_uri(uri, data: bytes):
+def write_uri(uri, data: BufferedReader):
     if not re.match(".+://", uri, re.IGNORECASE):
         # assume local path
         uri = filepath_abs_to_uri(Path(uri).absolute())

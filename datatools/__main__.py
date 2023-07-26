@@ -10,7 +10,7 @@ from . import Storage, __version__
 from .exceptions import DataDoesNotExists, DataExists, DatatoolsException
 from .load import read_uri, write_uri
 from .storage import StorageServer
-from .utils import as_uri, parse_cli_metadata
+from .utils import ByteReaderIterator, as_uri, parse_cli_metadata
 
 
 @click.group()
@@ -54,7 +54,8 @@ def data_get(storage: Storage, data_path: str, file_path: str):
     if file_path == "-":
         file_path = None
     if not file_path:
-        sys.stdout.buffer.write(data)
+        for chunk in ByteReaderIterator(data, name=file_path):
+            sys.stdout.buffer.write(chunk)
     else:
         write_uri(file_path, data)
 
@@ -74,7 +75,7 @@ def data_delete(storage: Storage, data_path: str):
 def data_put(storage: Storage, source, data_path: str = None, exist_ok=False):
     if source == "-":
         source = None
-        data = sys.stdin.buffer.read()
+        data = sys.stdin.buffer
         metadata = None
     else:
         uri = as_uri(source)

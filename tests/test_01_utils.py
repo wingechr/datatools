@@ -6,6 +6,7 @@ from pathlib import PurePosixPath, PureWindowsPath
 from tempfile import TemporaryDirectory
 
 from datatools.utils import (
+    ByteReaderIterator,
     filepath_abs_to_uri,
     get_hostname,
     get_now_str,
@@ -19,7 +20,7 @@ from datatools.utils import (
     uri_to_filepath_abs,
 )
 
-from . import objects_euqal
+from . import b_hello, b_hello_world, md5_hello, md5_hello_world, objects_euqal
 
 
 class TestUtils(unittest.TestCase):
@@ -121,3 +122,26 @@ class TestUtils(unittest.TestCase):
             )
         ]:
             self.assertEqual(normalize_sql_query(q), eq)
+
+
+class TestByteReaderIterator(unittest.TestCase):
+    def test_byte_reader_1(self):
+        # read all at once
+        bri = ByteReaderIterator(b_hello_world, hash_method="md5")
+        self.assertEqual(bri.read(), b_hello_world)
+        self.assertEqual(bri.hashsum(), md5_hello_world)
+
+        # read in chunks
+        bri = ByteReaderIterator(b_hello_world, chunk_size=2, hash_method="md5")
+        self.assertEqual(b"".join(x for x in bri), b_hello_world)
+        self.assertEqual(bri.hashsum(), md5_hello_world)
+
+        # read truncated
+        bri = ByteReaderIterator(
+            b_hello_world,
+            chunk_size=2,
+            hash_method="md5",
+            max_bytes=len(b_hello),
+        )
+        self.assertEqual(b"".join(x for x in bri), b_hello)
+        self.assertEqual(bri.hashsum(), md5_hello)

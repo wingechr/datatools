@@ -1,7 +1,6 @@
 # NOTE: we dont actually use ABC/abstractmethod
 # so that we can create decider instance
 import abc
-import hashlib
 import json
 import logging
 import os
@@ -10,6 +9,8 @@ import subprocess as sp
 import sys
 import traceback
 from http import HTTPStatus
+from io import BufferedReader, BytesIO
+from tempfile import NamedTemporaryFile
 from typing import Union
 from urllib.parse import parse_qs, unquote_plus
 from wsgiref.simple_server import make_server
@@ -22,12 +23,15 @@ from .exceptions import (
     DataDoesNotExists,
     DataExists,
     DatatoolsException,
+    IntegrityError,
     InvalidPath,
     raise_err,
 )
 from .load import read_uri
 from .utils import (
     LOCALHOST,
+    ByteReaderIterator,
+    exit_stack,
     get_default_storage_location,
     get_now_str,
     get_user_w_host,
@@ -93,11 +97,13 @@ class AbstractStorage(abc.ABC):
     def _metadata_put(self, norm_data_path: str, metadata: dict) -> None:
         raise NotImplementedError()
 
-    def _data_put(self, norm_data_path: str, data: bytes, exist_ok: bool) -> str:
+    def _data_put(
+        self, norm_data_path: str, data: BufferedReader, exist_ok: bool
+    ) -> str:
         """Returns norm_data_path"""
         raise NotImplementedError()
 
-    def _data_get(self, norm_data_path: str) -> bytes:
+    def _data_get(self, norm_data_path: str) -> BufferedReader:
         raise NotImplementedError()
 
     def _data_delete(self, norm_data_path: str) -> None:
@@ -118,7 +124,9 @@ class AbstractStorage(abc.ABC):
         norm_data_path = self._normalize_data_path(data_path)
         return self._metadata_put(norm_data_path=norm_data_path, metadata=metadata)
 
-    def data_put(self, data: bytes, data_path: str = None, exist_ok=None) -> str:
+    def data_put(
+        self, data: BufferedReader, data_path: str = None, exist_ok=None
+    ) -> str:
         # if not datapath: map to default hash endpoint
         if not data_path:
             norm_data_path = self._normalize_data_path(
@@ -137,7 +145,7 @@ class AbstractStorage(abc.ABC):
 
     def data_get(
         self, data_path: str, auto_load_uri: bool = False, auto_decode: bool = False
-    ) -> Union[bytes, object]:
+    ) -> Union[BufferedReader, object]:
         if auto_load_uri and not self.data_exists(data_path=data_path):
             if not is_uri(data_path):
                 raise NotImplementedError(
@@ -152,7 +160,10 @@ class AbstractStorage(abc.ABC):
                 self._metadata_put(norm_data_path=norm_data_path, metadata=metadata)
 
         norm_data_path = self._normalize_data_path(data_path)
+
         data = self._data_get(norm_data_path=norm_data_path)
+
+        data = exit_stack.enter_context(ByteReaderIterator(data, name=norm_data_path))
 
         if auto_decode:
             # MUST provide mediatype
@@ -161,7 +172,7 @@ class AbstractStorage(abc.ABC):
                 norm_data_path=norm_data_path, metadata_path="mediatype"
             )
             if mediatype == DEFAULT_MEDIA_TYPE:
-                data = DEFAULT_FROM_BYTES(data)
+                data = DEFAULT_FROM_BYTES(data.read())
             else:
                 raise NotImplementedError(
                     "Can only auto_decode if mediatype is registered"
@@ -264,39 +275,72 @@ class LocalStorage(AbstractStorage):
 
         return None
 
-    def _data_put(self, norm_data_path: str, data: bytes, exist_ok: bool) -> str:
-        if norm_data_path.startswith(HASHED_DATA_PATH_PREFIX):
-            offset = len(HASHED_DATA_PATH_PREFIX)
-            hash_method = norm_data_path[offset:]
-            if hash_method not in ALLOWED_HASH_METHODS:
-                raise InvalidPath(norm_data_path)
-        else:
-            hash_method = DEFAULT_HASH_METHOD
+    def _data_put(
+        self, norm_data_path: str, data: BufferedReader, exist_ok: bool
+    ) -> str:
+        filename_is_hash = norm_data_path.startswith(HASHED_DATA_PATH_PREFIX)
 
-        # get data hashsum
-        hasher = getattr(hashlib, hash_method)()
-        hasher.update(data)
-        hashsum = hasher.hexdigest()
-
-        if self._data_exists(norm_data_path=norm_data_path):
+        if not filename_is_hash and self._data_exists(norm_data_path=norm_data_path):
             if not exist_ok:
                 raise DataExists(norm_data_path)
             logging.info(f"Skipping existing file: {norm_data_path}")
             return norm_data_path
 
-        # write data
+        if filename_is_hash:
+            offset = len(HASHED_DATA_PATH_PREFIX)
+            hash_method = norm_data_path[offset:]
+            if hash_method not in ALLOWED_HASH_METHODS:
+                raise InvalidPath(norm_data_path)
+            # temporary filename, until we know the hashsum
+            norm_data_path = norm_data_path + "/__HASHSUM__"
+        else:
+            hash_method = DEFAULT_HASH_METHOD
+
+        # get abs filepath (and create parent dir)
         data_filepath = self._get_data_filepath(
             norm_data_path=norm_data_path, create_parent_dir=True
         )
-        logging.debug(f"WRITING {data_filepath}")
-        with open(data_filepath, "wb") as file:
-            file.write(data)
+        data_dir = os.path.dirname(data_filepath)
+        filename = os.path.basename(data_filepath)
+
+        with NamedTemporaryFile(
+            mode="wb", dir=data_dir, prefix=filename + "+", delete=False
+        ) as file:
+            logging.debug(f"WRITING {file.name}")
+            data = ByteReaderIterator(
+                source=data, hash_method=hash_method, name=file.name
+            )
+            for chunk in data:
+                file.write(chunk)
+        hashsum = data.hashsum()
+        size = data.position
+
+        if filename_is_hash:
+            filename = hashsum
+            norm_data_path = f"{HASHED_DATA_PATH_PREFIX}{hash_method}/{hashsum}"
+
+        data_filepath = os.path.join(data_dir, filename)
+
+        if os.path.exists(data_filepath):
+            # this should not happen,only when there are two processes writing the same
+            # target at same time?
+            raise IntegrityError(f"File exists: {data_filepath}")
+        logging.debug(f"RENAME {file.name} ==> {data_filepath}")
+        os.rename(file.name, data_filepath)
+
         make_file_readonly(data_filepath)
+
+        # check: compare with stat
+        size_os = os.path.getsize(data_filepath)
+        if size_os != size:
+            raise IntegrityError(
+                f"Filesize does not match: {size_os} =! {size}: {data_filepath}"
+            )
 
         # write metadata
         metadata = {
             f"hash.{hash_method}": hashsum,
-            "size": len(data),
+            "size": size,
             "source.user": get_user_w_host(),
             "source.datetime": get_now_str(),
             "source.name": norm_data_path,
@@ -305,13 +349,14 @@ class LocalStorage(AbstractStorage):
 
         return norm_data_path
 
-    def _data_get(self, norm_data_path: str) -> bytes:
+    def _data_get(self, norm_data_path: str) -> BufferedReader:
         data_filepath = self._get_data_filepath(norm_data_path=norm_data_path)
         if not os.path.exists(data_filepath):
             raise DataDoesNotExists(norm_data_path)
-        logging.debug(f"READING {data_filepath}")
-        with open(data_filepath, "rb") as file:
-            data = file.read()
+        logging.debug(f"OPENING {data_filepath}")
+
+        data = open(data_filepath, "rb")
+
         return data
 
     def _data_delete(self, norm_data_path: str) -> None:
@@ -346,7 +391,10 @@ class RemoteStorage(AbstractStorage):
     def _metadata_put(self, norm_data_path: str, metadata: dict) -> None:
         self._request(method="PATCH", data_path=norm_data_path, data=metadata)
 
-    def _data_put(self, norm_data_path: str, data: bytes, exist_ok: bool) -> str:
+    def _data_put(
+        self, norm_data_path: str, data: BufferedReader, exist_ok: bool
+    ) -> str:
+        # TODO: unused exist_ok
         if norm_data_path.startswith(HASHED_DATA_PATH_PREFIX):
             method = "POST"
         else:
@@ -358,7 +406,7 @@ class RemoteStorage(AbstractStorage):
         )
         return result.json()[PARAM_DATA_PATH]
 
-    def _data_get(self, norm_data_path: str) -> bytes:
+    def _data_get(self, norm_data_path: str) -> BufferedReader:
         return self._request(method="GET", data_path=norm_data_path).content
 
     def _data_delete(self, norm_data_path: str) -> None:
@@ -376,20 +424,25 @@ class RemoteStorage(AbstractStorage):
         self,
         method: str,
         data_path: str,
-        data: Union[bytes, object] = None,
+        data: Union[BufferedReader, object] = None,
         params: dict = None,
-    ) -> bytes:
+    ) -> BufferedReader:
         if data_path:
             norm_data_path = self._normalize_data_path(data_path)
         else:
             norm_data_path = ""
         url_path = "/" + norm_data_path
         url = self.location + url_path
-        # make sure data is bytes
-        if not (data is None or isinstance(data, bytes)):
+
+        # make sure data is BufferedReader
+        if isinstance(data, dict):
             data = json.dumps(data, default=json_serialize).encode()
+            data = BytesIO(data)
+
         logging.debug(f"CLI REQ: {method} {norm_data_path}")
-        res = requests.request(method=method, url=url, data=data, params=params)
+        res = requests.request(
+            method=method, url=url, data=data, params=params, stream=True
+        )
         logging.debug(f"CLI RES: {res.status_code}")
         if not res.ok:
             # get error from header
@@ -410,6 +463,7 @@ class StorageServerRoutes:
         data_path = args[0].lstrip("/")
         metadata = json.loads(data.decode())
         self._storage.metadata_put(data_path, metadata=metadata)
+        return b""
 
     def data_get_or_metadata_get(self, _data, args, kwargs):
         data_path = args[0].lstrip("/")
@@ -430,6 +484,7 @@ class StorageServerRoutes:
     def data_delete(self, _data, args, _kwargs):
         data_path = args[0].lstrip("/")
         self._storage.data_delete(data_path=data_path)
+        return b""
 
     def data_exists(self, _data, args, _kwargs):
         data_path = args[0].lstrip("/")
@@ -438,7 +493,7 @@ class StorageServerRoutes:
         norm_data_path = self._storage.data_exists(data_path=data_path)
         if not norm_data_path:
             raise DataDoesNotExists(data_path)
-        return norm_data_path  # NOTE: HEAD response will not send body
+        return b""  # NOTE: HEAD response will not send body
 
 
 class StorageServer:
@@ -469,6 +524,7 @@ class StorageServer:
             # TODO: we would want to just pass
             # input to main.save, but we need to specify the number of bytes
             # in advance
+            # BufferedReader
             input = environ["wsgi.input"]
             bdata = input.read(content_length)
         else:
@@ -477,6 +533,7 @@ class StorageServer:
         status_code = 404
         result = b""
         output_content_type = "application/octet-stream"
+        content_length_result = 0
 
         # routing
         routing_pattern = f"{method} {path}"
@@ -513,31 +570,37 @@ class StorageServer:
                 logging.error(traceback.format_exc())
                 status_code = 500
 
-        if method == "HEAD":
-            # HEAD: no body
-            result = None
+        # if method == "HEAD":
+        #    # HEAD: no body
+        #    result = None
 
-        if isinstance(result, str):
-            output_content_type = "text/plain"
-            result = result.encode()
-        if not isinstance(result, bytes):
+        if isinstance(result, dict):
             output_content_type = "application/json"
             result = json.dumps(result, default=json_serialize).encode()
+            content_length_result = len(result)
+            result = BytesIO(result)
+        else:
+            content_length_result = None
 
-        content_length_result = len(result)
         # TODO get other success codes
         status = "%s %s" % (status_code, HTTPStatus(status_code).phrase)
 
         response_headers += [
             ("Content-Type", output_content_type),
-            ("Content-Length", str(content_length_result)),
         ]
+        if content_length_result is not None:
+            response_headers += [
+                ("Content-Length", str(content_length_result)),
+            ]
 
         logging.debug(f"SRV RES: {status} {response_headers}")
 
         start_response(status, response_headers)
 
-        return [result]
+        if not result:
+            return []
+        else:
+            return result  # Iterator/BUffer
 
 
 class _TestCliStorage(AbstractStorage):
@@ -592,7 +655,9 @@ class _TestCliStorage(AbstractStorage):
         args = ["metadata-put", norm_data_path] + meta_key_vals
         self._call(b"", args)
 
-    def _data_put(self, norm_data_path: str, data: bytes, exist_ok: bool) -> str:
+    def _data_put(
+        self, norm_data_path: str, data: BufferedReader, exist_ok: bool
+    ) -> str:
         if isinstance(data, str):
             file_path = data
             data = None
@@ -607,13 +672,13 @@ class _TestCliStorage(AbstractStorage):
         res = self._call(data, args)
         return res.decode().strip()
 
-    def _data_get(self, norm_data_path: str) -> bytes:
+    def _data_get(self, norm_data_path: str) -> BufferedReader:
         file_path = "-"
         args = ["data-get", norm_data_path, file_path]
         res = self._call(b"", args)
         return res
 
-    def _data_delete(self, norm_data_path: str) -> bytes:
+    def _data_delete(self, norm_data_path: str) -> None:
         args = ["data-delete", norm_data_path]
         self._call(b"", args)
 

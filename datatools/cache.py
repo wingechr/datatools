@@ -10,8 +10,8 @@ DEFAULT_MEDIA_TYPE = "application/x-pickle"
 
 
 def get_hash(object):
-    bytes = json.dumps(object, sort_keys=True, ensure_ascii=False).encode()
-    job_id = hashlib.md5(bytes).hexdigest()
+    byte_data = json.dumps(object, sort_keys=True, ensure_ascii=False).encode()
+    job_id = hashlib.md5(byte_data).hexdigest()
     return job_id
 
 

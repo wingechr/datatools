@@ -1,11 +1,17 @@
+import atexit
 import datetime
+import hashlib
 import json
 import logging
 import os
 import re
 import socket
+import sys
 import time
+from contextlib import ExitStack
+from io import DEFAULT_BUFFER_SIZE, BufferedReader, BytesIO
 from pathlib import Path
+from typing import Union
 from urllib.parse import unquote, unquote_plus, urlsplit
 
 import appdirs
@@ -23,6 +29,14 @@ TIME_FMT = "%H:%M:%S"
 FILEMOD_WRITE = 0o222
 ANONYMOUS_USER = "Anonymous"
 LOCALHOST = "localhost"
+
+
+# global exit stack
+exit_stack = ExitStack().__enter__()
+# close on Exception
+sys.excepthook = exit_stack.__exit__
+# close also on regular exit
+atexit.register(exit_stack.__exit__, None, None, None)
 
 
 def normalize_sql_query(query: str) -> str:
@@ -341,3 +355,85 @@ def json_serialize(x):
         return x.__name__
     else:
         raise NotImplementedError(type(x))
+
+
+class ByteReaderIterator:
+    def __init__(
+        self,
+        source: Union[BufferedReader, bytes],
+        hash_method: str = None,
+        max_bytes: int = None,
+        chunk_size=None,
+        name=None,
+    ):
+        if isinstance(source, bytes):
+            source = BytesIO(source)
+        self.source = source
+        if hash_method:
+            self.hasher = getattr(hashlib, hash_method)()
+        else:
+            self.hasher = None
+        self.max_bytes = max_bytes
+        self.position = 0
+        self.chunk_size = chunk_size or DEFAULT_BUFFER_SIZE
+        self.name = name
+        self.open = True
+
+    def hashsum(self):
+        if not self.hasher:
+            raise NotImplementedError("no hash method defined")
+        return self.hasher.hexdigest()
+
+    def read(self, size: int = -1) -> bytes:
+        if size is None:
+            size = -1
+
+        if self.max_bytes:
+            n_remaining = self.max_bytes - self.position
+            # make sure we dont block
+            if size < 0 or size > n_remaining:
+                size = n_remaining
+
+        byte_data = self.source.read(size)
+
+        if self.hasher:
+            self.hasher.update(byte_data)
+
+        self.position += len(byte_data)
+
+        # close source
+        logging.debug((size, len(byte_data), self.position, self.max_bytes))
+        if (
+            not byte_data
+            or (size < 0)
+            or (self.max_bytes and self.position >= self.max_bytes)
+        ):
+            self.close()
+
+        return byte_data
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.open:
+            byte_data = self.read(self.chunk_size)
+        else:
+            byte_data = None
+        if not byte_data:
+            raise StopIteration()
+        return byte_data
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
+
+    def close(self):
+        try:
+            self.source.close()
+            logging.debug(f"CLOSING: {self.name or '*'}")
+        except Exception:
+            pass
+        self.open = False
