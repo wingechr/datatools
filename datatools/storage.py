@@ -10,6 +10,7 @@ import subprocess as sp
 import sys
 import traceback
 from http import HTTPStatus
+from io import BytesIO
 from tempfile import NamedTemporaryFile
 from typing import Union
 from urllib.parse import parse_qs, unquote_plus
@@ -30,6 +31,8 @@ from .exceptions import (
 from .load import read_uri
 from .utils import (
     LOCALHOST,
+    BufferedReaderHashWrapper,
+    BufferedReaderIterator,
     BufferedReaderMaxSizeWrapper,
     get_default_storage_location,
     get_now_str,
@@ -294,9 +297,6 @@ class LocalStorage(AbstractStorage):
             logging.info(f"Skipping existing file: {norm_data_path}")
             return norm_data_path
 
-        # get data hashsum
-        hasher = getattr(hashlib, hash_method)()
-
         # write data
         data_filepath = self._get_data_filepath(
             norm_data_path=norm_data_path, create_parent_dir=True
@@ -307,13 +307,24 @@ class LocalStorage(AbstractStorage):
             mode="wb", dir=data_dir, delete=False, prefix=filename + "+"
         ) as file:
             logging.debug(f"WRITING {file.name}")
-            file.write(data)
+            buf = BytesIO(data)
+            buf = BufferedReaderHashWrapper(buf, hash_method=hash_method)
+            buf = BufferedReaderIterator(buf)
+            for chunk in buf:
+                file.write(chunk)
 
-        hasher.update(data)
-        hashsum = hasher.hexdigest()
+        hashsum = buf.hexdigest()
+
+        # get data hashsum
+        # hasher = getattr(hashlib, hash_method)()
+        # hasher.update(data)
+        # assert hasher.hexdigest() == hashsum
 
         if filepath_is_hash:
             data_filepath = os.path.join(data_dir, hashsum)
+            # replace placeholder
+            n_placeholder = len("__HASHFILE__")
+            norm_data_path = norm_data_path[:-n_placeholder] + hashsum
 
         if os.path.exists(data_filepath):
             os.remove(file.name)
@@ -419,11 +430,19 @@ class RemoteStorage(AbstractStorage):
         url_path = "/" + norm_data_path
         url = self.location + url_path
         # make sure data is bytes
-        if not (data is None or isinstance(data, bytes)):
-            data = json.dumps(data, default=json_serialize).encode()
+        if data is not None:
+            if not isinstance(data, bytes):
+                data = json.dumps(data, default=json_serialize).encode()
+            buf = BytesIO(data)
+            buf = BufferedReaderMaxSizeWrapper(buf, max_size=len(data))
+        else:
+            buf = None
+
         logging.debug(f"CLI REQ: {method} {norm_data_path}")
 
-        res = requests.request(method=method, url=url, data=data, params=params)
+        res = requests.request(
+            method=method, url=url, data=buf, params=params, stream=True
+        )
 
         logging.debug(f"CLI RES: {res.status_code} {res.headers}")
         if not res.ok:

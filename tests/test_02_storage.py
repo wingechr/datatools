@@ -1,12 +1,13 @@
 import logging
 import os
+import secrets
 import unittest
 from tempfile import TemporaryDirectory
 
 from datatools.cache import DEFAULT_FROM_BYTES
 from datatools.exceptions import DataDoesNotExists, DataExists, InvalidPath
 from datatools.storage import HASHED_DATA_PATH_PREFIX, LocalStorage
-from datatools.utils import make_file_writable, normalize_path
+from datatools.utils import DEFAULT_BUFFER_SIZE, make_file_writable, normalize_path
 
 from . import objects_euqal
 
@@ -29,7 +30,11 @@ class TestBase(unittest.TestCase):
 class Test_01_LocalStorage(TestBase):
     def test_storage(self):
         # create local instance in temporary dir
-        data = b"hello world"
+        # data = b"hello world"
+
+        # create large random data
+        data = secrets.token_bytes(int(DEFAULT_BUFFER_SIZE * 1.5))
+
         data_path_user = "/My/path"
         invalid_path = HASHED_DATA_PATH_PREFIX + "my/path"
 
@@ -44,6 +49,9 @@ class Test_01_LocalStorage(TestBase):
         logging.debug("Step 2a: save data without path")
         data_path = self.storage.data_put(data=data)
         self.assertTrue(data_path.startswith(HASHED_DATA_PATH_PREFIX))
+
+        # load this again
+        self.assertEqual(self.storage.data_get(data_path), data)
 
         logging.debug("Step 2c: save with invalid path")
         self.assertRaises(
