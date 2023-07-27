@@ -1,10 +1,13 @@
+import atexit
 import datetime
 import json
 import logging
 import os
 import re
 import socket
+import sys
 import time
+from contextlib import ExitStack
 from pathlib import Path
 from urllib.parse import unquote, unquote_plus, urlsplit
 
@@ -23,6 +26,14 @@ TIME_FMT = "%H:%M:%S"
 FILEMOD_WRITE = 0o222
 ANONYMOUS_USER = "Anonymous"
 LOCALHOST = "localhost"
+
+
+# global exit stack
+exit_stack = ExitStack()
+# register at error
+sys.excepthook = exit_stack.__exit__
+# also register on regular exit
+atexit.register(exit_stack.__exit__, None, None, None)
 
 
 def normalize_sql_query(query: str) -> str:
