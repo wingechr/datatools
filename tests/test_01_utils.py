@@ -1,11 +1,16 @@
 # import logging
+import hashlib
 import os
 import re
 import unittest
+from io import BytesIO
 from pathlib import PurePosixPath, PureWindowsPath
 from tempfile import TemporaryDirectory
 
 from datatools.utils import (
+    BufferedReaderHashWrapper,
+    BufferedReaderIterator,
+    BufferedReaderMaxSizeWrapper,
     filepath_abs_to_uri,
     get_hostname,
     get_now_str,
@@ -121,3 +126,18 @@ class TestUtils(unittest.TestCase):
             )
         ]:
             self.assertEqual(normalize_sql_query(q), eq)
+
+
+class TestBufferedReader(unittest.TestCase):
+    def test_buffered_reader(self):
+        base_buffer = BytesIO(b"hello world")
+        buf = BufferedReaderMaxSizeWrapper(base_buffer, max_size=5)
+        buf = BufferedReaderHashWrapper(buf, hash_method="md5")
+        buf = BufferedReaderIterator(buf, chunk_size=2)
+        res = list(chunk for chunk in buf)
+        self.assertEqual(len(res), 3)
+        res = b"".join(res)
+        self.assertEqual(res, b"hello")
+        hashsum = buf.hexdigest()
+        exp_hashsum = hashlib.md5(b"hello").hexdigest()
+        self.assertEqual(hashsum, exp_hashsum)
