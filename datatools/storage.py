@@ -27,12 +27,10 @@ from .exceptions import (
     InvalidPath,
     raise_err,
 )
-from .load import read_uri
+from .load import open_uri
 from .utils import (
     LOCALHOST,
-    BufferedReaderHashWrapper,
-    BufferedReaderIterator,
-    BufferedReaderMaxSizeWrapper,
+    MyBufferedReader,
     get_default_storage_location,
     get_now_str,
     get_user_w_host,
@@ -149,7 +147,7 @@ class AbstractStorage(abc.ABC):
             norm_data_path = self._get_norm_data_path(data_path)
 
         if isinstance(data, bytes):
-            data = BufferedReaderMaxSizeWrapper(BytesIO(data), max_size=len(data))
+            data = MyBufferedReader(data)
 
         return self._data_put(
             data=data, norm_data_path=norm_data_path, exist_ok=exist_ok
@@ -162,7 +160,7 @@ class AbstractStorage(abc.ABC):
                     "auto_load_uri only works if data_path is uri"
                 )
             uri = data_path
-            data, metadata = read_uri(uri)
+            data, metadata = open_uri(uri)
             norm_data_path = self.data_put(
                 data=data, data_path=data_path, exist_ok=False
             )
@@ -322,12 +320,12 @@ class LocalStorage(AbstractStorage):
             mode="wb", dir=data_dir, delete=False, prefix=filename + "+"
         ) as file:
             logging.debug(f"WRITING {file.name}")
-            buf = BufferedReaderHashWrapper(data, hash_method=hash_method)
-            buf = BufferedReaderIterator(buf)
+            buf = MyBufferedReader(data, hash_method=hash_method)
             for chunk in buf:
                 file.write(chunk)
 
         hashsum = buf.hexdigest()
+        size = len(buf)
 
         # get data hashsum
         # hasher = getattr(hashlib, hash_method)()
@@ -355,7 +353,7 @@ class LocalStorage(AbstractStorage):
         # write metadata
         metadata = {
             f"hash.{hash_method}": hashsum,
-            "size": len(data),
+            "size": size,
             "source.user": get_user_w_host(),
             "source.datetime": get_now_str(),
             "source.name": norm_data_path,
@@ -369,9 +367,9 @@ class LocalStorage(AbstractStorage):
         if not os.path.exists(data_filepath):
             raise DataDoesNotExists(norm_data_path)
         logging.debug(f"READING {data_filepath}")
-        # with open(data_filepath, "rb") as file:
-        #    data = file.read()
+        file_size = os.path.getsize(data_filepath)
         data = open(data_filepath, "rb")
+        data = MyBufferedReader(data, max_size=file_size)
         return data
 
     def _data_delete(self, norm_data_path: str) -> None:
@@ -415,6 +413,7 @@ class RemoteStorage(AbstractStorage):
             method = "POST"
         else:
             method = "PUT"
+
         result = self._request(
             method=method,
             data_path=norm_data_path,
@@ -423,7 +422,9 @@ class RemoteStorage(AbstractStorage):
         return result.json()[PARAM_DATA_PATH]
 
     def _data_open(self, norm_data_path: str) -> BufferedReader:
-        return self._request(method="GET", data_path=norm_data_path).raw
+        res = self._request(method="GET", data_path=norm_data_path)
+        content_length = int(res.headers["Content-Length"])
+        return MyBufferedReader(res.raw, max_size=content_length)
 
     def _data_delete(self, norm_data_path: str) -> None:
         self._request("DELETE", data_path=norm_data_path)
@@ -439,7 +440,7 @@ class RemoteStorage(AbstractStorage):
         self,
         method: str,
         data_path: str,
-        data: Union[bytes, object, BufferedReader] = None,
+        data: Union[bytes, dict, BufferedReader] = None,
         params: dict = None,
     ) -> requests.Response:
         if data_path:
@@ -448,20 +449,24 @@ class RemoteStorage(AbstractStorage):
             norm_data_path = ""
         url_path = "/" + norm_data_path
         url = self.location + url_path
-        # make sure data is bytes
-        if data is not None:
-            if isinstance(data, dict):
-                data = json.dumps(data, default=json_serialize).encode()
-            if isinstance(data, bytes):
-                data = BytesIO(data)
-            buf = data
-        else:
-            buf = None
+
+        if isinstance(data, dict):
+            data = json.dumps(data, default=json_serialize).encode()
 
         logging.debug(f"CLI REQ: {method} {norm_data_path}")
 
+        # NOTE: if data is an BufferedReader like object,
+        # we need to provide a __len__ attribute
+
+        if data:
+            if not hasattr(data, "__len__"):
+                logging.warning(
+                    "need to read data completely because we dont have a size"
+                )
+                data = data.read()
+
         res = requests.request(
-            method=method, url=url, data=buf, params=params, stream=True
+            method=method, url=url, data=data, params=params, stream=True
         )
 
         logging.debug(f"CLI RES: {res.status_code} {res.headers}")
@@ -545,9 +550,7 @@ class StorageServer:
         if method in ["PUT", "POST", "PATCH"]:
             content_length = int(environ["CONTENT_LENGTH"])
 
-            input = BufferedReaderMaxSizeWrapper(
-                environ["wsgi.input"], max_size=content_length
-            )
+            input = MyBufferedReader(environ["wsgi.input"], max_size=content_length)
             bdata = input.read()
         else:
             bdata = b""
@@ -633,7 +636,7 @@ class _TestCliStorage(AbstractStorage):
         logging.debug(" ".join(cmd) + f" (pid={proc.pid})")
         return proc
 
-    def _call(self, data, args):
+    def _call(self, data: bytes, args) -> bytes:
         proc = self._proc(args, sp.PIPE)
         out, err = proc.communicate(data)
         if proc.returncode:
@@ -673,21 +676,24 @@ class _TestCliStorage(AbstractStorage):
     def _data_put(
         self, norm_data_path: str, data: BufferedReader, exist_ok: bool
     ) -> str:
-        if isinstance(data, str):
-            file_path = data
-            data = None
-        else:
-            file_path = "-"
-        args = ["data-put", file_path]
+        args = ["data-put", "-"]
         if norm_data_path:
             args += [norm_data_path]
         if exist_ok:
             args += ["--exist-ok"]
 
-        if data:
-            data = data.read()
+        data = data.read()
 
         res = self._call(data, args)
+        return res.decode().strip()
+
+    def _uri_put(self, norm_data_path: str, uri: str, exist_ok: bool) -> str:
+        args = ["data-put", uri]
+        if norm_data_path:
+            args += [norm_data_path]
+        if exist_ok:
+            args += ["--exist-ok"]
+        res = self._call(None, args)
         return res.decode().strip()
 
     def _data_open(self, norm_data_path: str) -> BufferedReader:

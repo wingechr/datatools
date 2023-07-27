@@ -8,9 +8,9 @@ import click
 
 from . import Storage, __version__
 from .exceptions import DataDoesNotExists, DataExists, DatatoolsException
-from .load import read_uri, write_uri
+from .load import open_uri, write_uri
 from .storage import StorageServer
-from .utils import as_uri, parse_cli_metadata
+from .utils import MyBufferedReader, as_uri, parse_cli_metadata
 
 
 @click.group()
@@ -50,13 +50,15 @@ def main(ctx, loglevel, location):
 @click.argument("data_path")
 @click.argument("file_path")
 def data_get(storage: Storage, data_path: str, file_path: str):
-    data = storage.data_get(data_path=data_path)
     if file_path == "-":
         file_path = None
-    if not file_path:
-        sys.stdout.buffer.write(data)
-    else:
-        write_uri(file_path, data)
+
+    with storage.data_open(data_path=data_path) as file:
+        if not file_path:
+            for chunk in MyBufferedReader(file):
+                sys.stdout.buffer.write(chunk)
+        else:
+            write_uri(file_path, file)
 
 
 @main.command("data-delete")
@@ -74,7 +76,7 @@ def data_delete(storage: Storage, data_path: str):
 def data_put(storage: Storage, source, data_path: str = None, exist_ok=False):
     if source == "-":
         source = None
-        data = sys.stdin.buffer.read()
+        data = sys.stdin.buffer
         metadata = None
     else:
         uri = as_uri(source)
@@ -88,7 +90,7 @@ def data_put(storage: Storage, source, data_path: str = None, exist_ok=False):
                 print(norm_data_path)
                 return
 
-        data, metadata = read_uri(uri)
+        data, metadata = open_uri(uri)
 
     data_path = storage.data_put(data=data, data_path=data_path, exist_ok=exist_ok)
 
@@ -141,5 +143,6 @@ if __name__ == "__main__":
         # format error in a way that we can read and decode again: <>
         logging.error(f"<{exc.__class__.__name__}: {str(exc)}>")
         sys.exit(1)
-    except Exception:
+    except Exception as exc:
+        logging.error(exc)
         raise

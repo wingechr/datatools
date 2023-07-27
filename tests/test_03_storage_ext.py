@@ -1,7 +1,6 @@
-# import logging
+import logging
 import subprocess as sp
 import sys
-from io import BytesIO
 from pathlib import Path
 from threading import Thread
 
@@ -10,7 +9,7 @@ import requests
 from datatools.storage import RemoteStorage, StorageServer, _TestCliStorage
 from datatools.utils import (
     LOCALHOST,
-    BufferedReaderMaxSizeWrapper,
+    MyBufferedReader,
     filepath_abs_to_uri,
     get_free_port,
     normalize_path,
@@ -38,8 +37,7 @@ class Test_02_RemoteStorage(t.Test_01_LocalStorage):
 
         res = requests.post(
             url=self.storage.location,
-            data=BufferedReaderMaxSizeWrapper(BytesIO(data), max_size=5),
-            stream=False,
+            data=MyBufferedReader(data),
         )
 
         self.assertTrue(res.ok)
@@ -53,7 +51,7 @@ class Test_03_TestCliStorage(t.Test_01_LocalStorage):
         server_storage = _TestCliStorage(location=self.tempdir_path)
         port = get_free_port()
         remote_location = f"http://{LOCALHOST}:{port}"
-
+        logging.debug(f"storage: {remote_location}")
         self.server_proc = server_storage.serve(port=port)
         wait_for_server(remote_location)
 
@@ -69,7 +67,9 @@ class Test_03_TestCliStorage(t.Test_01_LocalStorage):
                 self.tempdir_path,
             ]
         )
-        wait_for_server(f"http://{LOCALHOST}:{self.static_port}")
+        static_location = f"http://{LOCALHOST}:{self.static_port}"
+        wait_for_server(static_location)
+        logging.debug(f"static: {static_location}")
 
         # create client
         self.storage = _TestCliStorage(location=remote_location)
@@ -92,29 +92,25 @@ class Test_03_TestCliStorage(t.Test_01_LocalStorage):
         with open(filepath, "wb") as file:
             file.write(data)
 
-        # read file://
+        logging.debug("read uri from filepath")
         expected_path = normalize_path(filepath_abs_to_uri(Path(filepath).absolute()))
         # NOTE: use _data_put directly for this test
-        data_path = self.storage._data_put(
-            data=filepath, norm_data_path=None, exist_ok=False
+        data_path = self.storage._uri_put(
+            uri=filepath, norm_data_path=None, exist_ok=False
         )
         self.assertEqual(expected_path, data_path)
 
-        # read http://
+        logging.debug("read uri from url")
         url = f"http://user:passwd@{LOCALHOST}:{self.static_port}/{filename}#.anchor"
         expected_path = f"http/{LOCALHOST}/test.txt.anchor"
-        # NOTE: use _data_put directly for this test
-        data_path = self.storage._data_put(
-            data=url, norm_data_path=None, exist_ok=False
-        )
-        self.assertEqual(expected_path, data_path)
+        data_path = self.storage._uri_put(uri=url, norm_data_path=None, exist_ok=False)
 
-        # this should auto save the source
+        self.assertEqual(expected_path, data_path)
+        logging.debug("check metadata")
         source = self.storage.metadata_get(
             data_path=data_path, metadata_path="source.path"
         )
-        # url without credentials
+        logging.debug("check that passwords in url are not saved")
         exp_source = f"http://{LOCALHOST}:{self.static_port}/{filename}#.anchor"
         self.assertEqual(source, exp_source)
-
         print(self.storage.metadata_get(data_path=data_path))

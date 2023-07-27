@@ -9,8 +9,9 @@ import socket
 import sys
 import time
 from contextlib import ExitStack
-from io import BufferedReader
+from io import BufferedReader, BytesIO
 from pathlib import Path
+from typing import Union
 from urllib.parse import unquote, unquote_plus, urlsplit
 
 import appdirs
@@ -29,7 +30,7 @@ FILEMOD_WRITE = 0o222
 ANONYMOUS_USER = "Anonymous"
 LOCALHOST = "localhost"
 
-# from io import DEFAULT_BUFFER_SIZE
+# TODO after tesing: from io import DEFAULT_BUFFER_SIZE
 DEFAULT_BUFFER_SIZE = 1024
 
 
@@ -82,6 +83,7 @@ def wait_for_server(url, timeout_s=30) -> None:
         try:
             res = requests.head(url)
             if res.ok:
+                logging.debug(f"Server is online: {url}")
                 return True
             else:
                 raise Exception("HEAD failed")
@@ -359,76 +361,69 @@ def json_serialize(x):
         raise NotImplementedError(type(x))
 
 
-class BufferedReaderMaxSizeWrapper:
-    def __init__(self, buffer: BufferedReader, max_size: int):
-        self.__buffer = buffer
-        self.__max_size = max_size
-        self.__position = 0
+class MyBufferedReader:
+    def __init__(
+        self,
+        buffer: Union[BufferedReader, bytes],
+        max_size: int = None,
+        chunk_size: int = None,
+        hash_method: str = None,
+    ):
+        if isinstance(buffer, bytes):
+            max_size = len(buffer)
+            buffer = BytesIO(buffer)
 
-    def __getattr__(self, item):
-        # logging.debug(f"delegate {item}")
-        return getattr(self.__buffer, item)
-
-    def read(self, size=None):
-        avail_size = self.__max_size - self.__position
-        if size is None or size < 0 or size > avail_size:
-            size = avail_size
-        logging.debug(f"read {size}")
-        data = self.__buffer.read(size)
-        self.__position += len(data)
-        return data
-
-    def __len__(self):
-        return self.__max_size
-
-
-class BufferedReaderIterator:
-    def __init__(self, buffer: BufferedReader, chunk_size: int = None):
         self.__buffer = buffer
         self.__chunk_size = chunk_size or DEFAULT_BUFFER_SIZE
-
-    def __getattr__(self, item):
-        # logging.debug(f"delegate {item}")
-        return getattr(self.__buffer, item)
+        self.__position = 0
+        self.__hasher = getattr(hashlib, hash_method)() if hash_method else None
+        self.__max_size = max_size
+        self.__open = True
+        exit_stack.push(self)
 
     def __iter__(self):
         return self
 
-    def __next__(self):
-        data = self.read(self.__chunk_size)
-        if not data:
-            raise StopIteration
-        return data
-
-
-class BufferedReaderHashWrapper:
-    def __init__(self, buffer: BufferedReader, hash_method: str):
-        self.__buffer = buffer
-        self.__hasher = getattr(hashlib, hash_method)()
-
-    def __getattr__(self, item):
-        # logging.debug(f"delegate {item}")
-        return getattr(self.__buffer, item)
-
-    def read(self, size=None):
-        data = self.__buffer.read(size)
-        self.__hasher.update(data)
-        return data
-
-    def hexdigest(self):
-        return self.__hasher.hexdigest()
-
-
-class BufferOpenContext:
-    def __init__(self, buffer: BufferedReader):
-        self.__buffer = buffer
-
     def __enter__(self):
         return self
 
-    def __exit__(self):
+    def __exit__(self, *args):
         self.close()
 
-    def __getattr__(self, item):
-        # logging.debug(f"delegate {item}")
-        return getattr(self.__buffer, item)
+    def __next__(self):
+        chunk = self.read(self.__chunk_size)
+        if not chunk:
+            raise StopIteration
+        return chunk
+
+    def read(self, size=None):
+        # limit size, if max is defined
+        if self.__max_size is not None:
+            avail_size = self.__max_size - self.__position
+            if size is None or size < 0 or size > avail_size:
+                size = avail_size
+        logging.debug(f"read {size}")
+        chunk = self.__buffer.read(size)
+        if not chunk:
+            self.close()
+        else:
+            self.__position += len(chunk)
+            if self.__hasher:
+                self.__hasher.update(chunk)
+        return chunk
+
+    def hexdigest(self):
+        if self.__open:
+            raise Exception("Not finished")
+        return self.__hasher.hexdigest()
+
+    def __len__(self):
+        if self.__max_size is not None:
+            return self.__max_size
+        if self.__open:
+            raise Exception("Not finished")
+        return self.__position
+
+    def close(self):
+        self.__open = False
+        self.__buffer.close()

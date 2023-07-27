@@ -1,16 +1,18 @@
 import logging
 import os
 import re
+from io import BufferedReader, BytesIO
 from pathlib import Path
 from typing import Tuple
 from urllib.parse import parse_qs, urlencode, urlsplit
 
-import pandas as pd
+# import pandas as pd
 import requests
 import sqlalchemy as sa
 
 from .cache import DEFAULT_MEDIA_TYPE, DEFAULT_TO_BYTES
 from .utils import (
+    MyBufferedReader,
     filepath_abs_to_uri,
     normalize_sql_query,
     parse_content_type,
@@ -37,7 +39,7 @@ def get_table_schema(cursor):
     return {"fields": fields}
 
 
-def read_uri(uri: str) -> Tuple[bytes, dict]:
+def open_uri(uri: str) -> Tuple[BufferedReader, dict]:
     metadata = {}
 
     metadata["source.path"] = remove_auth_from_uri_or_path(uri)
@@ -47,17 +49,20 @@ def read_uri(uri: str) -> Tuple[bytes, dict]:
     # protocol routing
     if url_parts.scheme == "file":
         file_path = uri_to_filepath_abs(uri)
-        with open(file_path, "rb") as file:
-            data = file.read()
+        file_size = os.path.getsize(file_path)
+        data = MyBufferedReader(open(file_path, "rb"), max_size=file_size)
     elif url_parts.scheme in ["http", "https"]:
-        res = requests.get(uri)
+        res = requests.get(uri, stream=True)
         res.raise_for_status()
         content_type = res.headers.get("Content-Type")
         if content_type:
             _meta = parse_content_type(content_type)
             metadata.update(_meta)
             logging.info(_meta)
-        data = res.content
+
+        content_length = int(res.headers["Content-Length"])
+        data = MyBufferedReader(res.raw, max_size=content_length)
+
     elif "sql" in url_parts.scheme:
         # pop sql query
         query_dict = parse_qs(url_parts.query)
@@ -83,12 +88,17 @@ def read_uri(uri: str) -> Tuple[bytes, dict]:
                 res = con.execute(sa.text(sql_query))
                 data_schema = get_table_schema(res.cursor)
                 logging.debug(f"Schema: {data_schema}")
-                df = pd.DataFrame(res.fetchall())
-                logging.debug(f"Rows: {len(df)}")
+
+                # data = pd.DataFrame(res.fetchall())
+                data = [rec._asdict() for rec in res.fetchall()]
+
+                logging.debug(f"Rows: {len(data)}")
         # make sure everything is closed
         eng.dispose()
 
-        data = DEFAULT_TO_BYTES(df)
+        data = DEFAULT_TO_BYTES(data)
+        data = BufferedReader(BytesIO(data))
+
         metadata["schema"] = data_schema
         metadata["mediatype"] = DEFAULT_MEDIA_TYPE
 

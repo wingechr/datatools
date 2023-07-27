@@ -3,14 +3,12 @@ import hashlib
 import os
 import re
 import unittest
-from io import BytesIO
+from io import BufferedReader, BytesIO
 from pathlib import PurePosixPath, PureWindowsPath
 from tempfile import TemporaryDirectory
 
 from datatools.utils import (
-    BufferedReaderHashWrapper,
-    BufferedReaderIterator,
-    BufferedReaderMaxSizeWrapper,
+    MyBufferedReader,
     filepath_abs_to_uri,
     get_hostname,
     get_now_str,
@@ -130,10 +128,8 @@ class TestUtils(unittest.TestCase):
 
 class TestBufferedReader(unittest.TestCase):
     def test_buffered_reader(self):
-        base_buffer = BytesIO(b"hello world")
-        buf = BufferedReaderMaxSizeWrapper(base_buffer, max_size=5)
-        buf = BufferedReaderHashWrapper(buf, hash_method="md5")
-        buf = BufferedReaderIterator(buf, chunk_size=2)
+        base_buffer = BufferedReader(BytesIO(b"hello"))
+        buf = MyBufferedReader(base_buffer, chunk_size=2, hash_method="md5")
         res = list(chunk for chunk in buf)
         self.assertEqual(len(res), 3)
         res = b"".join(res)
@@ -141,3 +137,4 @@ class TestBufferedReader(unittest.TestCase):
         hashsum = buf.hexdigest()
         exp_hashsum = hashlib.md5(b"hello").hexdigest()
         self.assertEqual(hashsum, exp_hashsum)
+        self.assertEqual(len(buf), 5)
