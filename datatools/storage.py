@@ -1,7 +1,6 @@
 # NOTE: we dont actually use ABC/abstractmethod
 # so that we can create decider instance
 import abc
-import hashlib
 import json
 import logging
 import os
