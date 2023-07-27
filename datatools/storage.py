@@ -52,6 +52,9 @@ ALLOWED_HASH_METHODS = ["md5", "sha256"]
 
 DEFAULT_HASH_METHOD = ALLOWED_HASH_METHODS[0]
 
+HEADER_DATA_PATH = "X-DATATOOLS-PATH"
+HEADER_ERROR = "X-DATATOOLS-ERROR"
+
 
 class AbstractStorage(abc.ABC):
     def __init__(self, location):
@@ -394,12 +397,11 @@ class RemoteStorage(AbstractStorage):
 
     def _data_delete(self, norm_data_path: str) -> None:
         self._request("DELETE", data_path=norm_data_path)
-        return None
 
     def _data_exists(self, norm_data_path: str) -> str:
         try:
-            self._request("HEAD", data_path=norm_data_path)
-            return True
+            res = self._request("HEAD", data_path=norm_data_path)
+            return res.headers.get(HEADER_DATA_PATH, "")
         except DataDoesNotExists:
             return None
 
@@ -409,7 +411,7 @@ class RemoteStorage(AbstractStorage):
         data_path: str,
         data: Union[bytes, object] = None,
         params: dict = None,
-    ) -> bytes:
+    ) -> requests.Response:
         if data_path:
             norm_data_path = self._get_norm_data_path(data_path)
         else:
@@ -420,11 +422,13 @@ class RemoteStorage(AbstractStorage):
         if not (data is None or isinstance(data, bytes)):
             data = json.dumps(data, default=json_serialize).encode()
         logging.debug(f"CLI REQ: {method} {norm_data_path}")
+
         res = requests.request(method=method, url=url, data=data, params=params)
-        logging.debug(f"CLI RES: {res.status_code}")
+
+        logging.debug(f"CLI RES: {res.status_code} {res.headers}")
         if not res.ok:
             # get error from header
-            raise_err(res.headers.get("X-DATATOOLS-ERROR", ""))
+            raise_err(res.headers.get(HEADER_ERROR, ""))
         return res
 
 
@@ -432,17 +436,17 @@ class StorageServerRoutes:
     def __init__(self, storage):
         self._storage = storage
 
-    def data_put(self, data, args, _kwargs):
+    def data_put(self, data, args, _kwargs, _headers):
         data_path = args[0].lstrip("/")
         data_path = self._storage.data_put(data=data, data_path=data_path)
         return {PARAM_DATA_PATH: data_path}
 
-    def metadata_put(self, data, args, _kwargs):
+    def metadata_put(self, data, args, _kwargs, _headers):
         data_path = args[0].lstrip("/")
         metadata = json.loads(data.decode())
         self._storage.metadata_put(data_path, metadata=metadata)
 
-    def data_get_or_metadata_get(self, _data, args, kwargs):
+    def data_get_or_metadata_get(self, _data, args, kwargs, _headers):
         data_path = args[0].lstrip("/")
         metadata_path = kwargs.get(PARAM_METADATA_PATH)
         if metadata_path:
@@ -458,17 +462,21 @@ class StorageServerRoutes:
 
         return data
 
-    def data_delete(self, _data, args, _kwargs):
+    def data_delete(self, _data, args, _kwargs, _headers):
         data_path = args[0].lstrip("/")
         self._storage.data_delete(data_path=data_path)
 
-    def data_exists(self, _data, args, _kwargs) -> None:
+    def data_exists(self, _data, args, _kwargs, _headers) -> None:
         data_path = args[0].lstrip("/")
         if not data_path:  # only for testing if server works
             return None
         norm_data_path = self._storage.data_exists(data_path=data_path)
         if not norm_data_path:
             raise DataDoesNotExists(data_path)
+        else:
+            # need to add path as header, because HEAD request has no body
+            _headers.append((HEADER_DATA_PATH, norm_data_path))
+            # TODO: maybe always add this header
 
 
 class StorageServer:
@@ -528,17 +536,17 @@ class StorageServer:
                     f"SRV: {selected_handler.__name__}"
                     f"({len(bdata)}, {path_args}, {query})"
                 )
-                result = selected_handler(bdata, path_args, query)
+                result = selected_handler(bdata, path_args, query, response_headers)
                 status_code = 200
             except DatatoolsException as exc:
                 if isinstance(exc, DataDoesNotExists):
                     status_code = 404
-                    response_headers.append(("X-DATATOOLS-PATH", f"{exc}"))
+                    response_headers.append((HEADER_DATA_PATH, f"{exc}"))
                 else:
                     status_code = 400
                 result = {"error_msg": str(exc), "error_cls": exc.__class__.__name__}
                 response_headers.append(
-                    ("X-DATATOOLS-ERROR", f"{exc.__class__.__name__}: {exc}")
+                    (HEADER_ERROR, f"{exc.__class__.__name__}: {exc}")
                 )
             except Exception:
                 logging.error(traceback.format_exc())
