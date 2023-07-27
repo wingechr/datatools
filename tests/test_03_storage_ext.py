@@ -1,12 +1,16 @@
 # import logging
 import subprocess as sp
 import sys
+from io import BytesIO
 from pathlib import Path
 from threading import Thread
+
+import requests
 
 from datatools.storage import RemoteStorage, StorageServer, _TestCliStorage
 from datatools.utils import (
     LOCALHOST,
+    BufferedReaderMaxSizeWrapper,
     filepath_abs_to_uri,
     get_free_port,
     normalize_path,
@@ -28,6 +32,17 @@ class Test_02_RemoteStorage(t.Test_01_LocalStorage):
         wait_for_server(remote_location)
 
         self.storage = RemoteStorage(location=remote_location)
+
+    def test_wsgi_post_from_buffer(self):
+        data = b"hello world"
+
+        res = requests.post(
+            url=self.storage.location,
+            data=BufferedReaderMaxSizeWrapper(BytesIO(data), max_size=5),
+            stream=False,
+        )
+
+        self.assertTrue(res.ok)
 
 
 class Test_03_TestCliStorage(t.Test_01_LocalStorage):

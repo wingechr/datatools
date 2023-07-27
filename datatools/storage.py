@@ -10,6 +10,7 @@ import subprocess as sp
 import sys
 import traceback
 from http import HTTPStatus
+from tempfile import NamedTemporaryFile
 from typing import Union
 from urllib.parse import parse_qs, unquote_plus
 from wsgiref.simple_server import make_server
@@ -22,12 +23,14 @@ from .exceptions import (
     DataDoesNotExists,
     DataExists,
     DatatoolsException,
+    IntegrityError,
     InvalidPath,
     raise_err,
 )
 from .load import read_uri
 from .utils import (
     LOCALHOST,
+    BufferedReaderMaxSizeWrapper,
     get_default_storage_location,
     get_now_str,
     get_user_w_host,
@@ -61,15 +64,20 @@ class AbstractStorage(abc.ABC):
     def __exit__(self, *args):
         pass
 
-    def _normalize_data_path(self, data_path: str) -> str:
-        """should be all lowercase"""
-        norm_path = normalize_path(data_path)
+    def _get_norm_data_path(self, data_path: str) -> str:
+        """should be all lowercase
+        Returns:
+            str: norm_data_path
+        Raises:
+            InvalidPath
+        """
+        norm_data_path = normalize_path(data_path)
         # TODO: maybe later: remove double check:
-        if norm_path != normalize_path(norm_path):
+        if norm_data_path != normalize_path(norm_data_path):
             raise InvalidPath(data_path)
-        if re.match(r".*\.metadata\..*", norm_path):
+        if re.match(r".*\.metadata\..*", norm_data_path):
             raise InvalidPath(data_path)
-        return norm_path
+        return norm_data_path
 
     def cache(
         self,
@@ -109,19 +117,19 @@ class AbstractStorage(abc.ABC):
 
     def metadata_get(self, data_path: str, metadata_path: str = None) -> object:
         metadata_path = metadata_path or ROOT_METADATA_PATH
-        norm_data_path = self._normalize_data_path(data_path)
+        norm_data_path = self._get_norm_data_path(data_path)
         return self._metadata_get(
             norm_data_path=norm_data_path, metadata_path=metadata_path
         )
 
     def metadata_put(self, data_path: str, metadata: dict) -> None:
-        norm_data_path = self._normalize_data_path(data_path)
+        norm_data_path = self._get_norm_data_path(data_path)
         return self._metadata_put(norm_data_path=norm_data_path, metadata=metadata)
 
     def data_put(self, data: bytes, data_path: str = None, exist_ok=None) -> str:
         # if not datapath: map to default hash endpoint
         if not data_path:
-            norm_data_path = self._normalize_data_path(
+            norm_data_path = self._get_norm_data_path(
                 f"{HASHED_DATA_PATH_PREFIX}{DEFAULT_HASH_METHOD}"
             )
             if exist_ok is False:
@@ -129,7 +137,7 @@ class AbstractStorage(abc.ABC):
             exist_ok = True
         else:
             exist_ok = bool(exist_ok)
-            norm_data_path = self._normalize_data_path(data_path)
+            norm_data_path = self._get_norm_data_path(data_path)
 
         return self._data_put(
             data=data, norm_data_path=norm_data_path, exist_ok=exist_ok
@@ -151,7 +159,7 @@ class AbstractStorage(abc.ABC):
             if metadata:
                 self._metadata_put(norm_data_path=norm_data_path, metadata=metadata)
 
-        norm_data_path = self._normalize_data_path(data_path)
+        norm_data_path = self._get_norm_data_path(data_path)
         data = self._data_get(norm_data_path=norm_data_path)
 
         if auto_decode:
@@ -170,11 +178,11 @@ class AbstractStorage(abc.ABC):
         return data
 
     def data_delete(self, data_path: str) -> None:
-        norm_data_path = self._normalize_data_path(data_path)
+        norm_data_path = self._get_norm_data_path(data_path)
         return self._data_delete(norm_data_path=norm_data_path)
 
     def data_exists(self, data_path: str) -> str:
-        norm_data_path = self._normalize_data_path(data_path)
+        norm_data_path = self._get_norm_data_path(data_path)
         return self._data_exists(norm_data_path=norm_data_path)
 
 
@@ -265,32 +273,55 @@ class LocalStorage(AbstractStorage):
         return None
 
     def _data_put(self, norm_data_path: str, data: bytes, exist_ok: bool) -> str:
-        if norm_data_path.startswith(HASHED_DATA_PATH_PREFIX):
+        filepath_is_hash = norm_data_path.startswith(HASHED_DATA_PATH_PREFIX)
+
+        if filepath_is_hash:
             offset = len(HASHED_DATA_PATH_PREFIX)
             hash_method = norm_data_path[offset:]
             if hash_method not in ALLOWED_HASH_METHODS:
                 raise InvalidPath(norm_data_path)
+            # add a placeholder for filename
+            norm_data_path = norm_data_path + "/__HASHFILE__"
         else:
             hash_method = DEFAULT_HASH_METHOD
 
-        # get data hashsum
-        hasher = getattr(hashlib, hash_method)()
-        hasher.update(data)
-        hashsum = hasher.hexdigest()
-
-        if self._data_exists(norm_data_path=norm_data_path):
+        if not filepath_is_hash and self._data_exists(norm_data_path=norm_data_path):
             if not exist_ok:
                 raise DataExists(norm_data_path)
             logging.info(f"Skipping existing file: {norm_data_path}")
             return norm_data_path
 
+        # get data hashsum
+        hasher = getattr(hashlib, hash_method)()
+
         # write data
         data_filepath = self._get_data_filepath(
             norm_data_path=norm_data_path, create_parent_dir=True
         )
-        logging.debug(f"WRITING {data_filepath}")
-        with open(data_filepath, "wb") as file:
+        data_dir = os.path.dirname(data_filepath)
+        filename = os.path.basename(data_filepath)
+        with NamedTemporaryFile(
+            mode="wb", dir=data_dir, delete=False, prefix=filename + "+"
+        ) as file:
+            logging.debug(f"WRITING {file.name}")
             file.write(data)
+
+        hasher.update(data)
+        hashsum = hasher.hexdigest()
+
+        if filepath_is_hash:
+            data_filepath = os.path.join(data_dir, hashsum)
+
+        if os.path.exists(data_filepath):
+            os.remove(file.name)
+            if filepath_is_hash:
+                logging.debug(f"Skipping existing hashed file: {data_filepath}")
+            else:
+                raise IntegrityError(f"File should not exist: {data_filepath}")
+        else:
+            logging.debug(f"MOVE_TEMP {file.name} => {data_filepath}")
+            os.rename(file.name, data_filepath)
+
         make_file_readonly(data_filepath)
 
         # write metadata
@@ -380,7 +411,7 @@ class RemoteStorage(AbstractStorage):
         params: dict = None,
     ) -> bytes:
         if data_path:
-            norm_data_path = self._normalize_data_path(data_path)
+            norm_data_path = self._get_norm_data_path(data_path)
         else:
             norm_data_path = ""
         url_path = "/" + norm_data_path
@@ -431,14 +462,13 @@ class StorageServerRoutes:
         data_path = args[0].lstrip("/")
         self._storage.data_delete(data_path=data_path)
 
-    def data_exists(self, _data, args, _kwargs):
+    def data_exists(self, _data, args, _kwargs) -> None:
         data_path = args[0].lstrip("/")
         if not data_path:  # only for testing if server works
             return None
         norm_data_path = self._storage.data_exists(data_path=data_path)
         if not norm_data_path:
             raise DataDoesNotExists(data_path)
-        return norm_data_path  # NOTE: HEAD response will not send body
 
 
 class StorageServer:
@@ -464,13 +494,14 @@ class StorageServer:
         method = environ["REQUEST_METHOD"].upper()
         path = environ["PATH_INFO"]
         query = parse_qs(environ["QUERY_STRING"], strict_parsing=False)
-        content_length = int(environ["CONTENT_LENGTH"] or "0")
-        if content_length:
-            # TODO: we would want to just pass
-            # input to main.save, but we need to specify the number of bytes
-            # in advance
-            input = environ["wsgi.input"]
-            bdata = input.read(content_length)
+
+        if method in ["PUT", "POST", "PATCH"]:
+            content_length = int(environ["CONTENT_LENGTH"])
+
+            input = BufferedReaderMaxSizeWrapper(
+                environ["wsgi.input"], max_size=content_length
+            )
+            bdata = input.read()
         else:
             bdata = b""
 
@@ -513,19 +544,19 @@ class StorageServer:
                 logging.error(traceback.format_exc())
                 status_code = 500
 
-        if method == "HEAD":
-            # HEAD: no body
-            result = None
-
-        if isinstance(result, str):
+        # if method == "HEAD":
+        # HEAD: no body
+        #    result = None
+        if result is None:
+            result = b""
+        elif isinstance(result, str):
             output_content_type = "text/plain"
             result = result.encode()
-        if not isinstance(result, bytes):
+        elif not isinstance(result, bytes):
             output_content_type = "application/json"
             result = json.dumps(result, default=json_serialize).encode()
 
         content_length_result = len(result)
-        # TODO get other success codes
         status = "%s %s" % (status_code, HTTPStatus(status_code).phrase)
 
         response_headers += [

@@ -363,16 +363,20 @@ class BufferedReaderMaxSizeWrapper:
         self.__position = 0
 
     def __getattr__(self, item):
-        # delegate
+        # logging.debug(f"delegate {item}")
         return getattr(self.__source, item)
 
     def read(self, size=None):
         avail_size = self.__max_size - self.__position
         if size is None or size < 0 or size > avail_size:
             size = avail_size
+        logging.debug(f"read {size}")
         data = self.__source.read(size)
         self.__position += len(data)
         return data
+
+    def __len__(self):
+        return self.__max_size
 
 
 class BufferedReaderIterator:
@@ -381,7 +385,7 @@ class BufferedReaderIterator:
         self.__chunk_size = chunk_size or DEFAULT_BUFFER_SIZE
 
     def __getattr__(self, item):
-        # delegate
+        # logging.debug(f"delegate {item}")
         return getattr(self.__source, item)
 
     def __iter__(self):
@@ -400,7 +404,7 @@ class BufferedReaderHashWrapper:
         self.__hasher = getattr(hashlib, hash_method)()
 
     def __getattr__(self, item):
-        # delegate
+        # logging.debug(f"delegate {item}")
         return getattr(self.__source, item)
 
     def read(self, size=None):
