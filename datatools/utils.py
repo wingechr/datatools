@@ -357,21 +357,21 @@ def json_serialize(x):
 
 
 class BufferedReaderMaxSizeWrapper:
-    def __init__(self, source: BufferedReader, max_size: int):
-        self.__source = source
+    def __init__(self, buffer: BufferedReader, max_size: int):
+        self.__buffer = buffer
         self.__max_size = max_size
         self.__position = 0
 
     def __getattr__(self, item):
         # logging.debug(f"delegate {item}")
-        return getattr(self.__source, item)
+        return getattr(self.__buffer, item)
 
     def read(self, size=None):
         avail_size = self.__max_size - self.__position
         if size is None or size < 0 or size > avail_size:
             size = avail_size
         logging.debug(f"read {size}")
-        data = self.__source.read(size)
+        data = self.__buffer.read(size)
         self.__position += len(data)
         return data
 
@@ -380,13 +380,13 @@ class BufferedReaderMaxSizeWrapper:
 
 
 class BufferedReaderIterator:
-    def __init__(self, source: BufferedReader, chunk_size: int = None):
-        self.__source = source
+    def __init__(self, buffer: BufferedReader, chunk_size: int = None):
+        self.__buffer = buffer
         self.__chunk_size = chunk_size or DEFAULT_BUFFER_SIZE
 
     def __getattr__(self, item):
         # logging.debug(f"delegate {item}")
-        return getattr(self.__source, item)
+        return getattr(self.__buffer, item)
 
     def __iter__(self):
         return self
@@ -399,18 +399,33 @@ class BufferedReaderIterator:
 
 
 class BufferedReaderHashWrapper:
-    def __init__(self, source: BufferedReader, hash_method: str):
-        self.__source = source
+    def __init__(self, buffer: BufferedReader, hash_method: str):
+        self.__buffer = buffer
         self.__hasher = getattr(hashlib, hash_method)()
 
     def __getattr__(self, item):
         # logging.debug(f"delegate {item}")
-        return getattr(self.__source, item)
+        return getattr(self.__buffer, item)
 
     def read(self, size=None):
-        data = self.__source.read(size)
+        data = self.__buffer.read(size)
         self.__hasher.update(data)
         return data
 
     def hexdigest(self):
         return self.__hasher.hexdigest()
+
+
+class BufferOpenContext:
+    def __init__(self, buffer: BufferedReader):
+        self.__buffer = buffer
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self):
+        self.close()
+
+    def __getattr__(self, item):
+        # logging.debug(f"delegate {item}")
+        return getattr(self.__buffer, item)

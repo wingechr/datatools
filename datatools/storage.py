@@ -9,7 +9,7 @@ import subprocess as sp
 import sys
 import traceback
 from http import HTTPStatus
-from io import BytesIO
+from io import BufferedReader, BytesIO
 from tempfile import NamedTemporaryFile
 from typing import Union
 from urllib.parse import parse_qs, unquote_plus
@@ -110,7 +110,7 @@ class AbstractStorage(abc.ABC):
         """Returns norm_data_path"""
         raise NotImplementedError()
 
-    def _data_get(self, norm_data_path: str) -> bytes:
+    def _data_open(self, norm_data_path: str) -> BufferedReader:
         raise NotImplementedError()
 
     def _data_delete(self, norm_data_path: str) -> None:
@@ -148,9 +148,7 @@ class AbstractStorage(abc.ABC):
             data=data, norm_data_path=norm_data_path, exist_ok=exist_ok
         )
 
-    def data_get(
-        self, data_path: str, auto_load_uri: bool = False, auto_decode: bool = False
-    ) -> Union[bytes, object]:
+    def data_open(self, data_path: str, auto_load_uri: bool = False) -> BufferedReader:
         if auto_load_uri and not self.data_exists(data_path=data_path):
             if not is_uri(data_path):
                 raise NotImplementedError(
@@ -165,13 +163,20 @@ class AbstractStorage(abc.ABC):
                 self._metadata_put(norm_data_path=norm_data_path, metadata=metadata)
 
         norm_data_path = self._get_norm_data_path(data_path)
-        data = self._data_get(norm_data_path=norm_data_path)
+
+        return self._data_open(norm_data_path=norm_data_path)
+
+    def data_get(
+        self, data_path: str, auto_load_uri: bool = False, auto_decode: bool = False
+    ) -> Union[bytes, object]:
+        with self.data_open(data_path=data_path, auto_load_uri=auto_load_uri) as file:
+            data = file.read()
 
         if auto_decode:
             # MUST provide mediatype
             # TODO: select decode based on media type: right now: only default (pickle)
-            mediatype = self._metadata_get(
-                norm_data_path=norm_data_path, metadata_path="mediatype"
+            mediatype = self.metadata_get(
+                data_path=data_path, metadata_path="mediatype"
             )
             if mediatype == DEFAULT_MEDIA_TYPE:
                 data = DEFAULT_FROM_BYTES(data)
@@ -210,14 +215,16 @@ class LocalStorage(AbstractStorage):
         metadata_path_pattern = jsonpath_ng.parse(metadata_path)
         return metadata_path_pattern
 
-    def _get_data_filepath(self, norm_data_path: str, create_parent_dir=False):
+    def _get_data_filepath(self, norm_data_path: str, create_parent_dir=False) -> str:
         data_filepath = os.path.join(self.location, norm_data_path)
         data_filepath = self._get_abs_path_with_parent(
             path=data_filepath, create_parent_dir=create_parent_dir
         )
         return data_filepath
 
-    def _get_metadata_filepath(self, norm_data_path: str, create_parent_dir=False):
+    def _get_metadata_filepath(
+        self, norm_data_path: str, create_parent_dir=False
+    ) -> str:
         data_filepath = self._get_data_filepath(norm_data_path=norm_data_path)
         metadata_filepath = data_filepath + ".metadata.json"
         metadata_filepath = self._get_abs_path_with_parent(
@@ -225,7 +232,7 @@ class LocalStorage(AbstractStorage):
         )
         return metadata_filepath
 
-    def _get_abs_path_with_parent(self, path, create_parent_dir):
+    def _get_abs_path_with_parent(self, path, create_parent_dir) -> str:
         path = os.path.abspath(path)
         if create_parent_dir:
             os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -349,13 +356,14 @@ class LocalStorage(AbstractStorage):
 
         return norm_data_path
 
-    def _data_get(self, norm_data_path: str) -> bytes:
+    def _data_open(self, norm_data_path: str) -> BufferedReader:
         data_filepath = self._get_data_filepath(norm_data_path=norm_data_path)
         if not os.path.exists(data_filepath):
             raise DataDoesNotExists(norm_data_path)
         logging.debug(f"READING {data_filepath}")
-        with open(data_filepath, "rb") as file:
-            data = file.read()
+        # with open(data_filepath, "rb") as file:
+        #    data = file.read()
+        data = open(data_filepath, "rb")
         return data
 
     def _data_delete(self, norm_data_path: str) -> None:
@@ -402,8 +410,8 @@ class RemoteStorage(AbstractStorage):
         )
         return result.json()[PARAM_DATA_PATH]
 
-    def _data_get(self, norm_data_path: str) -> bytes:
-        return self._request(method="GET", data_path=norm_data_path).content
+    def _data_open(self, norm_data_path: str) -> BufferedReader:
+        return self._request(method="GET", data_path=norm_data_path).raw
 
     def _data_delete(self, norm_data_path: str) -> None:
         self._request("DELETE", data_path=norm_data_path)
@@ -664,10 +672,11 @@ class _TestCliStorage(AbstractStorage):
         res = self._call(data, args)
         return res.decode().strip()
 
-    def _data_get(self, norm_data_path: str) -> bytes:
+    def _data_open(self, norm_data_path: str) -> BufferedReader:
         file_path = "-"
         args = ["data-get", norm_data_path, file_path]
         res = self._call(b"", args)
+        res = BytesIO(res)
         return res
 
     def _data_delete(self, norm_data_path: str) -> bytes:
