@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 from datatools.cache import DEFAULT_FROM_BYTES
 from datatools.exceptions import DataDoesNotExists, DataExists, InvalidPath
 from datatools.storage import HASHED_DATA_PATH_PREFIX, LocalStorage
-from datatools.utils import make_file_writable, normalize_path  # DEFAULT_BUFFER_SIZE
+from datatools.utils import DEFAULT_BUFFER_SIZE, make_file_writable, normalize_path
 
 from . import objects_euqal
 
@@ -30,12 +30,9 @@ class TestBase(unittest.TestCase):
 class Test_01_LocalStorage(TestBase):
     def test_storage(self):
         # create local instance in temporary dir
-        # data = b"hello world"
 
         # create large random data
-        # data = secrets.token_bytes(int(DEFAULT_BUFFER_SIZE * 1.5))
-
-        data = secrets.token_bytes(123)
+        data = secrets.token_bytes(int(DEFAULT_BUFFER_SIZE * 1.5))
 
         data_path_user = "/My/path"
         invalid_path = HASHED_DATA_PATH_PREFIX + "my/path"

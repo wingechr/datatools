@@ -106,7 +106,9 @@ class AbstractStorage(abc.ABC):
     def _metadata_put(self, norm_data_path: str, metadata: dict) -> None:
         raise NotImplementedError()
 
-    def _data_put(self, norm_data_path: str, data: bytes, exist_ok: bool) -> str:
+    def _data_put(
+        self, norm_data_path: str, data: BufferedReader, exist_ok: bool
+    ) -> str:
         """Returns norm_data_path"""
         raise NotImplementedError()
 
@@ -131,7 +133,9 @@ class AbstractStorage(abc.ABC):
         norm_data_path = self._get_norm_data_path(data_path)
         return self._metadata_put(norm_data_path=norm_data_path, metadata=metadata)
 
-    def data_put(self, data: bytes, data_path: str = None, exist_ok=None) -> str:
+    def data_put(
+        self, data: Union[BufferedReader, bytes], data_path: str = None, exist_ok=None
+    ) -> str:
         # if not datapath: map to default hash endpoint
         if not data_path:
             norm_data_path = self._get_norm_data_path(
@@ -143,6 +147,9 @@ class AbstractStorage(abc.ABC):
         else:
             exist_ok = bool(exist_ok)
             norm_data_path = self._get_norm_data_path(data_path)
+
+        if isinstance(data, bytes):
+            data = BufferedReaderMaxSizeWrapper(BytesIO(data), max_size=len(data))
 
         return self._data_put(
             data=data, norm_data_path=norm_data_path, exist_ok=exist_ok
@@ -284,7 +291,9 @@ class LocalStorage(AbstractStorage):
 
         return None
 
-    def _data_put(self, norm_data_path: str, data: bytes, exist_ok: bool) -> str:
+    def _data_put(
+        self, norm_data_path: str, data: BufferedReader, exist_ok: bool
+    ) -> str:
         filepath_is_hash = norm_data_path.startswith(HASHED_DATA_PATH_PREFIX)
 
         if filepath_is_hash:
@@ -313,8 +322,7 @@ class LocalStorage(AbstractStorage):
             mode="wb", dir=data_dir, delete=False, prefix=filename + "+"
         ) as file:
             logging.debug(f"WRITING {file.name}")
-            buf = BytesIO(data)
-            buf = BufferedReaderHashWrapper(buf, hash_method=hash_method)
+            buf = BufferedReaderHashWrapper(data, hash_method=hash_method)
             buf = BufferedReaderIterator(buf)
             for chunk in buf:
                 file.write(chunk)
@@ -398,7 +406,11 @@ class RemoteStorage(AbstractStorage):
     def _metadata_put(self, norm_data_path: str, metadata: dict) -> None:
         self._request(method="PATCH", data_path=norm_data_path, data=metadata)
 
-    def _data_put(self, norm_data_path: str, data: bytes, exist_ok: bool) -> str:
+    def _data_put(
+        self, norm_data_path: str, data: BufferedReader, exist_ok: bool
+    ) -> str:
+        # TODO: unused exist_ok
+
         if norm_data_path.startswith(HASHED_DATA_PATH_PREFIX):
             method = "POST"
         else:
@@ -427,7 +439,7 @@ class RemoteStorage(AbstractStorage):
         self,
         method: str,
         data_path: str,
-        data: Union[bytes, object] = None,
+        data: Union[bytes, object, BufferedReader] = None,
         params: dict = None,
     ) -> requests.Response:
         if data_path:
@@ -438,10 +450,11 @@ class RemoteStorage(AbstractStorage):
         url = self.location + url_path
         # make sure data is bytes
         if data is not None:
-            if not isinstance(data, bytes):
+            if isinstance(data, dict):
                 data = json.dumps(data, default=json_serialize).encode()
-            buf = BytesIO(data)
-            buf = BufferedReaderMaxSizeWrapper(buf, max_size=len(data))
+            if isinstance(data, bytes):
+                data = BytesIO(data)
+            buf = data
         else:
             buf = None
 
@@ -657,7 +670,9 @@ class _TestCliStorage(AbstractStorage):
         args = ["metadata-put", norm_data_path] + meta_key_vals
         self._call(b"", args)
 
-    def _data_put(self, norm_data_path: str, data: bytes, exist_ok: bool) -> str:
+    def _data_put(
+        self, norm_data_path: str, data: BufferedReader, exist_ok: bool
+    ) -> str:
         if isinstance(data, str):
             file_path = data
             data = None
@@ -668,6 +683,9 @@ class _TestCliStorage(AbstractStorage):
             args += [norm_data_path]
         if exist_ok:
             args += ["--exist-ok"]
+
+        if data:
+            data = data.read()
 
         res = self._call(data, args)
         return res.decode().strip()

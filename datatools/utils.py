@@ -9,7 +9,7 @@ import socket
 import sys
 import time
 from contextlib import ExitStack
-from io import DEFAULT_BUFFER_SIZE, BufferedReader
+from io import BufferedReader
 from pathlib import Path
 from urllib.parse import unquote, unquote_plus, urlsplit
 
@@ -28,6 +28,9 @@ TIME_FMT = "%H:%M:%S"
 FILEMOD_WRITE = 0o222
 ANONYMOUS_USER = "Anonymous"
 LOCALHOST = "localhost"
+
+# from io import DEFAULT_BUFFER_SIZE
+DEFAULT_BUFFER_SIZE = 1024
 
 
 # global exit stack
