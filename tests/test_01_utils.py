@@ -6,12 +6,17 @@ from io import BytesIO
 from pathlib import PurePosixPath, PureWindowsPath
 from tempfile import TemporaryDirectory
 
+import numpy as np
+import pandas as pd
+
 from datatools.utils import (
     as_byte_iterator,
     filepath_abs_to_uri,
+    get_df_table_schema,
     get_hostname,
     get_now_str,
     get_user_w_host,
+    json_serialize,
     make_file_readonly,
     make_file_writable,
     normalize_path,
@@ -150,3 +155,32 @@ class TestUtils(unittest.TestCase):
         data_l = list(as_byte_iterator(data1))
         self.assertEqual(len(data_l), 2)
         self.assertEqual(b"".join(data_l), data)
+
+    def test_json_serialize(self):
+        res = json_serialize(object)
+        self.assertEqual(res, "object")
+
+    def test_get_df_table_schema(self):
+        df = pd.DataFrame(
+            {
+                "i": [0, 0, 80, 10, 20],
+                "c": ["x", "x", "x", None, "x"],
+                "b": [True, False, True, True, False],
+                "f": [np.inf, np.nan, 10.1, -12.231, 1e4],
+            }
+        )
+        schema = get_df_table_schema(df)
+        self.assertTrue(
+            objects_euqal(
+                schema,
+                {
+                    "fields": [
+                        {"name": "i", "data_type": "int64", "is_nullable": False},
+                        {"name": "c", "data_type": "object", "is_nullable": True},
+                        {"name": "b", "data_type": "bool", "is_nullable": False},
+                        {"name": "f", "data_type": "float64", "is_nullable": True},
+                    ]
+                },
+            ),
+            schema,
+        )

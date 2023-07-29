@@ -16,6 +16,7 @@ if __name__ == "__main__":
             "sqlparse",
             "pyodbc",
             "pandas",
+            "chardet",
         ],
         name="wingechr-datatools",
         description=None,

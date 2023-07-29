@@ -9,7 +9,7 @@ import click
 from . import Storage, __version__
 from .exceptions import DataDoesNotExists, DatatoolsException
 from .load import write_uri
-from .utils import parse_cli_metadata
+from .utils import json_serialize, parse_cli_metadata
 
 
 @click.group()
@@ -87,7 +87,7 @@ def data_put(storage: Storage, source, data_path: str = None, exist_ok=False):
 @click.argument("metadata_path", required=False)
 def metadata_get(storage: Storage, data_path, metadata_path):
     results = storage.metadata_get(data_path=data_path, metadata_path=metadata_path)
-    print(json.dumps(results, indent=2, ensure_ascii=True))
+    print(json.dumps(results, indent=2, ensure_ascii=True, default=json_serialize))
 
 
 @main.command("metadata-put")

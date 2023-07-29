@@ -1,5 +1,7 @@
 import atexit
+import csv
 import datetime
+import inspect
 import json
 import logging
 import os
@@ -14,6 +16,9 @@ from typing import Iterable, Union
 from urllib.parse import unquote, unquote_plus, urlsplit
 
 import appdirs
+import chardet
+import numpy as np
+import pandas as pd
 import requests
 import sqlparse
 import tzlocal
@@ -354,11 +359,13 @@ def json_serialize(x):
         return x.strftime(DATE_FMT)
     elif isinstance(x, datetime.time):
         return x.strftime(TIME_FMT)
-    elif isinstance(x, type):
+    elif isinstance(x, np.bool_):
+        return bool(x)
+    elif inspect.isclass(x):
         # classname
         return x.__name__
     else:
-        raise NotImplementedError(type(x))
+        raise NotImplementedError(f"{x.__class__}: {x}")
 
 
 def iter_chunks(input):
@@ -379,3 +386,44 @@ def as_byte_iterator(data: Union[bytes, Iterable, BufferedReader]) -> Iterable[b
         yield from data
     else:
         raise NotImplementedError(type(data))
+
+
+def detect_encoding(sample_data: bytes):
+    result = chardet.detect(sample_data)
+    if result["confidence"] < 1:
+        logging.warning(f"Chardet encoding detection < 100%: {result}")
+    return result["encoding"]
+
+
+def detect_csv_dialect(sample_data: str):
+    dialect = csv.Sniffer().sniff(sample_data)
+    return dialect
+
+
+def get_sql_table_schema(cursor):
+    fields = [
+        {"name": name, "data_type": data_type, "is_nullable": is_nullable}
+        for (
+            name,
+            data_type,
+            _display_size,
+            _internal_size,
+            _precision,
+            _scale,
+            is_nullable,
+        ) in cursor.description
+    ]
+    return {"fields": fields}
+
+
+def get_df_table_schema(df: pd.DataFrame):
+    fields = []
+    for cname in df.columns:
+        fields.append(
+            {
+                "name": cname,
+                "data_type": df[cname].dtype.name,
+                "is_nullable": (df[cname].isna() | df[cname].isnull()).any(),
+            }
+        )
+    return {"fields": fields}

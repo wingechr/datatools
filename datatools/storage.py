@@ -17,6 +17,7 @@ from .load import open_uri
 from .utils import (
     as_byte_iterator,
     as_uri,
+    get_default_storage_location,
     get_now_str,
     get_user_w_host,
     json_serialize,
@@ -26,11 +27,7 @@ from .utils import (
 )
 
 # remote
-# PARAM_METADATA_PATH = "p"
-# PARAM_DATA_PATH = "path"
-# PARAM_VALUE = "value"
 ROOT_METADATA_PATH = "$"  # root
-# DEFAULT_PORT = 8000
 HASHED_DATA_PATH_PREFIX = "hash/"
 ALLOWED_HASH_METHODS = ["md5", "sha256"]
 
@@ -38,8 +35,8 @@ DEFAULT_HASH_METHOD = ALLOWED_HASH_METHODS[0]
 
 
 class Storage:
-    def __init__(self, location):
-        self.location = location
+    def __init__(self, location=None):
+        self.location = location or get_default_storage_location()
         logging.debug(f"Location: {self.location}")
 
     def __enter__(self):

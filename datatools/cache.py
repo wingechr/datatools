@@ -4,6 +4,8 @@ import json
 import logging
 import pickle
 
+from datatools.utils import json_serialize
+
 DEFAULT_FROM_BYTES = pickle.loads
 DEFAULT_TO_BYTES = pickle.dumps
 
@@ -12,7 +14,9 @@ DEFAULT_MEDIA_TYPE = "application/x-pickle"
 
 
 def get_hash(object):
-    bytes = json.dumps(object, sort_keys=True, ensure_ascii=False).encode()
+    bytes = json.dumps(
+        object, sort_keys=True, ensure_ascii=False, default=json_serialize
+    ).encode()
     job_id = hashlib.md5(bytes).hexdigest()
     return job_id
 

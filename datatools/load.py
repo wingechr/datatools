@@ -12,6 +12,7 @@ import sqlalchemy as sa
 from .cache import DEFAULT_MEDIA_TYPE, DEFAULT_TO_BYTES
 from .utils import (
     filepath_abs_to_uri,
+    get_sql_table_schema,
     normalize_sql_query,
     parse_content_type,
     remove_auth_from_uri_or_path,
@@ -19,22 +20,6 @@ from .utils import (
 )
 
 PARAM_SQL_QUERY = "q"
-
-
-def get_table_schema(cursor):
-    fields = [
-        {"name": name, "data_type": data_type, "is_nullable": is_nullable}
-        for (
-            name,
-            data_type,
-            _display_size,
-            _internal_size,
-            _precision,
-            _scale,
-            is_nullable,
-        ) in cursor.description
-    ]
-    return {"fields": fields}
 
 
 def open_uri(uri: str) -> Tuple[BufferedReader, dict]:
@@ -83,7 +68,7 @@ def open_uri(uri: str) -> Tuple[BufferedReader, dict]:
             with con:
                 logging.debug(f"Exceute: {sql_query}")
                 res = con.execute(sa.text(sql_query))
-                data_schema = get_table_schema(res.cursor)
+                data_schema = get_sql_table_schema(res.cursor)
                 logging.debug(f"Schema: {data_schema}")
 
                 # data = pd.DataFrame(res.fetchall())
