@@ -19,7 +19,7 @@ class Test_05_Sql(TestBase):
         # self.assertEqual(df.iloc[0, 0], 1)
 
         # try sqlite3 database
-        dbpath = self.tempdir_path.replace("\\", "/") + "/test.db"
+        dbpath = self.static_dir.replace("\\", "/") + "/test.db"
         uri = f"sqlite:///{dbpath}?q={query}"
         data, _metadata = open_uri(uri)
         data = DEFAULT_FROM_BYTES(data.read())

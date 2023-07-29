@@ -6,13 +6,11 @@ from pathlib import Path
 from typing import Tuple
 from urllib.parse import parse_qs, urlencode, urlsplit
 
-# import pandas as pd
 import requests
 import sqlalchemy as sa
 
 from .cache import DEFAULT_MEDIA_TYPE, DEFAULT_TO_BYTES
 from .utils import (
-    MyBufferedReader,
     filepath_abs_to_uri,
     normalize_sql_query,
     parse_content_type,
@@ -49,8 +47,8 @@ def open_uri(uri: str) -> Tuple[BufferedReader, dict]:
     # protocol routing
     if url_parts.scheme == "file":
         file_path = uri_to_filepath_abs(uri)
-        file_size = os.path.getsize(file_path)
-        data = MyBufferedReader(open(file_path, "rb"), max_size=file_size)
+        data = open(file_path, "rb")
+
     elif url_parts.scheme in ["http", "https"]:
         res = requests.get(uri, stream=True)
         res.raise_for_status()
@@ -60,8 +58,7 @@ def open_uri(uri: str) -> Tuple[BufferedReader, dict]:
             metadata.update(_meta)
             logging.info(_meta)
 
-        content_length = int(res.headers["Content-Length"])
-        data = MyBufferedReader(res.raw, max_size=content_length)
+        data = res.raw
 
     elif "sql" in url_parts.scheme:
         # pop sql query
@@ -97,7 +94,7 @@ def open_uri(uri: str) -> Tuple[BufferedReader, dict]:
         eng.dispose()
 
         data = DEFAULT_TO_BYTES(data)
-        data = BufferedReader(BytesIO(data))
+        data = BytesIO(data)
 
         metadata["schema"] = data_schema
         metadata["mediatype"] = DEFAULT_MEDIA_TYPE
@@ -108,7 +105,7 @@ def open_uri(uri: str) -> Tuple[BufferedReader, dict]:
     return data, metadata
 
 
-def write_uri(uri, data: bytes):
+def write_uri(uri, data: BufferedReader):
     if not re.match(".+://", uri, re.IGNORECASE):
         # assume local path
         uri = filepath_abs_to_uri(Path(uri).absolute())
@@ -121,6 +118,6 @@ def write_uri(uri, data: bytes):
             raise FileExistsError(file_path)
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         with open(file_path, "wb") as file:
-            file.write(data)
+            file.write(data.read())
     else:
         raise NotImplementedError(url_parts.scheme)

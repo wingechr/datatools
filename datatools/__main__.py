@@ -7,10 +7,9 @@ import sys
 import click
 
 from . import Storage, __version__
-from .exceptions import DataDoesNotExists, DataExists, DatatoolsException
-from .load import open_uri, write_uri
-from .storage import StorageServer
-from .utils import MyBufferedReader, as_uri, parse_cli_metadata
+from .exceptions import DataDoesNotExists, DatatoolsException
+from .load import write_uri
+from .utils import parse_cli_metadata
 
 
 @click.group()
@@ -50,13 +49,13 @@ def main(ctx, loglevel, location):
 @click.argument("data_path")
 @click.argument("file_path")
 def data_get(storage: Storage, data_path: str, file_path: str):
-    if file_path == "-":
+    if file_path in ("", "-"):
         file_path = None
 
     with storage.data_open(data_path=data_path) as file:
         if not file_path:
-            for chunk in MyBufferedReader(file):
-                sys.stdout.buffer.write(chunk)
+            # todo chunk
+            sys.stdout.buffer.write(file.read())
         else:
             write_uri(file_path, file)
 
@@ -74,30 +73,12 @@ def data_delete(storage: Storage, data_path: str):
 @click.argument("source")
 @click.argument("data_path", required=False)
 def data_put(storage: Storage, source, data_path: str = None, exist_ok=False):
-    if source == "-":
-        source = None
-        data = sys.stdin.buffer
-        metadata = None
-    else:
-        uri = as_uri(source)
-        if data_path is None:  # ! explicitly use is None, so we can manually set ""
-            data_path = uri
-            norm_data_path = storage.data_exists(data_path=data_path)
-            if norm_data_path:
-                if not exist_ok:
-                    raise DataExists(norm_data_path)
-                logging.info(f"Already in storage: {norm_data_path}")
-                print(norm_data_path)
-                return
-
-        data, metadata = open_uri(uri)
-
-    data_path = storage.data_put(data=data, data_path=data_path, exist_ok=exist_ok)
-
-    if metadata:
-        storage.metadata_put(data_path=data_path, metadata=metadata)
-
-    print(data_path)
+    if source in ("", "-"):
+        source = sys.stdin.buffer
+    norm_data_path = storage.data_put(
+        data=source, data_path=data_path, exist_ok=exist_ok
+    )
+    print(norm_data_path)
 
 
 @main.command("metadata-get")
@@ -128,20 +109,11 @@ def data_exists(storage: Storage, data_path: str):
     print(norm_data_path)
 
 
-@main.command("serve")
-@click.pass_obj
-@click.option("--port", "-p", type=int)
-def serve(storage: Storage, port: int):
-    server = StorageServer(storage=storage, port=port)
-    server.serve_forever()
-
-
 if __name__ == "__main__":
     try:
         main(prog_name="datatools")
     except DatatoolsException as exc:
-        # format error in a way that we can read and decode again: <>
-        logging.error(f"<{exc.__class__.__name__}: {str(exc)}>")
+        logging.error(exc)
         sys.exit(1)
     except Exception as exc:
         logging.error(exc)

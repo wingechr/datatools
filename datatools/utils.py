@@ -1,6 +1,5 @@
 import atexit
 import datetime
-import hashlib
 import json
 import logging
 import os
@@ -11,7 +10,7 @@ import time
 from contextlib import ExitStack
 from io import BufferedReader, BytesIO
 from pathlib import Path
-from typing import Union
+from typing import Iterable, Union
 from urllib.parse import unquote, unquote_plus, urlsplit
 
 import appdirs
@@ -25,14 +24,14 @@ from .exceptions import InvalidPath
 DATETIMETZ_FMT = "%Y-%m-%dT%H:%M:%S%z"
 DATE_FMT = "%Y-%m-%d"
 TIME_FMT = "%H:%M:%S"
-
 FILEMOD_WRITE = 0o222
 ANONYMOUS_USER = "Anonymous"
 LOCALHOST = "localhost"
 
-# TODO after tesing: from io import DEFAULT_BUFFER_SIZE
-DEFAULT_BUFFER_SIZE = 1024
 
+# default is 1024 * 8
+# wsgi often uses 1024 * 16
+DEFAULT_BUFFER_SIZE = 8 * 1024
 
 # global exit stack
 exit_stack = ExitStack()
@@ -81,12 +80,9 @@ def wait_for_server(url, timeout_s=30) -> None:
     time_start = time.time()
     while True:
         try:
-            res = requests.head(url)
-            if res.ok:
-                logging.debug(f"Server is online: {url}")
-                return True
-            else:
-                raise Exception("HEAD failed")
+            requests.head(url)
+            logging.debug(f"Server is online: {url}")
+            return True
         except requests.exceptions.ConnectionError:
             pass
 
@@ -98,29 +94,27 @@ def wait_for_server(url, timeout_s=30) -> None:
     raise Exception("Timeout")
 
 
-def uri_to_path(uri: str) -> str:
-    url_parts = urlsplit(uri)
-    if url_parts.scheme == "https":
-        url_parts = url_parts._replace(scheme="http")
-    if url_parts.netloc:
-        nl = url_parts.netloc
-        nl = remove_port_from_url_netloc(nl)
-        nl = remove_auth_from_url_netloc(nl)
-        url_parts = url_parts._replace(netloc=nl)
-    # remove query params
-    url_parts = url_parts._replace(query=None)
-    uri = url_parts.geturl()
-    # remove fragment separator
-    uri = uri.replace("#", "")
-    path = uri
-    return path
-
-
 def normalize_path(path: str) -> str:
-    """should be all lowercase ascii"""
+    """should be all lowercase ascii
+    * uri: replace auth and ports
+    * uri: remove query
+
+    """
     _path = path  # save original
     if is_uri(path):
-        path = uri_to_path(uri=path)
+        url_parts = urlsplit(path)
+        if url_parts.scheme == "https":
+            url_parts = url_parts._replace(scheme="http")
+        if url_parts.netloc:
+            nl = url_parts.netloc
+            nl = remove_port_from_url_netloc(nl)
+            nl = remove_auth_from_url_netloc(nl)
+            url_parts = url_parts._replace(netloc=nl)
+        # remove query params
+        url_parts = url_parts._replace(query=None)
+        uri = url_parts.geturl()
+        # remove fragment separator
+        path = uri.replace("#", "")
 
     path = unquote_plus(path)
     path = path.lower()
@@ -150,6 +144,7 @@ def normalize_path(path: str) -> str:
 
 
 def get_default_storage_location() -> str:
+    """get the users data storage path"""
     return os.path.join(
         appdirs.user_data_dir(
             appname="datatools", appauthor=None, version=None, roaming=False
@@ -159,7 +154,7 @@ def get_default_storage_location() -> str:
 
 
 def get_query_arg(kwargs: dict, key: str, default=None) -> str:
-    """kwargs only come as lists"""
+    """query args only come as lists, we want single value"""
     values = kwargs.get(key)
     if not values:
         return default
@@ -174,6 +169,7 @@ def get_hostname() -> str:
 
 
 def get_fqhostname() -> str:
+    """fully qualified hostname (with domain)"""
     return socket.getfqdn()
 
 
@@ -211,6 +207,9 @@ def platform_is_windows() -> bool:
 
 
 def make_file_readonly(file_path: str) -> None:
+    """Note: in WIndows, this also prevents delete
+    but not in Linux
+    """
     current_permissions = os.stat(file_path).st_mode
     readonly_permissions = current_permissions & ~FILEMOD_WRITE
     os.chmod(file_path, readonly_permissions)
@@ -284,6 +283,7 @@ def uri_to_filepath_abs(uri: str) -> str:
 
 
 def remove_auth_from_uri_or_path(uri_or_path):
+    """remove username:password@ from uri"""
     if not is_uri(uri_or_path):
         return uri_or_path
     url_parts = urlsplit(uri_or_path)
@@ -361,69 +361,21 @@ def json_serialize(x):
         raise NotImplementedError(type(x))
 
 
-class MyBufferedReader:
-    def __init__(
-        self,
-        buffer: Union[BufferedReader, bytes],
-        max_size: int = None,
-        chunk_size: int = None,
-        hash_method: str = None,
-    ):
-        if isinstance(buffer, bytes):
-            max_size = len(buffer)
-            buffer = BytesIO(buffer)
+def iter_chunks(input):
+    if isinstance(input, bytes):
+        input = BytesIO(input)
 
-        self.__buffer = buffer
-        self.__chunk_size = chunk_size or DEFAULT_BUFFER_SIZE
-        self.__position = 0
-        self.__hasher = getattr(hashlib, hash_method)() if hash_method else None
-        self.__max_size = max_size
-        self.__open = True
-        exit_stack.push(self)
 
-    def __iter__(self):
-        return self
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args):
-        self.close()
-
-    def __next__(self):
-        chunk = self.read(self.__chunk_size)
-        if not chunk:
-            raise StopIteration
-        return chunk
-
-    def read(self, size=None):
-        # limit size, if max is defined
-        if self.__max_size is not None:
-            avail_size = self.__max_size - self.__position
-            if size is None or size < 0 or size > avail_size:
-                size = avail_size
-        logging.debug(f"read {size}")
-        chunk = self.__buffer.read(size)
-        if not chunk:
-            self.close()
-        else:
-            self.__position += len(chunk)
-            if self.__hasher:
-                self.__hasher.update(chunk)
-        return chunk
-
-    def hexdigest(self):
-        if self.__open:
-            raise Exception("Not finished")
-        return self.__hasher.hexdigest()
-
-    def __len__(self):
-        if self.__max_size is not None:
-            return self.__max_size
-        if self.__open:
-            raise Exception("Not finished")
-        return self.__position
-
-    def close(self):
-        self.__open = False
-        self.__buffer.close()
+def as_byte_iterator(data: Union[bytes, Iterable, BufferedReader]) -> Iterable[bytes]:
+    if isinstance(data, bytes):
+        yield data
+    elif isinstance(data, BufferedReader):
+        while True:
+            chunk = input.read(DEFAULT_BUFFER_SIZE)
+            if not chunk:
+                break
+            yield chunk
+    elif isinstance(data, Iterable):
+        yield from data
+    else:
+        raise NotImplementedError(type(data))

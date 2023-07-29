@@ -1,14 +1,13 @@
 # import logging
-import hashlib
 import os
 import re
 import unittest
-from io import BufferedReader, BytesIO
+from io import BytesIO
 from pathlib import PurePosixPath, PureWindowsPath
 from tempfile import TemporaryDirectory
 
 from datatools.utils import (
-    MyBufferedReader,
+    as_byte_iterator,
     filepath_abs_to_uri,
     get_hostname,
     get_now_str,
@@ -50,10 +49,10 @@ class TestUtils(unittest.TestCase):
             ),
         ]:
             np = normalize_path(p)
-            self.assertEqual(exp_np, np, p)
+            self.assertEqual(np, exp_np, p)
             # also: normalized path should always normalize to self
             np = normalize_path(exp_np)
-            self.assertEqual(exp_np, np, exp_np)
+            self.assertEqual(np, exp_np, exp_np)
 
     def test_path_to_file_uri(self):
         host = get_hostname()
@@ -125,16 +124,29 @@ class TestUtils(unittest.TestCase):
         ]:
             self.assertEqual(normalize_sql_query(q), eq)
 
+    def test_as_byte_iterator(self):
+        data = b"hello world"
 
-class TestBufferedReader(unittest.TestCase):
-    def test_buffered_reader(self):
-        base_buffer = BufferedReader(BytesIO(b"hello"))
-        buf = MyBufferedReader(base_buffer, chunk_size=2, hash_method="md5")
-        res = list(chunk for chunk in buf)
-        self.assertEqual(len(res), 3)
-        res = b"".join(res)
-        self.assertEqual(res, b"hello")
-        hashsum = buf.hexdigest()
-        exp_hashsum = hashlib.md5(b"hello").hexdigest()
-        self.assertEqual(hashsum, exp_hashsum)
-        self.assertEqual(len(buf), 5)
+        # check bytes
+        data1 = data
+        data_l = list(as_byte_iterator(data1))
+        self.assertEqual(len(data_l), 1)
+        self.assertEqual(b"".join(data_l), data)
+
+        # check BufferedReader
+        data1 = BytesIO(data1)
+        data_l = list(as_byte_iterator(data1))
+        # self.assertEqual(len(data_l), 1)
+        self.assertEqual(b"".join(data_l), data)
+
+        # check iterable
+        data1 = [data[:5], data[5:]]
+        data_l = list(as_byte_iterator(data1))
+        self.assertEqual(len(data_l), 2)
+        self.assertEqual(b"".join(data_l), data)
+
+        # check self
+        data1 = as_byte_iterator([data[:5], data[5:]])
+        data_l = list(as_byte_iterator(data1))
+        self.assertEqual(len(data_l), 2)
+        self.assertEqual(b"".join(data_l), data)

@@ -6,6 +6,8 @@ import pickle
 
 DEFAULT_FROM_BYTES = pickle.loads
 DEFAULT_TO_BYTES = pickle.dumps
+
+
 DEFAULT_MEDIA_TYPE = "application/x-pickle"
 
 
@@ -62,7 +64,8 @@ def cache(
                 norm_data_path = storage.data_put(byte_data, data_path)
                 storage.metadata_put(data_path=norm_data_path, metadata=metadata)
 
-            byte_data = storage.data_get(data_path=data_path)
+            with storage.data_open(data_path=data_path) as file:
+                byte_data = file.read()
             logging.debug("Loaded from cache")
             data = from_bytes(byte_data)
 

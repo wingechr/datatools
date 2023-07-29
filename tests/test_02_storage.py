@@ -1,17 +1,23 @@
 import logging
 import os
-import secrets
+import subprocess as sp
+import sys
+
+# import secrets
 import unittest
 from tempfile import TemporaryDirectory
+from urllib.parse import urlsplit
 
 from datatools.cache import DEFAULT_FROM_BYTES
 from datatools.exceptions import DataDoesNotExists, DataExists, InvalidPath
-from datatools.storage import HASHED_DATA_PATH_PREFIX, LocalStorage
-from datatools.utils import (
+from datatools.storage import HASHED_DATA_PATH_PREFIX, Storage
+from datatools.utils import (  # exit_stack,
     DEFAULT_BUFFER_SIZE,
-    exit_stack,
+    as_uri,
+    get_free_port,
     make_file_writable,
     normalize_path,
+    wait_for_server,
 )
 
 from . import objects_euqal
@@ -38,12 +44,33 @@ class MyTemporaryDirectory(TemporaryDirectory):
 
 class TestBase(unittest.TestCase):
     def setUp(self) -> None:
-        self.tempdir = MyTemporaryDirectory()
-        self.tempdir_path = exit_stack.enter_context(self.tempdir)
-        self.storage = LocalStorage(location=self.tempdir_path)
+        self.tempdir1 = MyTemporaryDirectory()
+        path_tempdir1 = self.tempdir1.__enter__()  # exit_stack.enter_context()
+        self.storage = Storage(location=path_tempdir1)
+
+        # set up static file server
+        self.tempdir2 = MyTemporaryDirectory()
+        self.static_dir = self.tempdir2.__enter__()  # exit_stack.enter_context()
+        port = get_free_port()
+        self.static_url = f"http://localhost:{port}"
+        self.http_proc = sp.Popen(
+            [
+                sys.executable,
+                "-m",
+                "http.server",
+                str(port),
+                "--directory",
+                self.static_dir,
+            ]
+        )
+        wait_for_server(self.static_url)
 
     def tearDown(self) -> None:
-        self.tempdir.__exit__(None, None, None)
+        self.http_proc.terminate()  # or kill
+        self.http_proc.wait()
+
+        self.tempdir1.__exit__(None, None, None)
+        self.tempdir2.__exit__(None, None, None)
 
 
 class Test_01_LocalStorage(TestBase):
@@ -51,7 +78,8 @@ class Test_01_LocalStorage(TestBase):
         # create local instance in temporary dir
 
         # create large random data
-        data = secrets.token_bytes(int(DEFAULT_BUFFER_SIZE * 1.5))
+        # data = secrets.token_bytes(int(DEFAULT_BUFFER_SIZE * 1.5))
+        data = b"x" * int(DEFAULT_BUFFER_SIZE * 1.5)
 
         data_path_user = "/My/path"
         invalid_path = HASHED_DATA_PATH_PREFIX + "my/path"
@@ -69,7 +97,9 @@ class Test_01_LocalStorage(TestBase):
         self.assertTrue(data_path.startswith(HASHED_DATA_PATH_PREFIX))
 
         # load this again
-        self.assertEqual(self.storage.data_get(data_path), data)
+        with self.storage.data_open(data_path) as file:
+            _data = file.read()
+        self.assertEqual(_data, data)
 
         logging.debug("Step 2c: save with invalid path")
         self.assertRaises(
@@ -94,8 +124,9 @@ class Test_01_LocalStorage(TestBase):
         )
 
         logging.debug("Step 3: read data")
-        res = self.storage.data_get(data_path=data_path_user)
-        self.assertEqual(data, res)
+        with self.storage.data_open(data_path=data_path_user) as file:
+            _data = file.read()
+        self.assertEqual(data, _data)
 
         logging.debug("Step 4a: delete")
         self.storage.data_delete(data_path=data_path_user)
@@ -104,7 +135,7 @@ class Test_01_LocalStorage(TestBase):
         self.storage.data_delete(data_path=data_path_user)
         # reading now will raise error
         self.assertRaises(
-            DataDoesNotExists, self.storage.data_get, data_path=data_path_user
+            DataDoesNotExists, self.storage.data_open, data_path=data_path_user
         )
 
         logging.debug("Step 5: save again")
@@ -126,15 +157,27 @@ class Test_01_LocalStorage(TestBase):
 
     def test_storage_autoload(self):
         uri = "sqlite:///:memory:?q=select 1 as value#/query1"
-        self.assertRaises(DataDoesNotExists, self.storage.data_get, data_path=uri)
-        data = self.storage.data_get(data_path=uri, auto_load_uri=True)
+        self.assertRaises(DataDoesNotExists, self.storage.data_open, data_path=uri)
+
+        with self.storage.data_open(data_path=uri, auto_load_uri=True) as file:
+            data = file.read()
         data = DEFAULT_FROM_BYTES(data)
         self.assertEqual(data[0]["value"], 1)
-        # self.assertEqual(df.iloc[0, 0], 1)
 
-        uri = "sqlite:///:memory:?q=select 2 as value#/query2"
-        data2 = self.storage.data_get(
-            data_path=uri, auto_load_uri=True, auto_decode=True
-        )
-        self.assertEqual(data2[0]["value"], 2)
-        # self.assertEqual(df2.iloc[0, 0], 2)
+        # save test file
+        db_filepath = self.static_dir + "/test.db"
+        with open(db_filepath, "wb") as file:
+            pass
+
+        # platform independent: no baskslash, abspath, always starts with /
+        db_path = urlsplit(as_uri(db_filepath)).path
+        uri = f"sqlite://{db_path}?q=select 1 as value#/query1"
+        with self.storage.data_open(data_path=uri, auto_load_uri=True) as file:
+            data = file.read()
+        data = DEFAULT_FROM_BYTES(data)
+        self.assertEqual(data[0]["value"], 1)
+
+        uri = f"{self.static_url}/test.db"
+        with self.storage.data_open(data_path=uri, auto_load_uri=True) as file:
+            data = file.read()
+        self.assertEqual(data, b"")

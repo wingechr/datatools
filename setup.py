@@ -21,7 +21,7 @@ if __name__ == "__main__":
         description=None,
         long_description=None,
         long_description_content_type="text/markdown",
-        version="0.1.1",
+        version="0.2.0",
         author="Christian Winger",
         author_email="c@wingechr.de",
         url="https://github.com/wingechr/datatools",
