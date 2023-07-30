@@ -6,17 +6,16 @@ import sys
 # import secrets
 import unittest
 from tempfile import TemporaryDirectory
-from urllib.parse import urlsplit
 
 from datatools.cache import DEFAULT_FROM_BYTES
 from datatools.exceptions import DataDoesNotExists, DataExists, InvalidPath
 from datatools.storage import HASHED_DATA_PATH_PREFIX, Storage
-from datatools.utils import (  # exit_stack,
+from datatools.utils import (
     DEFAULT_BUFFER_SIZE,
-    as_uri,
     get_free_port,
     make_file_writable,
     normalize_path,
+    platform_is_unix,
     wait_for_server,
 )
 
@@ -170,9 +169,12 @@ class Test_01_LocalStorage(TestBase):
         db_filepath = self.static_dir + "/test.db"
         # file should be created by sqlalchemy
 
-        # platform independent: no backslash, abspath, always starts with /
-        db_path = urlsplit(as_uri(db_filepath)).path
-        uri = f"sqlite:///{db_path}?q=select 1 as value#/query1"
+        # only for sqlite:
+        # in need an additional slash in linux for abs path
+        if platform_is_unix:
+            db_filepath = "/" + db_filepath
+
+        uri = f"sqlite://{db_filepath}?q=select 1 as value#/query1"
         with self.storage.data_open(data_path=uri, auto_load_uri=True) as file:
             data = file.read()
         data = DEFAULT_FROM_BYTES(data)

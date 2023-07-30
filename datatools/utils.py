@@ -148,6 +148,31 @@ def normalize_path(path: str) -> str:
     return path
 
 
+def normalize_name(name: str) -> str:
+    """should be all lowercase ascii
+    * uri: remove query
+
+    """
+    _name = name  # cop
+    name = unquote_plus(name)
+    name = name.lower()
+    for cin, cout in [
+        ("ä", "ae"),
+        ("ö", "oe"),
+        ("ü", "ue"),
+        ("ß", "ss"),
+    ]:
+        name = name.replace(cin, cout)
+    name = unidecode.unidecode(name)
+    name = re.sub(r"[^a-z0-9]+", "_", name)
+    name = name.strip("_")
+
+    if not name:
+        raise InvalidPath(_name)
+
+    return name
+
+
 def get_default_storage_location() -> str:
     """get the users data storage path"""
     return os.path.join(
@@ -209,6 +234,10 @@ def get_now_str() -> str:
 def platform_is_windows() -> bool:
     # os.name: 'posix', 'nt', 'java'
     return os.name == "nt"
+
+
+def platform_is_unix() -> bool:
+    return not platform_is_windows()
 
 
 def make_file_readonly(file_path: str) -> None:
