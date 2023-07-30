@@ -43,6 +43,7 @@ class TestUtils(unittest.TestCase):
             ("http://a.com#x", "http/a.comx"),
             ("http://a.com#/x", "http/a.com/x"),
             ("http://user:pass@a.com", "http/a.com"),
+            ("http://header=token@a.com", "http/a.com"),
             ("Lower  Case with SPACE ! ", "lower_case_with_space"),
             (
                 "François fährt Straßenbahn zum Café Málaga",

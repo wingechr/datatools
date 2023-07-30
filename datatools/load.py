@@ -4,7 +4,7 @@ import re
 from io import BufferedReader, BytesIO
 from pathlib import Path
 from typing import Tuple
-from urllib.parse import parse_qs, urlencode, urlsplit
+from urllib.parse import parse_qs, unquote, urlencode, urlsplit
 
 import requests
 import sqlalchemy as sa
@@ -35,7 +35,23 @@ def open_uri(uri: str) -> Tuple[BufferedReader, dict]:
         data = open(file_path, "rb")
 
     elif url_parts.scheme in ["http", "https"]:
-        res = requests.get(uri, stream=True)
+        # because we want to encode auth headers
+        # in the uri, we place it in the netloc
+        # part before the @host (instead of the basic auth)
+        # if it's basic auth, the pattern is `user:pass`
+        # if it's a header, it's header=value
+        match_header = re.match("^([^=@]+)=([^=@]+)@(.+)$", url_parts.netloc)
+        headers = {}
+        if match_header:
+            h_name, h_val, netloc = match_header.groups()
+            h_name = unquote(h_name)
+            h_val = unquote(h_val)
+            url_parts = url_parts._replace(netloc=netloc)
+            headers[h_name] = h_val
+            logging.debug("Stripping auth header from uri")
+
+        res = requests.get(uri, stream=True, headers=headers)
+
         res.raise_for_status()
         content_type = res.headers.get("Content-Type")
         if content_type:

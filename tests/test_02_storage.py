@@ -61,7 +61,9 @@ class TestBase(unittest.TestCase):
                 str(port),
                 "--directory",
                 self.static_dir,
-            ]
+            ],
+            stdout=sp.DEVNULL,  # do not show server startup message
+            stderr=sp.DEVNULL,  # do not show server request logging
         )
         wait_for_server(self.static_url)
 
@@ -166,12 +168,11 @@ class Test_01_LocalStorage(TestBase):
 
         # save test file
         db_filepath = self.static_dir + "/test.db"
-        with open(db_filepath, "wb") as file:
-            pass
+        # file should be created by sqlalchemy
 
-        # platform independent: no baskslash, abspath, always starts with /
+        # platform independent: no backslash, abspath, always starts with /
         db_path = urlsplit(as_uri(db_filepath)).path
-        uri = f"sqlite://{db_path}?q=select 1 as value#/query1"
+        uri = f"sqlite:///{db_path}?q=select 1 as value#/query1"
         with self.storage.data_open(data_path=uri, auto_load_uri=True) as file:
             data = file.read()
         data = DEFAULT_FROM_BYTES(data)

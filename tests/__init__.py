@@ -10,6 +10,7 @@ def objects_euqal(left, right):
     return left == right
 
 
-logging.basicConfig(
-    format="[%(asctime)s %(levelname)7s] %(message)s", level=logging.DEBUG
-)
+if __name__ == "__main__":
+    logging.basicConfig(
+        format="[%(asctime)s %(levelname)7s] %(message)s", level=logging.DEBUG
+    )
