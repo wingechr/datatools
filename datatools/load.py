@@ -65,7 +65,9 @@ def open_uri(uri: str) -> Tuple[BufferedReader, dict]:
         # pop sql query
         query_dict = parse_qs(url_parts.query)
         sql_query = query_dict.pop(PARAM_SQL_QUERY)[0]
+        sql_query = unquote(sql_query)
         sql_query = normalize_sql_query(sql_query)
+
         metadata["source.query"] = sql_query
         # doseq: if False: encode arrays differently
         query_str = urlencode(query_dict, doseq=True)

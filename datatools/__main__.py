@@ -6,10 +6,10 @@ import sys
 
 import click
 
-from . import Storage, __version__
+from . import GLOBAL_LOCATION, LOCAL_LOCATION, Storage, __version__
 from .exceptions import DataDoesNotExists, DatatoolsException
-from .load import write_uri
-from .utils import json_serialize, parse_cli_metadata
+from .load import open_uri, write_uri
+from .utils import as_uri, json_serialize, parse_cli_metadata
 
 
 @click.group()
@@ -23,7 +23,8 @@ from .utils import json_serialize, parse_cli_metadata
     show_default=True,
 )
 @click.option("--location", "-d")
-def main(ctx, loglevel, location):
+@click.option("--global-location", "-g", is_flag=True)
+def main(ctx, loglevel, location, global_location):
     """Script entry point."""
     # setup default logging
     loglevel = getattr(logging, loglevel.upper())
@@ -41,6 +42,12 @@ def main(ctx, loglevel, location):
     except ModuleNotFoundError:
         pass
 
+    if location and global_location:
+        raise DatatoolsException("location and global-location are mutually exclusive")
+    if global_location:
+        location = GLOBAL_LOCATION
+    if not location:
+        location = LOCAL_LOCATION
     ctx.obj = Storage(location=location)
 
 
@@ -74,10 +81,17 @@ def data_delete(storage: Storage, data_path: str):
 @click.argument("data_path", required=False)
 def data_put(storage: Storage, source, data_path: str = None, exist_ok=False):
     if source in ("", "-"):
-        source = sys.stdin.buffer
-    norm_data_path = storage.data_put(
-        data=source, data_path=data_path, exist_ok=exist_ok
-    )
+        data = sys.stdin.buffer
+        metadata = {}
+    else:
+        uri = as_uri(source=source)
+        data, metadata = open_uri(uri)
+        if data_path is None:
+            data_path = uri
+    logging.debug(data)
+    norm_data_path = storage.data_put(data=data, data_path=data_path, exist_ok=exist_ok)
+    if metadata:
+        storage.metadata_put(data_path=norm_data_path, metadata=metadata)
     print(norm_data_path)
 
 

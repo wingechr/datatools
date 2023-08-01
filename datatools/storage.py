@@ -33,10 +33,14 @@ ALLOWED_HASH_METHODS = ["md5", "sha256"]
 
 DEFAULT_HASH_METHOD = ALLOWED_HASH_METHODS[0]
 
+GLOBAL_LOCATION = get_default_storage_location()
+LOCAL_LOCATION = "__data__"
+
 
 class Storage:
     def __init__(self, location=None):
-        self.location = location or get_default_storage_location()
+        location = location or LOCAL_LOCATION
+        self.location = os.path.abspath(location)
         logging.debug(f"Location: {self.location}")
 
     def __enter__(self):
@@ -187,11 +191,16 @@ class Storage:
         with NamedTemporaryFile(
             mode="wb", dir=data_dir, delete=False, prefix=filename + "+"
         ) as file:
-            logging.debug(f"WRITING {file.name}")
-            for chunk in data:
-                size += len(chunk)
-                hasher.update(chunk)
-                file.write(chunk)
+            try:
+                logging.debug(f"WRITING {file.name}")
+                for chunk in data:
+                    size += len(chunk)
+                    hasher.update(chunk)
+                    file.write(chunk)
+            except Exception:
+                file.close()
+                os.remove(file.name)
+                raise
 
         hashsum = hasher.hexdigest()
 

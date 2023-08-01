@@ -397,17 +397,13 @@ def json_serialize(x):
         raise NotImplementedError(f"{x.__class__}: {x}")
 
 
-def iter_chunks(input):
-    if isinstance(input, bytes):
-        input = BytesIO(input)
-
-
 def as_byte_iterator(data: Union[bytes, Iterable, BufferedReader]) -> Iterable[bytes]:
     if isinstance(data, bytes):
         yield data
     elif isinstance(data, BufferedReader):
         while True:
-            chunk = input.read(DEFAULT_BUFFER_SIZE)
+            chunk = data.read(DEFAULT_BUFFER_SIZE)
+            logging.debug(f"read {len(data)} bytes")
             if not chunk:
                 break
             yield chunk
