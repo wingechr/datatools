@@ -10,7 +10,8 @@ import socket
 import sys
 import time
 from contextlib import ExitStack
-from io import BufferedReader, BytesIO
+from io import DEFAULT_BUFFER_SIZE as _DEFAULT_BUFFER_SIZE
+from io import BufferedReader
 from pathlib import Path
 from typing import Iterable, Union
 from urllib.parse import unquote, unquote_plus, urlsplit
@@ -36,7 +37,7 @@ LOCALHOST = "localhost"
 
 # default is 1024 * 8
 # wsgi often uses 1024 * 16
-DEFAULT_BUFFER_SIZE = 8 * 1024
+DEFAULT_BUFFER_SIZE = _DEFAULT_BUFFER_SIZE
 
 # global exit stack
 exit_stack = ExitStack()
@@ -403,7 +404,7 @@ def as_byte_iterator(data: Union[bytes, Iterable, BufferedReader]) -> Iterable[b
     elif isinstance(data, BufferedReader):
         while True:
             chunk = data.read(DEFAULT_BUFFER_SIZE)
-            logging.debug(f"read {len(data)} bytes")
+            logging.debug(f"read {len(chunk)} bytes")
             if not chunk:
                 break
             yield chunk

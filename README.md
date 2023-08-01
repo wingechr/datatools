@@ -1,7 +1,18 @@
 # README
 
-## Develop
+## Install
 
-- use virtual environment
-- put develop dependencies in `requirements.txt`
-- update with `pip install --upgrade -r requirements.txt`
+```bash
+pip install wingechr-datatools
+```
+
+## Usage
+
+```python
+import datatools as dt
+
+store = st.Store()
+store_g = st.StoreGlobal()
+
+
+```

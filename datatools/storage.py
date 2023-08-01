@@ -143,10 +143,15 @@ class Storage:
 
     def data_put(
         self,
-        data: Union[BufferedReader, bytes, Iterable],
+        data: Union[BufferedReader, bytes, Iterable, str],
         data_path: str = None,
         exist_ok=None,
     ) -> str:
+        if isinstance(data, str):
+            return self._data_put_uri(
+                source=data, data_path=data_path, exist_ok=bool(exist_ok)
+            )
+
         # if not datapath: map to default hash endpoint
         if not data_path:
             norm_data_path = self._get_norm_data_path(
@@ -234,13 +239,26 @@ class Storage:
 
         return norm_data_path
 
+    def _data_put_uri(self, source: str, data_path=None, exist_ok=False) -> str:
+        uri = as_uri(source=source)
+        data_path = data_path or uri
+        norm_data_path = self.data_exists(data_path=data_path)
+        if norm_data_path:
+            if exist_ok:
+                return norm_data_path
+            else:
+                raise FileExistsError(uri)
+        data, metadata = open_uri(uri)
+        norm_data_path = self.data_put(data=data, data_path=data_path, exist_ok=False)
+        if metadata:
+            self.metadata_put(data_path=norm_data_path, metadata=metadata)
+        return norm_data_path
+
     def data_open(self, data_path: str, auto_load_uri: bool = False) -> BufferedReader:
         if auto_load_uri and not self.data_exists(data_path=data_path):
-            uri = as_uri(source=data_path)
-            data, metadata = open_uri(uri)
-            norm_data_path = self.data_put(data=data, data_path=uri, exist_ok=False)
-            if metadata:
-                self.metadata_put(data_path=data_path, metadata=metadata)
+            norm_data_path = self._data_put_uri(
+                source=data_path, data_path=None, exist_ok=False
+            )
         else:
             norm_data_path = self.data_exists(data_path=data_path)
 
@@ -252,6 +270,18 @@ class Storage:
         data = open(data_filepath, "rb")
 
         return data
+
+    def get_filepath(self, data_path: str) -> str:
+        norm_data_path = self.data_exists(data_path=data_path)
+
+        if not norm_data_path:
+            raise DataDoesNotExists(data_path)
+
+        data_filepath = self._get_data_filepath(norm_data_path=norm_data_path)
+        # just to be sure
+        make_file_readonly(data_filepath)
+
+        return data_filepath
 
     def data_exists(self, data_path) -> str:
         norm_data_path = self._get_norm_data_path(data_path)
