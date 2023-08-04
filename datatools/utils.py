@@ -9,7 +9,7 @@ import re
 import socket
 import sys
 import time
-from contextlib import ExitStack
+from contextlib import ExitStack as _ExitStack
 from io import DEFAULT_BUFFER_SIZE as _DEFAULT_BUFFER_SIZE
 from io import BufferedReader
 from pathlib import Path
@@ -39,12 +39,29 @@ LOCALHOST = "localhost"
 # wsgi often uses 1024 * 16
 DEFAULT_BUFFER_SIZE = _DEFAULT_BUFFER_SIZE
 
-# global exit stack
-exit_stack = ExitStack()
-# register at error
-sys.excepthook = exit_stack.__exit__
-# also register on regular exit
-atexit.register(exit_stack.__exit__, None, None, None)
+
+class ExitStack(_ExitStack):
+    __singleton_instance = None
+
+    def __new__(cls, *args, **kwargs):
+        if not cls.__singleton_instance:
+            cls.__singleton_instance = super().__new__(cls, *args, **kwargs)
+
+            print("register exit stack")
+
+            # register __exit__ on normal exit
+            atexit.register(cls.__singleton_instance.__exit__, None, None, None)
+
+            # register on unhandled Exception exit
+            sys.excepthook = cls.__singleton_instance.__exit__
+
+        return cls.__singleton_instance
+
+    def __exit__(self, exc_cls, exc_inst, exc_trace):
+        # do regular cleanup
+        super().__exit__(exc_cls, exc_inst, exc_trace)
+        if exc_inst:
+            raise exc_inst
 
 
 def normalize_sql_query(query: str) -> str:
