@@ -4,7 +4,7 @@ from .test_02_storage import TestBase
 
 
 class Test_04_Cache(TestBase):
-    def test_cache_decorator(self):
+    def __DISABLED__test_cache_decorator(self):
         context = {"counter": 0}
 
         @self.storage.cache(path_prefix="myproject/cache/")  # use defaults

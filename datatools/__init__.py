@@ -11,7 +11,8 @@ __all__ = [
 ]
 
 from . import exceptions, storage, utils
+from .constants import GLOBAL_LOCATION, LOCAL_LOCATION
 from .exceptions import DatatoolsException
-from .storage import GLOBAL_LOCATION, LOCAL_LOCATION, Storage
+from .storage import Storage
 
 StorageGlobal = Storage(GLOBAL_LOCATION)

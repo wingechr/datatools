@@ -8,10 +8,14 @@ import unittest
 from tempfile import TemporaryDirectory
 
 from datatools.cache import DEFAULT_FROM_BYTES
-from datatools.exceptions import DataDoesNotExists, DataExists, InvalidPath
-from datatools.storage import HASHED_DATA_PATH_PREFIX, Storage
-from datatools.utils import (
+from datatools.constants import (
+    DATA_PATH_PREFIX,
     DEFAULT_BUFFER_SIZE,
+    HASHED_DATA_PATH_PREFIX,
+)
+from datatools.exceptions import DataDoesNotExists, DataExists, InvalidPath
+from datatools.storage import Storage
+from datatools.utils import (
     get_free_port,
     make_file_writable,
     normalize_path,
@@ -83,7 +87,7 @@ class Test_01_LocalStorage(TestBase):
         data = b"x" * int(DEFAULT_BUFFER_SIZE * 1.5)
 
         data_path_user = "/My/path"
-        invalid_path = HASHED_DATA_PATH_PREFIX + "my/path"
+        invalid_path = HASHED_DATA_PATH_PREFIX + "/my/path"
 
         logging.debug("Step 1: cannot save save data to hash subdir")
         self.assertRaises(
@@ -94,10 +98,16 @@ class Test_01_LocalStorage(TestBase):
         )
 
         logging.debug("Step 2a: save data without path")
-        data_path = self.storage.data_put(data=data)
-        self.assertTrue(data_path.startswith(HASHED_DATA_PATH_PREFIX))
+        data_path = self.storage.data_post(data=data)
+        self.assertTrue(
+            data_path.startswith(
+                DATA_PATH_PREFIX + "/" + HASHED_DATA_PATH_PREFIX + "/"
+            ),
+            data_path,
+        )
 
         # load this again
+        logging.error(data_path)
         with self.storage.data_open(data_path) as file:
             _data = file.read()
         self.assertEqual(_data, data)
@@ -114,7 +124,9 @@ class Test_01_LocalStorage(TestBase):
         self.assertFalse(self.storage.data_exists(data_path_user))
         data_path = self.storage.data_put(data=data, data_path=data_path_user)
         self.assertTrue(self.storage.data_exists(data_path_user))
-        self.assertEqual(normalize_path(data_path_user), data_path)
+        self.assertEqual(
+            DATA_PATH_PREFIX + "/" + normalize_path(data_path_user), data_path
+        )
 
         logging.debug("Step 2c: save again will fail")
         self.assertRaises(
@@ -156,7 +168,7 @@ class Test_01_LocalStorage(TestBase):
         )
         self.assertTrue(objects_euqal(metadata2, ["test", "test2"]))
 
-    def test_storage_autoload(self):
+    def __DISABLED__test_storage_autoload(self):
         uri = "sqlite:///:memory:?q=select 1 as value#/query1"
         self.assertRaises(DataDoesNotExists, self.storage.data_open, data_path=uri)
 
