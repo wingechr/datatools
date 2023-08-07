@@ -1,7 +1,6 @@
 import atexit
 import csv
 import datetime
-import hashlib
 import inspect
 import json
 import logging
@@ -13,7 +12,6 @@ import time
 from contextlib import ExitStack as _ExitStack
 from io import BufferedReader
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 from typing import Iterable, Union
 from urllib.parse import unquote, unquote_plus, urlsplit
 
@@ -30,7 +28,6 @@ from .constants import (
     DATE_FMT,
     DATETIMETZ_FMT,
     DEFAULT_BUFFER_SIZE,
-    DEFAULT_HASH_METHOD,
     FILEMOD_WRITE,
     LOCALHOST,
     TIME_FMT,
@@ -458,74 +455,3 @@ def get_df_table_schema(df: pd.DataFrame):
             }
         )
     return {"fields": fields}
-
-
-class NewNamedTemporaryFile:
-    def __init__(self, filepath: str):
-        self.filepath = filepath
-        self.tempfile = None
-        self.size = None
-        self.hash_method = DEFAULT_HASH_METHOD
-        self.hasher = None
-        self.hashsum = None
-        self.filepath_temp = None
-        self.folder = os.path.dirname(self.filepath)
-        self.temp_prefix = os.path.basename(self.filepath) + "+"
-
-    def __enter__(self):
-        os.makedirs(self.folder, exist_ok=True)
-        self.tempfile = NamedTemporaryFile(
-            prefix=self.temp_prefix, dir=self.folder, delete=False
-        )
-        self.filepath_temp = self.tempfile.name
-        self.size = 0
-        self.hasher = getattr(hashlib, self.hash_method)()
-        return self
-
-    def __exit__(self, *errs):
-        self.hashsum = self.hasher.hexdigest()
-        self.hasher = None
-        try:
-            self.tempfile.close()
-            if not any(errs):
-                # move tempfile to target file
-                filepath = self.get_target_path()
-                if not os.path.exists(filepath):
-                    logging.debug(f"MOVING: {self.filepath_temp} => {filepath}")
-                    os.rename(self.filepath_temp, filepath)
-                    make_file_readonly(filepath)
-                else:
-                    logging.debug(f"skipping existing file: {filepath}")
-        finally:
-            # make sure tempfile is gone
-            if os.path.exists(self.filepath_temp):
-                os.remove(self.filepath_temp)
-
-    def write(self, chunk: bytes):
-        self.tempfile.write(chunk)
-        self.size += len(chunk)
-        self.hasher.update(chunk)
-
-    @property
-    def metadata(self):
-        return {
-            f"hash.{self.hash_method}": self.hashsum,
-            "size": self.size,
-            "source.user": get_user_w_host(),
-            "source.datetime": get_now_str(),
-        }
-
-    def get_target_path(self):
-        filepath = self.filepath
-        if os.path.exists(filepath):
-            raise FileExistsError(filepath)
-        return filepath
-
-
-class HashedNamedTemporaryFile(NewNamedTemporaryFile):
-    def __init__(self, filepath):
-        super().__init__(filepath + "/__temp__")
-        self.filepath = filepath.split("/")[-1]
-
-    def get_target_path(self):
-        return os.path.join(self.folder, self.hashsum)

@@ -91,7 +91,7 @@ def data_put(storage: Storage, source, data_path: str = None, exist_ok=False):
     logging.debug(data)
     norm_data_path = storage.data_put(data=data, data_path=data_path, exist_ok=exist_ok)
     if metadata:
-        storage.metadata_put(data_path=norm_data_path, metadata=metadata)
+        storage.metadata_set(data_path=norm_data_path, metadata=metadata)
     print(norm_data_path)
 
 
@@ -110,7 +110,7 @@ def metadata_get(storage: Storage, data_path, metadata_path):
 @click.argument("metadata_key_vals", nargs=-1, required=True)
 def metadata_put(storage: Storage, data_path, metadata_key_vals):
     metadata = parse_cli_metadata(metadata_key_vals)
-    storage.metadata_put(data_path=data_path, metadata=metadata)
+    storage.metadata_set(data_path=data_path, metadata=metadata)
 
 
 @main.command("data-exists")

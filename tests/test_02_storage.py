@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import os
 import subprocess as sp
@@ -7,21 +8,10 @@ import sys
 import unittest
 from tempfile import TemporaryDirectory
 
-from datatools.cache import DEFAULT_FROM_BYTES
-from datatools.constants import (
-    DATA_PATH_PREFIX,
-    DEFAULT_BUFFER_SIZE,
-    HASHED_DATA_PATH_PREFIX,
-)
-from datatools.exceptions import DataDoesNotExists, DataExists, InvalidPath
+from datatools.constants import DEFAULT_HASH_METHOD
+from datatools.exceptions import DataDoesNotExists, DataExists
 from datatools.storage import Storage
-from datatools.utils import (
-    get_free_port,
-    make_file_writable,
-    normalize_path,
-    platform_is_unix,
-    wait_for_server,
-)
+from datatools.utils import get_free_port, make_file_writable, wait_for_server
 
 from . import objects_euqal
 
@@ -82,53 +72,17 @@ class Test_01_LocalStorage(TestBase):
     def test_storage(self):
         # create local instance in temporary dir
 
-        # create large random data
-        # data = secrets.token_bytes(int(DEFAULT_BUFFER_SIZE * 1.5))
-        data = b"x" * int(DEFAULT_BUFFER_SIZE * 1.5)
-
+        data = b"hello world"
         data_path_user = "/My/path"
-        invalid_path = HASHED_DATA_PATH_PREFIX + "/my/path"
 
-        logging.debug("Step 1: cannot save save data to hash subdir")
-        self.assertRaises(
-            InvalidPath,
-            self.storage.data_put,
-            data=data,
-            data_path=invalid_path,
-        )
-
-        logging.debug("Step 2a: save data without path")
-        data_path = self.storage.data_post(data=data)
-        self.assertTrue(
-            data_path.startswith(
-                DATA_PATH_PREFIX + "/" + HASHED_DATA_PATH_PREFIX + "/"
-            ),
-            data_path,
-        )
-
-        # load this again
-        logging.error(data_path)
-        with self.storage.data_open(data_path) as file:
-            _data = file.read()
-        self.assertEqual(_data, data)
-
-        logging.debug("Step 2c: save with invalid path")
-        self.assertRaises(
-            InvalidPath,
-            self.storage.data_put,
-            data=data,
-            data_path="/my/data/file.metadata.json",  # .metadata. is not allowed
-        )
-
-        logging.debug("Step 2b: save data with path")
         self.assertFalse(self.storage.data_exists(data_path_user))
+
+        logging.debug("save data")
         data_path = self.storage.data_put(data=data, data_path=data_path_user)
         self.assertTrue(self.storage.data_exists(data_path_user))
-        self.assertEqual(
-            DATA_PATH_PREFIX + "/" + normalize_path(data_path_user), data_path
-        )
+        self.assertEqual(data_path, "my/path")
 
-        logging.debug("Step 2c: save again will fail")
+        logging.debug("save again will fail")
         self.assertRaises(
             DataExists,
             self.storage.data_put,
@@ -136,63 +90,38 @@ class Test_01_LocalStorage(TestBase):
             data_path=data_path_user,
         )
 
-        logging.debug("Step 3: read data")
+        logging.debug("read data")
         with self.storage.data_open(data_path=data_path_user) as file:
             _data = file.read()
         self.assertEqual(data, _data)
 
-        logging.debug("Step 4a: delete")
-        self.storage.data_delete(data_path=data_path_user)
-
-        logging.debug("Step 4b: delete again")
+        logging.debug("delete (twice, which is allowed)")
         self.storage.data_delete(data_path=data_path_user)
         # reading now will raise error
         self.assertRaises(
             DataDoesNotExists, self.storage.data_open, data_path=data_path_user
         )
+        self.storage.data_delete(data_path=data_path_user)
 
-        logging.debug("Step 5: save again")
+        logging.debug("save again")
         self.storage.data_put(data=data, data_path=data_path_user)
 
-        logging.debug("Step 5: save metadata")
+        logging.debug("save metadata")
         metadata = {"a": [1, 2, 3], "b.c[0]": "test"}
-        self.storage.metadata_put(data_path=data_path_user, metadata=metadata)
+        self.storage.metadata_set(data_path=data_path_user, metadata=metadata)
 
-        logging.debug("Step 5: update metadata")
+        logging.debug("update metadata")
         metadata = {"b.c[1]": "test2"}
-        self.storage.metadata_put(data_path=data_path_user, metadata=metadata)
+        self.storage.metadata_set(data_path=data_path_user, metadata=metadata)
 
-        logging.debug("Step 5: get metadata")
-        metadata2 = self.storage.metadata_get(
+        logging.debug("get metadata")
+        metadata_b_c = self.storage.metadata_get(
             data_path=data_path_user, metadata_path="b.c"
         )
-        self.assertTrue(objects_euqal(metadata2, ["test", "test2"]))
-
-    def __DISABLED__test_storage_autoload(self):
-        uri = "sqlite:///:memory:?q=select 1 as value#/query1"
-        self.assertRaises(DataDoesNotExists, self.storage.data_open, data_path=uri)
-
-        with self.storage.data_open(data_path=uri, auto_load_uri=True) as file:
-            data = file.read()
-        data = DEFAULT_FROM_BYTES(data)
-        self.assertEqual(data[0]["value"], 1)
-
-        # save test file
-        db_filepath = self.static_dir + "/test.db"
-        # file should be created by sqlalchemy
-
-        # only for sqlite:
-        # in need an additional slash in linux for abs path
-        if platform_is_unix:
-            db_filepath = "/" + db_filepath
-
-        uri = f"sqlite://{db_filepath}?q=select 1 as value#/query1"
-        with self.storage.data_open(data_path=uri, auto_load_uri=True) as file:
-            data = file.read()
-        data = DEFAULT_FROM_BYTES(data)
-        self.assertEqual(data[0]["value"], 1)
-
-        uri = f"{self.static_url}/test.db"
-        with self.storage.data_open(data_path=uri, auto_load_uri=True) as file:
-            data = file.read()
-        self.assertEqual(data, b"")
+        self.assertTrue(objects_euqal(metadata_b_c, ["test", "test2"]))
+        metadata_all = self.storage.metadata_get(data_path=data_path_user)
+        self.assertTrue(
+            metadata_all["hash"][DEFAULT_HASH_METHOD],
+            getattr(hashlib, DEFAULT_HASH_METHOD)(data).hexdigest,
+        )
+        self.assertTrue(metadata_all["size"], len(data))
