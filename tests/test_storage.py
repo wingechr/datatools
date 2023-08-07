@@ -30,6 +30,7 @@ class MyTemporaryDirectory(TemporaryDirectory):
             for f in fs:
                 filepath = f"{rt}/{f}"
                 make_file_writable(filepath)
+                logging.debug(f"FILE: {filepath}")
         # delete dir
         self.tempdir.__exit__(*args)
         logging.debug(f"DELETING {path}: {not os.path.exists(path)}")
@@ -42,7 +43,7 @@ class TestBase(unittest.TestCase):
         self.storage = Storage(location=path_tempdir1)
 
         # set up static file server
-        self.tempdir2 = MyTemporaryDirectory()
+        self.tempdir2 = TemporaryDirectory()
         self.static_dir = self.tempdir2.__enter__()  # exit_stack.enter_context()
         port = get_free_port()
         self.static_url = f"http://localhost:{port}"

@@ -22,16 +22,22 @@ class TestResource(TestBase):
 
         # sqlite file
         db_filepath = self.static_dir + "/test.db"
-        with sqlite3.connect(db_filepath) as con:
-            cur = con.cursor()
-            cur.execute("create table test(value int);")
-            cur.execute("insert into test values(102);")
+
+        con = sqlite3.connect(db_filepath)
+        cur = con.cursor()
+        cur.execute("create table test(value int);")
+        cur.execute("insert into test values(102);")
+        cur.close()
+        con.commit()
+        con.close()
+
         # file should be created by sqlalchemy
         # only for sqlite:
         # in need an additional slash in linux for abs path
         if platform_is_unix:
             db_filepath = "/" + db_filepath
         uri = f"sqlite://{db_filepath}?q=select value from test#/testquery"
+
         res = self.storage.resource(uri=uri)
         with res.open() as file:
             bdata = file.read()
