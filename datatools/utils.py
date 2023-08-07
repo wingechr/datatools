@@ -410,6 +410,10 @@ def as_byte_iterator(data: Union[bytes, Iterable, BufferedReader]) -> Iterable[b
             if not chunk:
                 break
             yield chunk
+        try:
+            data.close()
+        except Exception as exc:
+            logging.warning(f"could not close BufferedReader: {exc}")
     elif isinstance(data, Iterable):
         yield from data
     else:

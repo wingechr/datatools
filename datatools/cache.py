@@ -3,13 +3,12 @@ import hashlib
 import json
 import logging
 import pickle
+from typing import Callable
 
 from datatools.utils import json_serialize
 
 DEFAULT_FROM_BYTES = pickle.loads
 DEFAULT_TO_BYTES = pickle.dumps
-
-
 DEFAULT_MEDIA_TYPE = "application/x-pickle"
 
 
@@ -46,7 +45,7 @@ def cache(
     from_bytes=None,
     to_bytes=None,
     path_prefix=None,
-):
+) -> Callable:
     """ """
     get_path = get_path or default_get_path
     from_bytes = from_bytes or DEFAULT_FROM_BYTES
@@ -66,7 +65,7 @@ def cache(
                 metadata = {"source.creation": job_description}
                 byte_data = to_bytes(data)
                 norm_data_path = storage.data_put(byte_data, data_path)
-                storage.metadata_put(data_path=norm_data_path, metadata=metadata)
+                storage.metadata_set(data_path=norm_data_path, metadata=metadata)
 
             with storage.data_open(data_path=data_path) as file:
                 byte_data = file.read()

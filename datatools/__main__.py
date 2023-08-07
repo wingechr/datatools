@@ -8,7 +8,7 @@ import click
 
 from . import GLOBAL_LOCATION, LOCAL_LOCATION, Storage, __version__
 from .exceptions import DataDoesNotExists, DatatoolsException
-from .load import open_uri, write_uri
+from .resource import open_uri, write_uri
 from .utils import as_uri, json_serialize, parse_cli_metadata
 
 
@@ -108,7 +108,7 @@ def metadata_get(storage: Storage, data_path, metadata_path):
 @click.pass_obj
 @click.argument("data_path")
 @click.argument("metadata_key_vals", nargs=-1, required=True)
-def metadata_put(storage: Storage, data_path, metadata_key_vals):
+def metadata_set(storage: Storage, data_path, metadata_key_vals):
     metadata = parse_cli_metadata(metadata_key_vals)
     storage.metadata_set(data_path=data_path, metadata=metadata)
 

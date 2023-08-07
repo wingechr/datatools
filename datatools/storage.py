@@ -8,12 +8,14 @@ import os
 import re
 from io import BufferedReader
 from tempfile import NamedTemporaryFile
-from typing import Iterable, Union
+from typing import Callable, Iterable, Union
 
 import jsonpath_ng
 
+from .cache import cache
 from .constants import DEFAULT_HASH_METHOD, LOCAL_LOCATION, ROOT_METADATA_PATH
 from .exceptions import DataDoesNotExists, DataExists, InvalidPath
+from .resource import Resouce
 from .utils import (
     as_byte_iterator,
     get_now_str,
@@ -25,7 +27,7 @@ from .utils import (
 )
 
 
-class Storage:
+class StorageBase:
     def __init__(self, location=None):
         self.__location = os.path.abspath(location or LOCAL_LOCATION)
 
@@ -80,7 +82,7 @@ class Storage:
         except DataDoesNotExists:
             return False
 
-    def data_delete(self, data_path: str) -> None:
+    def data_delete(self, data_path: str, delete_metadata=False) -> None:
         try:
             data_filepath = self._get_existing_data_filepath(data_path=data_path)
         except DataDoesNotExists:
@@ -88,6 +90,16 @@ class Storage:
         make_file_writable(file_path=data_filepath)
         logging.debug(f"DELETING {data_filepath}")
         os.remove(data_filepath)
+
+        if delete_metadata:
+            norm_data_path = self._get_norm_data_path(data_path=data_path)
+            metadata_filepath = self._get_metadata_filepath(
+                norm_data_path=norm_data_path
+            )
+            if os.path.exists(metadata_filepath):
+                logging.debug(f"DELETING {metadata_filepath}")
+                os.remove(metadata_filepath)
+
         return
 
     def data_put(
@@ -97,14 +109,14 @@ class Storage:
         exist_ok=False,
     ) -> str:
         norm_data_path = self._get_norm_data_path(data_path=data_path)
-        if self.data_exists(data_path=norm_data_path):
+        data_filepath = self._get_data_filepath(norm_data_path=norm_data_path)
+        if os.path.exists(data_filepath):
             if not exist_ok:
                 raise DataExists(norm_data_path)
             logging.info(f"Skipping existing file: {norm_data_path}")
             return norm_data_path
 
         # write data
-        data_filepath = self._get_data_filepath(norm_data_path=norm_data_path)
         tmp_dir = os.path.dirname(data_filepath)
         tmp_prefix = os.path.basename(data_filepath) + "+"
 
@@ -194,3 +206,23 @@ class Storage:
         logging.debug(f"WRITING {metadata_filepath}")
         with open(metadata_filepath, "wb") as file:
             file.write(metadata_bytes)
+
+
+class Storage(StorageBase):
+    def cache(
+        self,
+        get_path=None,
+        from_bytes=None,
+        to_bytes=None,
+        path_prefix=None,
+    ) -> Callable:
+        return cache(
+            storage=self,
+            get_path=get_path,
+            from_bytes=from_bytes,
+            to_bytes=to_bytes,
+            path_prefix=path_prefix,
+        )
+
+    def resource(self, uri, name=None) -> Resouce:
+        return Resouce(uri=uri, name=name, storage=self)
