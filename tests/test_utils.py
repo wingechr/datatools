@@ -16,6 +16,7 @@ from datatools.utils import (
     get_hostname,
     get_now_str,
     get_user_w_host,
+    is_file_readonly,
     json_serialize,
     make_file_readonly,
     make_file_writable,
@@ -89,6 +90,7 @@ class TestUtils(unittest.TestCase):
                 pass
 
             make_file_readonly(filepath)
+            self.assertTrue(is_file_readonly(filepath))
 
             # reading should be ok
             with open(filepath, "rb"):
@@ -103,6 +105,7 @@ class TestUtils(unittest.TestCase):
 
             # but we can revers it:
             make_file_writable(filepath)
+            self.assertFalse(is_file_readonly(filepath))
 
             os.remove(filepath)
 

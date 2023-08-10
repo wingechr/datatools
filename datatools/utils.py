@@ -252,6 +252,11 @@ def make_file_readonly(file_path: str) -> None:
     os.chmod(file_path, readonly_permissions)
 
 
+def is_file_readonly(file_path: str) -> None:
+    current_permissions = os.stat(file_path).st_mode
+    return not (current_permissions & FILEMOD_WRITE)
+
+
 def make_file_writable(file_path: str) -> None:
     current_permissions = os.stat(file_path).st_mode
     readonly_permissions = current_permissions | FILEMOD_WRITE

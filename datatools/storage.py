@@ -15,11 +15,12 @@ import jsonpath_ng
 from .cache import cache
 from .constants import DEFAULT_HASH_METHOD, LOCAL_LOCATION, ROOT_METADATA_PATH
 from .exceptions import DataDoesNotExists, DataExists, InvalidPath
-from .resource import Resouce
+from .resource import Resource
 from .utils import (
     as_byte_iterator,
     get_now_str,
     get_user_w_host,
+    is_file_readonly,
     json_serialize,
     make_file_readonly,
     make_file_writable,
@@ -48,10 +49,16 @@ class StorageBase:
         norm_data_path = normalize_path(data_path)
 
         # TODO: create function is_metadata_path
-        if re.match(r".*\.metadata\..*", norm_data_path):
+        if self._is_metadata_path(norm_data_path):
             raise InvalidPath(data_path)
 
         return norm_data_path
+
+    def _is_metadata_path(self, path: str):
+        return ".metadata." in path
+
+    def _is_temp_path(self, path: str):
+        return "+" in path
 
     def _create_metadata_path_pattern(self, metadata_path: str) -> str:
         metadata_path_pattern = jsonpath_ng.parse(metadata_path)
@@ -224,5 +231,54 @@ class Storage(StorageBase):
             path_prefix=path_prefix,
         )
 
-    def resource(self, uri, name=None) -> Resouce:
-        return Resouce(uri=uri, name=name, storage=self)
+    def resource(self, uri, name=None) -> Resource:
+        return Resource(uri=uri, name=name, storage=self)
+
+    def check(self, fix=False):
+        """scan location and check for problems"""
+        for rt, _ds, fs in os.walk(self.location):
+            rt_rl = os.path.relpath(rt, self.location).replace("\\", "/")
+            rt = rt.replace("\\", "/")
+            for filename in fs:
+                filepath = f"{rt}/{filename}"
+                if self._is_metadata_path(filename):
+                    continue
+                if self._is_temp_path(filename):
+                    logging.warning(f"Possibly incomplete tempfile: {filepath}")
+                    continue
+                if not is_file_readonly(filepath):
+                    if fix:
+                        make_file_readonly(filepath)
+                        logging.info(f"FIXED: File not readonly: {filepath}")
+                    else:
+                        logging.warning(f"File not readonly: {filepath}")
+                filepath_rel = f"{rt_rl}/{filename}"
+                norm_path = self._get_norm_data_path(filepath_rel)
+                # ignore case not now:
+                if norm_path != filepath_rel:
+                    data_path_old = self._get_data_filepath(filepath_rel)
+                    data_path_new = self._get_data_filepath(norm_path)
+
+                    meta_data_path_old = self._get_metadata_filepath(data_path_old)
+                    meta_data_path_new = self._get_metadata_filepath(data_path_new)
+
+                    if fix:
+                        os.rename(data_path_old, data_path_new)
+                        if os.path.exists(meta_data_path_old):
+                            os.rename(meta_data_path_old, meta_data_path_new)
+                        logging.info(f"FIXED: invalid path: {filepath_rel}")
+                    else:
+                        logging.warning(f"invalid path: {filepath_rel}")
+
+                # TODO: check hash, check size
+
+    def search(self, path_pattern) -> Iterable[str]:
+        path_pattern = re.compile(path_pattern.lower())
+        for rt, _ds, fs in os.walk(self.location):
+            rt_rl = os.path.relpath(rt, self.location).replace("\\", "/")
+            for filename in fs:
+                path = f"{rt_rl}/{filename}"
+                if self._is_metadata_path(path):
+                    continue
+                if path_pattern.match(path):
+                    yield path

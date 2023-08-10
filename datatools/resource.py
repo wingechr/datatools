@@ -27,7 +27,23 @@ def get_default_storage():
     return storage.Storage(location=None)
 
 
-class Resouce:
+class Metadata:
+    def __init__(self, resource: "Resource"):
+        self.__resource = resource
+
+    def __getitem__(self, metadata_path):
+        return self.__resource.storage.metadata_get(
+            data_path=self.__resource.name, metadata_path=metadata_path
+        )
+
+    def __setitem__(self, metadata_path, value):
+        metadata = {metadata_path: value}
+        return self.__resource.storage.metadata_set(
+            data_path=self.__resource.name, metadata=metadata
+        )
+
+
+class Resource:
     def __init__(self, uri: str, name: str = None, storage: "storage.Storage" = None):
         self.__storage = storage or get_default_storage()
         self.__uri = as_uri(uri)
@@ -45,6 +61,10 @@ class Resouce:
         return (
             f"Resource(uri='{self.uri}', name='{self.name}', storage='{self.storage}')"
         )
+
+    @property
+    def metadata(self):
+        return Metadata(resource=self)
 
     @property
     def scheme(self):
@@ -107,7 +127,9 @@ class Resouce:
                 netloc = self.netloc
 
             # TODO: is self.query encoded properly automatically?
-            url = urlunsplit([self.scheme, netloc, self.path, self.query, None])
+
+            query = urlencode(self.query, doseq=True) if self.query else None
+            url = urlunsplit([self.scheme, netloc, self.path, query, None])
             logging.debug(f"OPEN: {url}")
             res = requests.get(url, stream=True, headers=headers)
 
@@ -188,3 +210,9 @@ class Resouce:
             self.storage.metadata_set(data_path=self.name, metadata=metadata)
 
         return self.storage.data_open(data_path=self.name)
+
+    def is_in_storage(self) -> bool:
+        return self.storage.data_exists(data_path=self.name)
+
+    def remove_from_storage(self, delete_metadata=False) -> None:
+        self.storage.data_delete(data_path=self.name, delete_metadata=delete_metadata)
