@@ -272,13 +272,13 @@ class Storage(StorageBase):
 
                 # TODO: check hash, check size
 
-    def search(self, path_pattern) -> Iterable[str]:
-        path_pattern = re.compile(path_pattern.lower())
+    def search(self, *path_patterns) -> Iterable[str]:
+        path_patterns = [re.compile(".*" + p.lower()) for p in path_patterns]
         for rt, _ds, fs in os.walk(self.location):
             rt_rl = os.path.relpath(rt, self.location).replace("\\", "/")
             for filename in fs:
                 path = f"{rt_rl}/{filename}"
                 if self._is_metadata_path(path):
                     continue
-                if path_pattern.match(path):
+                if all(p.match(path) for p in path_patterns):
                     yield path

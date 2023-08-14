@@ -2,7 +2,7 @@ import logging
 import os
 import re
 from io import BufferedReader, BytesIO
-from typing import Tuple
+from typing import Callable, Tuple
 from urllib.parse import parse_qs, unquote, urlencode, urlsplit, urlunsplit
 
 import requests
@@ -41,6 +41,18 @@ class Metadata:
         return self.__resource.storage.metadata_set(
             data_path=self.__resource.name, metadata=metadata
         )
+
+    def get(self, metadata_path, default_value=None, save=False):
+        result = self[metadata_path]
+        if result is None:
+            if isinstance(default_value, Callable):
+                # pass resource
+                result = default_value(self.__resource)
+            else:
+                result = default_value
+            if save:
+                self[metadata_path] = result
+        return result
 
 
 class Resource:
@@ -97,6 +109,10 @@ class Resource:
     @property
     def storage(self):
         return self.__storage
+
+    @property
+    def filepath(self):
+        return self.storage._get_existing_data_filepath(data_path=self.name)
 
     def _open(self, **metadata_kwargs) -> Tuple[BufferedReader, dict]:
         metadata = {}
@@ -197,7 +213,7 @@ class Resource:
         else:
             raise NotImplementedError(self.scheme)
 
-    def open(self) -> BufferedReader:
+    def _save_if_not_exist(self):
         if not self.storage.data_exists(self.name):
             metadata_old = self.storage.metadata_get(data_path=self.name) or {}
             # use old metadata as opening hints
@@ -209,8 +225,11 @@ class Resource:
                 )
             self.storage.metadata_set(data_path=self.name, metadata=metadata)
 
+    def open(self) -> BufferedReader:
+        self._save_if_not_exist()
         return self.storage.data_open(data_path=self.name)
 
+    @property
     def is_in_storage(self) -> bool:
         return self.storage.data_exists(data_path=self.name)
 
