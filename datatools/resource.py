@@ -1,18 +1,28 @@
+import bz2
+import gzip
+import json
 import logging
 import os
 import re
+import zipfile
 from io import BufferedReader, BytesIO
 from typing import Callable, Tuple
 from urllib.parse import parse_qs, unquote, urlencode, urlsplit, urlunsplit
 
+import geopandas as gpd
+import pandas as pd
+import pyproj
 import requests
 import sqlalchemy as sa
+import xarray as xr
+from bs4 import BeautifulSoup
 
 from . import storage
 from .cache import DEFAULT_MEDIA_TYPE, DEFAULT_TO_BYTES
 from .utils import (
     as_uri,
     get_sql_table_schema,
+    load_asciigrid,
     normalize_path,
     normalize_sql_query,
     parse_content_type,
@@ -48,9 +58,13 @@ class Metadata:
             if isinstance(default_value, Callable):
                 # pass resource
                 result = default_value(self.__resource)
+                if result is not None:
+                    logging.debug(f"meta data from function: {metadata_path}={result}")
             else:
                 result = default_value
-            if save:
+                if result is not None:
+                    logging.debug(f"meta data from default: {metadata_path}={result}")
+            if result is not None and save:
                 self[metadata_path] = result
         return result
 
@@ -58,6 +72,10 @@ class Metadata:
 class Resource:
     def __init__(self, uri: str, name: str = None, storage: "storage.Storage" = None):
         self.__storage = storage or get_default_storage()
+
+        # TODO
+        uri = uri or "data:///" + name
+
         self.__uri = as_uri(uri)
         self.__name = normalize_path(name or uri)
 
@@ -235,3 +253,121 @@ class Resource:
 
     def remove_from_storage(self, delete_metadata=False) -> None:
         self.storage.data_delete(data_path=self.name, delete_metadata=delete_metadata)
+
+    # geopandas
+
+    def _load_from_zip(self, load):
+        name = self.name
+        assumed_filename_in_zip = name.split("/")[-1]
+        with self.open() as file:
+            zfile = zipfile.ZipFile(file)
+            # find
+            filename_in_zip = None
+            for zf in zfile.filelist:
+                logging.debug(zf.filename)
+                if normalize_path(zf.filename) + ".zip" == assumed_filename_in_zip:
+                    filename_in_zip = zf.filename
+                    break
+            if not filename_in_zip:
+                raise Exception(f"cannot find file in zip: {name}")
+            file_in_zip = zfile.open(filename_in_zip)
+            return load(file_in_zip)
+
+    def load(self):
+        # determine load method by media type
+        name = self.name
+
+        logging.info(name)
+        if re.match(r".*\.(zip)$", name):
+            if re.match(r".*\.(shp).zip$", name):
+                return gpd.read_file(self.filepath)
+            elif re.match(r".*\.(gpkg).zip$", name):
+                return self._load_from_zip(load=gpd.read_file)
+            elif re.match(r".*\.(csv).zip$", name):
+                return pd.read_csv(self.filepath)
+            else:
+                # plain zip
+                raise Exception(name)
+        elif re.match(r".*\.(gz)$", name):
+            if re.match(r".*\.(asc).gz$", name):
+                with self.open() as file:
+                    zfile = gzip.open(file)
+                    return load_asciigrid(zfile)
+            else:
+                # plain gz
+                raise Exception(name)
+        elif re.match(r".*\.(bz2)$", name):
+            if re.match(r".*\.(nc).bz2$", name):
+                with self.open() as file:
+                    zfile = bz2.open(file)
+                    return xr.load_dataset(zfile)
+            else:
+                # plain bz2
+                raise Exception(name)
+        elif re.match(r".*\.(json)$", name):
+            with self.open() as file:
+                return json.load(file)
+        elif re.match(r".*\.(txt|md|rst)$", name):
+            with self.open() as file:
+                bdata = file.read()
+            return bdata.decode(encoding=None)
+        elif re.match(r".*\.(html)$", name):
+            with self.open() as file:
+                return BeautifulSoup(file)
+        elif re.match(r".*\.(csv)$", name):
+            with self.open() as file:
+                return pd.read_csv(file)
+        elif re.match(r".*\.(xls|xlsx)$", name):
+            with self.open() as file:
+                return pd.read_excel(sheet_name=None)
+        elif re.match(r".*\.(shx|dbf|cpg)$", name):
+            # find associated shp
+            name_shp = re.sub("[^.]+$", "shp", self.name)
+            res = self.storage.resource(name=name_shp)
+            return gpd.read_file(res.filepath)
+        elif re.match(r".*\.(shp)$", name):
+            return gpd.read_file(self.filepath)
+        elif re.match(r".*\.(geojson|gpkg)$", name):
+            with self.open() as file:
+                return gpd.read_file(file)
+        elif re.match(r".*\.(png)$", name):
+            with self.open() as file:
+                return xr.load_dataarray(file)
+        elif re.match(r".*\.(tif|tiff)$", name):
+            with self.open() as file:
+                return xr.load_dataarray(file)
+        elif re.match(r".*\.(nc|nc4)$", name):
+            # xarray
+            with self.open() as file:
+                return xr.load_dataset(file)
+        elif re.match(r".*\.(asc)$", name):
+            # ascii grid
+            with self.open() as file:
+                return load_asciigrid(file)
+        elif re.match(r".*\.(xyz)$", name):
+            # point coords
+            with self.open() as file:
+                df = pd.read_csv(
+                    file,
+                    header=None,
+                    sep=" ",
+                    names=["x", "y", "z"],
+                    dtype={"x": int, "y": int, "z": float},
+                )
+            ds = df.set_index(["x", "y"])["z"]
+            ds = xr.DataArray.from_series(ds)
+            print(ds)
+            return ds
+
+        elif re.match(r".*\.(prj)$", name):
+            # projection string
+            with self.open() as file:
+                wkt = file.read().decode(encodinf="ascii")
+                return pyproj.CRS.from_wkt(wkt)
+        elif re.match(r".*\.(tfw)$", name):
+            # projection string for tif (text)
+            raise Exception(name)
+        elif re.match(r".*\.(qgz|pdf|docx|woff|woff2|ipynb|py|js|css)$", name):
+            raise Exception(name)
+        else:
+            raise Exception(name)

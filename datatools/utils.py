@@ -4,6 +4,7 @@ import datetime
 import inspect
 import json
 import logging
+import mimetypes
 import os
 import re
 import socket
@@ -464,3 +465,29 @@ def get_df_table_schema(df: pd.DataFrame):
             }
         )
     return {"fields": fields}
+
+
+def guess_mediatype(url: str) -> str:
+    mediatype, _ = mimetypes.guess_type(url=url)
+
+    if not mediatype:
+        if re.match(r"^.*\.url$", url):
+            return
+        else:
+            raise Exception(url)
+
+    if not mediatype:
+        logging.warning(f"no mediatype for {url}")
+    return mediatype
+
+
+def load_asciigrid(buf):
+    bdata = buf.read()
+    sdata = bdata.decode(encoding="ascii")
+    lines = sdata.splitlines()
+    ascii_grid = np.loadtxt(lines, skiprows=6)
+    # metadata
+    for ln in lines[:6]:
+        k, v = re.match("^([^ ]+)[ ]+([^ ]+)$", ln).groups()
+        ascii_grid.dtype.metadata[k] = float(v)
+    return ascii_grid

@@ -1,6 +1,7 @@
 # NOTE: we dont actually use ABC/abstractmethod
 # so that we can create decider instance
 
+import abc
 import hashlib
 import json
 import logging
@@ -28,7 +29,38 @@ from .utils import (
 )
 
 
-class StorageBase:
+class StorageAbstractBase(abc.ABC):
+    @abc.abstractmethod
+    def data_exists(self, data_path) -> bool:
+        ...
+
+    @abc.abstractmethod
+    def data_delete(self, data_path: str, delete_metadata=False) -> None:
+        ...
+
+    @abc.abstractmethod
+    def data_put(
+        self,
+        data: Union[BufferedReader, bytes, Iterable],
+        data_path: str,
+        exist_ok=False,
+    ) -> str:
+        ...
+
+    @abc.abstractmethod
+    def data_open(self, data_path: str) -> BufferedReader:
+        ...
+
+    @abc.abstractmethod
+    def metadata_get(self, data_path: str, metadata_path: str = None) -> object:
+        ...
+
+    @abc.abstractmethod
+    def metadata_set(self, data_path: str, metadata: dict) -> None:
+        ...
+
+
+class StorageBase(StorageAbstractBase):
     def __init__(self, location=None):
         self.__location = os.path.abspath(location or LOCAL_LOCATION)
 
@@ -184,8 +216,14 @@ class StorageBase:
         result = [x.value for x in match]
         # TODO: we always get a list (multiple matches),
         # but most of the time, we want only one
-        if len(result) == 1:
+
+        if len(result) == 0:
+            result = None
+        elif len(result) == 1:
             result = result[0]
+        else:
+            logging.warning("multiple results in metadata found")
+
         logging.debug(f"get metadata: {metadata_path} => {result}")
         return result
 
@@ -231,7 +269,9 @@ class Storage(StorageBase):
             path_prefix=path_prefix,
         )
 
-    def resource(self, uri, name=None) -> Resource:
+    def resource(self, uri=None, name=None) -> Resource:
+        if isinstance(uri, Resource):
+            uri = uri.uri
         return Resource(uri=uri, name=name, storage=self)
 
     def check(self, fix=False):
@@ -241,19 +281,24 @@ class Storage(StorageBase):
             rt = rt.replace("\\", "/")
             for filename in fs:
                 filepath = f"{rt}/{filename}"
-                if self._is_metadata_path(filename):
+                filepath_rel = f"{rt_rl}/{filename}"
+
+                if self._is_metadata_path(filepath_rel):
                     continue
+
                 if self._is_temp_path(filename):
                     logging.warning(f"Possibly incomplete tempfile: {filepath}")
                     continue
+
                 if not is_file_readonly(filepath):
                     if fix:
                         make_file_readonly(filepath)
                         logging.info(f"FIXED: File not readonly: {filepath}")
                     else:
                         logging.warning(f"File not readonly: {filepath}")
-                filepath_rel = f"{rt_rl}/{filename}"
+
                 norm_path = self._get_norm_data_path(filepath_rel)
+
                 # ignore case not now:
                 if norm_path != filepath_rel:
                     data_path_old = self._get_data_filepath(filepath_rel)
@@ -269,8 +314,6 @@ class Storage(StorageBase):
                         logging.info(f"FIXED: invalid path: {filepath_rel}")
                     else:
                         logging.warning(f"invalid path: {filepath_rel}")
-
-                # TODO: check hash, check size
 
     def search(self, *path_patterns) -> Iterable[str]:
         path_patterns = [re.compile(".*" + p.lower()) for p in path_patterns]

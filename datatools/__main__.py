@@ -60,11 +60,26 @@ def data_put(storage: Storage, uri, name: str = None):
     print(res.name)
 
 
+@main.command("check")
+@click.pass_obj
+@click.option("--fix", "-f", is_flag=True)
+def check(storage: Storage, fix):
+    storage.check(fix=fix)
+
+
+@main.command("_load")
+@click.pass_obj
+@click.argument("name")
+def _load(storage: Storage, name):
+    res = storage.resource(name=name)
+    print(type(res.load()))
+
+
 if __name__ == "__main__":
     try:
         main(prog_name="datatools")
     except DatatoolsException as exc:
-        logging.error(exc)
+        logging.error(f"{exc.__class__.__name__}: {exc}")
         sys.exit(1)
     except Exception as exc:
         logging.error(exc)
