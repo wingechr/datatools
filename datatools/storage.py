@@ -290,6 +290,8 @@ class Storage(StorageBase):
                     logging.warning(f"Possibly incomplete tempfile: {filepath}")
                     continue
 
+                logging.debug(filepath)
+
                 if not is_file_readonly(filepath):
                     if fix:
                         make_file_readonly(filepath)

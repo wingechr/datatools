@@ -67,14 +67,15 @@ def check(storage: Storage, fix):
     storage.check(fix=fix)
 
 
-@main.command("_load")
+@main.command("search")
 @click.pass_obj
-@click.argument("name")
-def _load(storage: Storage, name):
-    res = storage.resource(name=name)
-    print(type(res.load()))
+@click.argument("patterns", nargs=-1)
+def search(storage: Storage, patterns):
+    for result in storage.search(*patterns):
+        print(result)
 
 
+search
 if __name__ == "__main__":
     try:
         main(prog_name="datatools")

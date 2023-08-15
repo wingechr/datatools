@@ -23,6 +23,7 @@ import requests
 import sqlparse
 import tzlocal
 import unidecode
+import xarray as xr
 
 from .constants import (
     ANONYMOUS_USER,
@@ -491,3 +492,16 @@ def load_asciigrid(buf):
         k, v = re.match("^([^ ]+)[ ]+([^ ]+)$", ln).groups()
         ascii_grid.dtype.metadata[k] = float(v)
     return ascii_grid
+
+
+def load_xyz(buf):
+    df = pd.read_csv(
+        buf,
+        header=None,
+        sep=" ",
+        names=["x", "y", "z"],
+        dtype={"x": int, "y": int, "z": float},
+    )
+    ds = df.set_index(["x", "y"])["z"]
+    ds = xr.DataArray.from_series(ds)
+    return ds

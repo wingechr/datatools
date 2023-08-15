@@ -26,6 +26,7 @@ if __name__ == "__main__":
             "beautifulsoup4",
             "openpyxl",
             "pyproj",
+            "gdal",
         ],
         name="wingechr-datatools",
         description=None,
