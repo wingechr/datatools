@@ -6,12 +6,13 @@ import re
 import zipfile
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 import pyproj
 import xarray as xr
 from bs4 import BeautifulSoup
 
-from .utils import get_df_table_schema, load_asciigrid, load_xyz, normalize_name
+from .utils import get_df_table_schema, normalize_name
 
 
 def _load_from_zip(filepath, load, kwargs):
@@ -29,6 +30,31 @@ def _load_from_zip(filepath, load, kwargs):
             raise Exception(f"cannot find file in zip: {filepath}")
         file_in_zip = zfile.open(filename_in_zip)
         return load(file_in_zip, **kwargs)
+
+
+def load_xyz(buf):
+    df = pd.read_csv(
+        buf,
+        header=None,
+        sep=" ",
+        names=["x", "y", "z"],
+        dtype={"x": int, "y": int, "z": float},
+    )
+    ds = df.set_index(["x", "y"])["z"]
+    ds = xr.DataArray.from_series(ds)
+    return ds
+
+
+def load_asciigrid(buf):
+    bdata = buf.read()
+    sdata = bdata.decode(encoding="ascii")
+    lines = sdata.splitlines()
+    ascii_grid = np.loadtxt(lines, skiprows=6)
+    # metadata
+    for ln in lines[:6]:
+        k, v = re.match("^([^ ]+)[ ]+([^ ]+)$", ln).groups()
+        ascii_grid.dtype.metadata[k] = float(v)
+    return ascii_grid
 
 
 def load(filepath: str, **kwargs):
@@ -121,7 +147,7 @@ def get_metadata(obj, **kwargs):
         metadata["schema"] = get_df_table_schema(obj)
         metadata["shape"] = obj.shape
     if isinstance(obj, gpd.GeoDataFrame):
-        metadata["crs"] = obj.crs
+        metadata["crs"] = obj.crs.to_wkt()
         metadata["bounds"] = list(obj.total_bounds)
 
     return metadata

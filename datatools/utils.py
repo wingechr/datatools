@@ -23,7 +23,6 @@ import requests
 import sqlparse
 import tzlocal
 import unidecode
-import xarray as xr
 
 from .constants import (
     ANONYMOUS_USER,
@@ -480,28 +479,3 @@ def guess_mediatype(url: str) -> str:
     if not mediatype:
         logging.warning(f"no mediatype for {url}")
     return mediatype
-
-
-def load_asciigrid(buf):
-    bdata = buf.read()
-    sdata = bdata.decode(encoding="ascii")
-    lines = sdata.splitlines()
-    ascii_grid = np.loadtxt(lines, skiprows=6)
-    # metadata
-    for ln in lines[:6]:
-        k, v = re.match("^([^ ]+)[ ]+([^ ]+)$", ln).groups()
-        ascii_grid.dtype.metadata[k] = float(v)
-    return ascii_grid
-
-
-def load_xyz(buf):
-    df = pd.read_csv(
-        buf,
-        header=None,
-        sep=" ",
-        names=["x", "y", "z"],
-        dtype={"x": int, "y": int, "z": float},
-    )
-    ds = df.set_index(["x", "y"])["z"]
-    ds = xr.DataArray.from_series(ds)
-    return ds
