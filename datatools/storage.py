@@ -10,7 +10,12 @@ from typing import Iterable, Union
 
 import jsonpath_ng
 
-from .constants import DEFAULT_HASH_METHOD, LOCAL_LOCATION, ROOT_METADATA_PATH
+from .constants import (
+    DEFAULT_HASH_METHOD,
+    GLOBAL_LOCATION,
+    LOCAL_LOCATION,
+    ROOT_METADATA_PATH,
+)
 from .exceptions import DataDoesNotExists, DataExists, InvalidPath
 from .utils import (
     as_byte_iterator,
@@ -302,3 +307,14 @@ class Storage(StorageBase):
                     continue
                 if all(p.match(path) for p in path_patterns):
                     yield path
+
+
+class StorageGlobal(Storage):
+    def __init__(self):
+        super().__init__(location=GLOBAL_LOCATION)
+
+
+class StorageEnv(Storage):
+    def __init__(self, env_location):
+        location = os.environ[env_location]
+        super().__init__(location=location)

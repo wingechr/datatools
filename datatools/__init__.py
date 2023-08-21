@@ -8,15 +8,14 @@ __all__ = [
     "cache",
     "Storage",
     "StorageGlobal",
+    "StorageEnv",
 ]
 
 import click
 
 from . import cache, constants, exceptions, loader, resource, storage, utils
 from .main import main
-from .storage import Storage
-
-StorageGlobal = Storage(constants.GLOBAL_LOCATION)
+from .storage import Storage, StorageEnv, StorageGlobal
 
 # =============================================
 # patch scripts with resource
@@ -59,7 +58,9 @@ storage.StorageAbstractBase.cache = cache.cache
 
 
 # patch storage class
+# TODO: maybe move to resource
 def _load(resource, **kwargs):
+    resource._save_if_not_exist()
     return loader.load(filepath=resource.filepath, **kwargs)
 
 

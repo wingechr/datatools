@@ -2,6 +2,7 @@ import bz2
 import gzip
 import json
 import logging
+import pickle
 import re
 import zipfile
 from io import BufferedReader
@@ -163,6 +164,10 @@ def load(filepath: str, **kwargs):
         # point coords
         with open(filepath, "rb") as file:
             return _load_xyz(file, **kwargs)
+    elif re.match(r".*\.(pkl|pickle)$", filepath):
+        # point coords
+        with open(filepath, "rb") as file:
+            return pickle.load(file, **kwargs)
     elif re.match(r".*\.(tfw)$", filepath):
         # projection string for tif (text)
         raise Exception(filepath)
