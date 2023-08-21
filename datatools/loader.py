@@ -4,13 +4,31 @@ import json
 import logging
 import re
 import zipfile
+from io import BufferedReader
+from typing import Union
 
-import geopandas as gpd
 import numpy as np
 import pandas as pd
-import pyproj
-import xarray as xr
-from bs4 import BeautifulSoup
+
+# optional
+try:
+    import geopandas
+except ImportError:
+    geopandas = None
+
+# optional
+try:
+    import xarray
+except ImportError:
+    xarray = None
+
+
+# optional
+try:
+    import bs4
+except ImportError:
+    bs4 = None
+
 
 from .utils import get_df_table_schema, normalize_name
 
@@ -32,7 +50,9 @@ def _load_from_zip(filepath, load, kwargs):
         return load(file_in_zip, **kwargs)
 
 
-def load_xyz(buf):
+def _load_xyz(buf):
+    if xarray is None:
+        raise ImportError("xarray")
     df = pd.read_csv(
         buf,
         header=None,
@@ -41,11 +61,11 @@ def load_xyz(buf):
         dtype={"x": int, "y": int, "z": float},
     )
     ds = df.set_index(["x", "y"])["z"]
-    ds = xr.DataArray.from_series(ds)
+    ds = xarray.DataArray.from_series(ds)
     return ds
 
 
-def load_asciigrid(buf):
+def _load_asciigrid(buf):
     bdata = buf.read()
     sdata = bdata.decode(encoding="ascii")
     lines = sdata.splitlines()
@@ -57,12 +77,30 @@ def load_asciigrid(buf):
     return ascii_grid
 
 
+def _load_geopandas(source: Union[str, BufferedReader], **kwargs):
+    if geopandas is None:
+        raise ImportError("geopandas")
+    return geopandas.read_file(source, **kwargs)
+
+
+def _load_xarray(source: Union[str, BufferedReader], **kwargs):
+    if xarray is None:
+        raise ImportError("xarray")
+    return xarray.load_dataarray(source, **kwargs)
+
+
+def _load_beautifulsoup(source: Union[str, BufferedReader], **kwargs):
+    if bs4 is None:
+        raise ImportError("bs4")
+    return bs4.BeautifulSoup(source, features="lxml", **kwargs)
+
+
 def load(filepath: str, **kwargs):
     if re.match(r".*\.(zip)$", filepath):
         if re.match(r".*\.(shp).zip$", filepath):
-            return gpd.read_file(filepath, **kwargs)
+            return _load_geopandas(filepath, **kwargs)
         elif re.match(r".*\.(gpkg).zip$", filepath):
-            return _load_from_zip(load=gpd.read_file, kwargs=kwargs)
+            return _load_from_zip(load=_load_geopandas, kwargs=kwargs)
         elif re.match(r".*\.(csv).zip$", filepath):
             return pd.read_csv(filepath, **kwargs)
         else:
@@ -72,7 +110,7 @@ def load(filepath: str, **kwargs):
         if re.match(r".*\.(asc).gz$", filepath):
             with open(filepath, "rb") as file:
                 zfile = gzip.open(file)
-                return load_asciigrid(zfile, **kwargs)
+                return _load_asciigrid(zfile, **kwargs)
         else:
             # plain gz
             raise Exception(filepath)
@@ -80,7 +118,7 @@ def load(filepath: str, **kwargs):
         if re.match(r".*\.(nc).bz2$", filepath):
             with open(filepath, "rb") as file:
                 zfile = bz2.open(file)
-                return xr.load_dataset(zfile, **kwargs)
+                return _load_xarray(zfile, **kwargs)
         else:
             # plain bz2
             raise Exception(filepath)
@@ -93,45 +131,38 @@ def load(filepath: str, **kwargs):
         return bdata.decode(encoding=None, **kwargs)
     elif re.match(r".*\.(html)$", filepath):
         with open(filepath, "rb") as file:
-            return BeautifulSoup(file, features="lxml", **kwargs)
+            return _load_beautifulsoup(file, **kwargs)
     elif re.match(r".*\.(csv)$", filepath):
         with open(filepath, "rb") as file:
             return pd.read_csv(file, **kwargs)
     elif re.match(r".*\.(xls|xlsx)$", filepath):
         with open(filepath, "rb") as file:
             return pd.read_excel(sheet_name=None, **kwargs)
-    elif re.match(r".*\.(shx|dbf|cpg)$", filepath):
+    elif re.match(r".*\.(shx|dbf|cpg|prj)$", filepath):
         # find associated shp
         filepath_shp = re.sub("[^.]+$", "shp", filepath)
-        return gpd.read_file(filepath_shp, **kwargs)
-    elif re.match(r".*\.(shp)$", filepath):
-        return gpd.read_file(filepath)
-    elif re.match(r".*\.(geojson|gpkg)$", filepath):
+        return _load_geopandas(filepath_shp, **kwargs)
+    elif re.match(r".*\.(geojson|gpkg|shp)$", filepath):
         with open(filepath, "rb") as file:
-            return gpd.read_file(file, **kwargs)
+            return _load_geopandas(file, **kwargs)
     elif re.match(r".*\.(png)$", filepath):
         with open(filepath, "rb") as file:
-            return xr.load_dataarray(file, **kwargs)
+            return _load_xarray(file, **kwargs)
     elif re.match(r".*\.(tif|tiff)$", filepath):
         with open(filepath, "rb") as file:
-            return xr.load_dataarray(file, **kwargs)
+            return _load_xarray(file, **kwargs)
     elif re.match(r".*\.(nc|nc4)$", filepath):
         # xarray
         with open(filepath, "rb") as file:
-            return xr.load_dataset(file, **kwargs)
+            return _load_xarray(file, **kwargs)
     elif re.match(r".*\.(asc)$", filepath):
         # ascii grid
         with open(filepath, "rb") as file:
-            return load_asciigrid(file, **kwargs)
+            return _load_asciigrid(file, **kwargs)
     elif re.match(r".*\.(xyz)$", filepath):
         # point coords
         with open(filepath, "rb") as file:
-            return load_xyz(file, **kwargs)
-    elif re.match(r".*\.(prj)$", filepath):
-        # projection string
-        with open(filepath, "rb") as file:
-            wkt = file.read().decode(encodinf="ascii")
-            return pyproj.CRS.from_wkt(wkt)
+            return _load_xyz(file, **kwargs)
     elif re.match(r".*\.(tfw)$", filepath):
         # projection string for tif (text)
         raise Exception(filepath)
@@ -146,7 +177,7 @@ def get_metadata(obj, **kwargs):
     if isinstance(obj, pd.DataFrame):
         metadata["schema"] = get_df_table_schema(obj)
         metadata["shape"] = obj.shape
-    if isinstance(obj, gpd.GeoDataFrame):
+    if geopandas is not None and isinstance(obj, geopandas.GeoDataFrame):
         metadata["crs"] = obj.crs.to_wkt()
         metadata["bounds"] = list(obj.total_bounds)
 

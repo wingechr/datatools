@@ -1,9 +1,9 @@
 # import logging
 import json
 import os
+import pickle
 import sqlite3
 
-from datatools.cache import DEFAULT_FROM_BYTES
 from datatools.utils import platform_is_unix
 
 from .test_storage import TestBase
@@ -17,7 +17,7 @@ class TestResource(TestBase):
         res = self.storage.resource(uri=uri)
         with res.open() as file:
             bdata = file.read()
-        data = DEFAULT_FROM_BYTES(bdata)
+        data = pickle.loads(bdata)
         self.assertEqual(data[0]["value"], 101)
 
         # sqlite file
@@ -41,7 +41,7 @@ class TestResource(TestBase):
         res = self.storage.resource(uri=uri)
         with res.open() as file:
             bdata = file.read()
-        data = DEFAULT_FROM_BYTES(bdata)
+        data = pickle.loads(bdata)
         self.assertEqual(data[0]["value"], 102)
 
         # create files in static dir

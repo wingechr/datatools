@@ -3,6 +3,7 @@ from io import DEFAULT_BUFFER_SIZE as _DEFAULT_BUFFER_SIZE
 
 import appdirs
 
+PARAM_SQL_QUERY = "q"
 ROOT_METADATA_PATH = "$"  # root
 HASHED_DATA_PATH_PREFIX = "hash"
 ALLOWED_HASH_METHODS = ["md5", "sha256"]
@@ -28,3 +29,6 @@ TIME_FMT = "%H:%M:%S"
 FILEMOD_WRITE = 0o222
 ANONYMOUS_USER = "Anonymous"
 LOCALHOST = "localhost"
+
+
+DEFAULT_MEDIA_TYPE = "application/x-pickle"

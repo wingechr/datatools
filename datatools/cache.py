@@ -5,11 +5,7 @@ import logging
 import pickle
 from typing import Callable
 
-from datatools.utils import json_serialize
-
-DEFAULT_FROM_BYTES = pickle.loads
-DEFAULT_TO_BYTES = pickle.dumps
-DEFAULT_MEDIA_TYPE = "application/x-pickle"
+from .utils import json_serialize
 
 
 def get_hash(object):
@@ -40,16 +36,12 @@ def default_get_path(fun, args, kwargs):
 
 
 def cache(
-    storage,
-    get_path=None,
-    from_bytes=None,
-    to_bytes=None,
-    path_prefix=None,
+    storage, get_path=None, from_bytes=None, to_bytes=None, path_prefix=None
 ) -> Callable:
     """ """
     get_path = get_path or default_get_path
-    from_bytes = from_bytes or DEFAULT_FROM_BYTES
-    to_bytes = to_bytes or DEFAULT_TO_BYTES
+    from_bytes = from_bytes or pickle.loads
+    to_bytes = to_bytes or pickle.dumps
     path_prefix = path_prefix or ""
 
     def decorator(fun):

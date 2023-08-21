@@ -1,6 +1,3 @@
-# NOTE: we dont actually use ABC/abstractmethod
-# so that we can create decider instance
-
 import abc
 import hashlib
 import json
@@ -9,14 +6,12 @@ import os
 import re
 from io import BufferedReader
 from tempfile import NamedTemporaryFile
-from typing import Callable, Iterable, Union
+from typing import Iterable, Union
 
 import jsonpath_ng
 
-from .cache import cache
 from .constants import DEFAULT_HASH_METHOD, LOCAL_LOCATION, ROOT_METADATA_PATH
 from .exceptions import DataDoesNotExists, DataExists, InvalidPath
-from .resource import Resource
 from .utils import (
     as_byte_iterator,
     get_now_str,
@@ -254,26 +249,6 @@ class StorageBase(StorageAbstractBase):
 
 
 class Storage(StorageBase):
-    def cache(
-        self,
-        get_path=None,
-        from_bytes=None,
-        to_bytes=None,
-        path_prefix=None,
-    ) -> Callable:
-        return cache(
-            storage=self,
-            get_path=get_path,
-            from_bytes=from_bytes,
-            to_bytes=to_bytes,
-            path_prefix=path_prefix,
-        )
-
-    def resource(self, uri=None, name=None) -> Resource:
-        if isinstance(uri, Resource):
-            uri = uri.uri
-        return Resource(uri=uri, name=name, storage=self)
-
     def check(self, fix=False):
         """scan location and check for problems"""
         for rt, _ds, fs in os.walk(self.location):

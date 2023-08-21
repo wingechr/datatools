@@ -1,5 +1,6 @@
 import logging
 import os
+import pickle
 import re
 from io import BufferedReader, BytesIO
 from typing import Callable, Tuple
@@ -8,8 +9,7 @@ from urllib.parse import parse_qs, unquote, urlencode, urlsplit, urlunsplit
 import requests
 import sqlalchemy as sa
 
-from . import storage
-from .cache import DEFAULT_MEDIA_TYPE, DEFAULT_TO_BYTES
+from .constants import DEFAULT_MEDIA_TYPE, PARAM_SQL_QUERY
 from .utils import (
     as_uri,
     get_sql_table_schema,
@@ -20,11 +20,11 @@ from .utils import (
     uri_to_filepath_abs,
 )
 
-PARAM_SQL_QUERY = "q"
-
 
 def get_default_storage():
-    return storage.Storage(location=None)
+    from .storage import Storage
+
+    return Storage(location=None)
 
 
 class Metadata:
@@ -197,7 +197,7 @@ class Resource:
             # make sure everything is closed
             eng.dispose()
 
-            data = DEFAULT_TO_BYTES(data)
+            data = pickle.dumps(data)
             data = BytesIO(data)
 
             metadata["schema"] = data_schema
@@ -243,3 +243,9 @@ class Resource:
 
     def remove_from_storage(self, delete_metadata=False) -> None:
         self.storage.data_delete(data_path=self.name, delete_metadata=delete_metadata)
+
+    @staticmethod
+    def _storage_resource(storage, uri=None, name=None) -> "Resource":
+        if isinstance(uri, Resource):
+            uri = uri.uri
+        return Resource(uri=uri, name=name, storage=storage)
