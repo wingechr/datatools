@@ -257,6 +257,15 @@ class Storage(StorageBase):
     def check(self, fix=False):
         """scan location and check for problems"""
         for rt, _ds, fs in os.walk(self.location):
+            # also make folder readonly
+            make_file_readonly(rt)
+            if not is_file_readonly(rt):
+                if fix:
+                    make_file_readonly(rt)
+                    logging.info(f"FIXED: File not readonly: {rt}")
+                else:
+                    logging.warning(f"File not readonly: {rt}")
+
             rt_rl = os.path.relpath(rt, self.location).replace("\\", "/")
             rt = rt.replace("\\", "/")
             for filename in fs:

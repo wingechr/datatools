@@ -109,6 +109,40 @@ class TestUtils(unittest.TestCase):
 
             os.remove(filepath)
 
+    def _TODO_test_make_folder_readonly(self):
+        """not really working in windows"""
+        with TemporaryDirectory() as dir:
+            # create a folder
+            dirpath = f"{dir}/test"
+            os.makedirs(dirpath)
+
+            filepath = f"{dirpath}/test.txt"
+
+            # create file
+            with open(filepath, "wb"):
+                pass
+
+            make_file_readonly(dirpath)
+            self.assertTrue(is_file_readonly(dirpath))
+
+            # reading should be ok
+            with open(filepath, "rb"):
+                pass
+
+            # but not writing: rename, delete, create new
+            self.assertRaises(PermissionError, open, filepath, "wb")
+            self.assertRaises(PermissionError, os.rename, filepath, filepath + ".new")
+            self.assertRaises(PermissionError, os.remove, filepath)
+
+            self.assertRaises(PermissionError, os.rename, dirpath, dirpath + ".new")
+            self.assertRaises(PermissionError, os.remove, dirpath)
+
+            # but we can revers it:
+            make_file_writable(dirpath)
+            self.assertFalse(is_file_readonly(dirpath))
+
+            os.remove(filepath)
+
     def test_get_now_str(self):
         now_str = get_now_str()
         n2 = "[0-9]{2}"
