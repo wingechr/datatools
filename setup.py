@@ -18,6 +18,8 @@ if __name__ == "__main__":
             "numpy",
             "pandas",
             "chardet",
+            "frictionless",
+            "jsonschema",
         ],
         install_recommends=[  # this does not do anything, just for information
             "geopandas",
