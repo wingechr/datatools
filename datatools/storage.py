@@ -10,6 +10,7 @@ from typing import Iterable, Union
 
 import jsonpath_ng
 
+from . import loader
 from .constants import (
     DEFAULT_HASH_METHOD,
     GLOBAL_LOCATION,
@@ -68,6 +69,10 @@ class AbstractStorageResource(abc.ABC):
     def write(
         self, data: Union[BufferedReader, bytes, Iterable], exist_ok=False
     ) -> None:
+        ...
+
+    @abc.abstractmethod
+    def save(self, exist_ok=False) -> None:
         ...
 
     @abc.abstractmethod
@@ -175,6 +180,10 @@ class StorageResource(AbstractStorageResource):
     def name(self):
         return self.__name
 
+    @property
+    def filepath(self):
+        return self.__filepath
+
     def __get_norm_name(self, name: str) -> str:
         norm_name = normalize_path(name)
 
@@ -198,6 +207,9 @@ class StorageResource(AbstractStorageResource):
 
         if delete_metadata:
             self.metadata.delete()
+
+    def save(self, exist_ok=False) -> None:
+        raise NotImplementedError()
 
     def write(
         self, data: Union[BufferedReader, bytes, Iterable], exist_ok=False
@@ -245,21 +257,23 @@ class StorageResource(AbstractStorageResource):
         self.metadata.update(metadata)
 
     def open(self) -> BufferedReader:
-        if not os.path.exists(self.__filepath):
+        if not self.exists():
             raise DataDoesNotExists(self.name)
 
         logging.debug(f"READING {self.__filepath}")
         file = open(self.__filepath, "rb")
         return file
 
-    def _get_metadata_filepath(self):
-        return self.__filepath + ".metadata.json"
+    def load(self, **kwargs):
+        if not self.exists():
+            self.save()
+        return loader.load(filepath=self.filepath, **kwargs)
 
 
 class StorageResourceMetadata(AbstractStorageResourceMetadata):
     def __init__(self, resource: "AbstractStorageResource"):
         self.__resource = resource
-        self.__filepath = self.__resource._get_metadata_filepath()
+        self.__filepath = self.__resource.filepath + ".metadata.json"
 
     def __read(self) -> dict:
         if not os.path.exists(self.__filepath):

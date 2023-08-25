@@ -1,9 +1,19 @@
 import json
+import logging
 from os import makedirs
 from os.path import dirname, isfile
 
 import frictionless
 import jsonschema
+import requests
+
+
+def load_schema():
+    raise NotImplementedError
+
+
+def get_local_path():
+    raise NotImplementedError
 
 
 def validate_resource(resource_descriptor):

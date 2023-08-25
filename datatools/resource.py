@@ -1,9 +1,8 @@
 import logging
-import os
 import pickle
 import re
 from io import BufferedReader, BytesIO
-from typing import Callable, Iterable, Tuple, Union
+from typing import Iterable, Tuple
 from urllib.parse import parse_qs, unquote, urlencode, urlsplit, urlunsplit
 
 import requests
@@ -15,7 +14,6 @@ from .exceptions import DataExists
 from .utils import (
     as_uri,
     get_sql_table_schema,
-    normalize_path,
     normalize_sql_query,
     parse_content_type,
     remove_auth_from_uri_or_path,
@@ -28,9 +26,9 @@ def default_storage():
 
 
 class UriResource(storage.StorageResource):
-    def __init__(self, uri: str, storage: "storage.Storage" = None):
+    def __init__(self, uri: str, name: str = None, storage: "storage.Storage" = None):
         self.__uri = as_uri(uri)
-        super().__init__(storage=storage or default_storage(), name=self.__uri)
+        super().__init__(storage=storage or default_storage(), name=name or self.__uri)
 
         url_parts = urlsplit(self.__uri)
         self.__scheme = url_parts.scheme
@@ -154,7 +152,10 @@ class UriResource(storage.StorageResource):
 
         return data, metadata
 
-    def write(self, exist_ok=False) -> None:
+    def write(self, data: BufferedReader | bytes | Iterable, exist_ok=False) -> None:
+        raise NotImplementedError("use save() instead")
+
+    def save(self, exist_ok=False) -> None:
         if self.exists():
             if not exist_ok:
                 raise DataExists(self)
@@ -166,5 +167,5 @@ class UriResource(storage.StorageResource):
 
     def open(self) -> BufferedReader:
         # make sure that data exists in storage
-        self.write(exist_ok=True)
+        self.save(exist_ok=True)
         return super().open()
