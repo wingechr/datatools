@@ -32,3 +32,4 @@ LOCALHOST = "localhost"
 
 
 DEFAULT_MEDIA_TYPE = "application/x-pickle"
+STORAGE_SCHEME = "data"

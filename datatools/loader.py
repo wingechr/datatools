@@ -5,11 +5,23 @@ import logging
 import pickle
 import re
 import zipfile
-from io import BufferedReader
-from typing import Union
+from io import BufferedReader, BytesIO
+from typing import Tuple, Union
+from urllib.parse import parse_qs, unquote, urlencode, urlsplit, urlunsplit
 
-import numpy as np
-import pandas as pd
+import requests
+import sqlalchemy as sa
+
+from .constants import DEFAULT_MEDIA_TYPE, PARAM_SQL_QUERY
+from .utils import (
+    get_df_table_schema,
+    get_sql_table_schema,
+    normalize_name,
+    normalize_sql_query,
+    parse_content_type,
+    remove_auth_from_uri_or_path,
+    uri_to_filepath_abs,
+)
 
 # optional
 try:
@@ -29,9 +41,6 @@ try:
     import bs4
 except ImportError:
     bs4 = None
-
-
-from .utils import get_df_table_schema, normalize_name
 
 
 def _load_from_zip(filepath, load, kwargs):
@@ -187,3 +196,88 @@ def get_metadata(obj, **kwargs):
         metadata["bounds"] = list(obj.total_bounds)
 
     return metadata
+
+
+def load_uri(uri) -> Tuple[BufferedReader, dict]:
+    metadata = {}
+    metadata["source.path"] = remove_auth_from_uri_or_path(uri)
+    url = urlsplit(uri)
+
+    # protocol routing
+    if url.scheme == "file":
+        file_path = uri_to_filepath_abs(uri)
+        logging.debug(f"OPEN: {file_path}")
+        data = open(file_path, "rb")
+
+    elif url.scheme in ["http", "https"]:
+        # because we want to encode auth headers
+        # in the uri, we place it in the netloc
+        # part before the @host (instead of the basic auth)
+        # if it's basic auth, the pattern is `user:pass`
+        # if it's a header, it's header=value
+        match_header = re.match("^([^=@]+)=([^=@]+)@(.+)$", url.netloc)
+        headers = {}
+        if match_header:
+            h_name, h_val, netloc = match_header.groups()
+            h_name = unquote(h_name)
+            h_val = unquote(h_val)
+            headers[h_name] = h_val
+            logging.debug("Stripping auth header from uri")
+
+        else:
+            netloc = url.netloc
+
+        # TODO: is self.query encoded properly automatically?
+
+        url = urlunsplit([url.scheme, netloc, url.path, url.query, None])
+        logging.debug(f"OPEN: {url}")
+        res = requests.get(url, stream=True, headers=headers)
+
+        res.raise_for_status()
+        content_type = res.headers.get("Content-Type")
+        if content_type:
+            _meta = parse_content_type(content_type)
+            metadata.update(_meta)
+            logging.info(_meta)
+
+        data = res.raw
+
+    elif "sql" in url.scheme:
+        # pop sql query
+        query_dict = parse_qs(url.query)
+        sql_query = query_dict.pop(PARAM_SQL_QUERY)[0]
+        sql_query = unquote(sql_query)
+        sql_query = normalize_sql_query(sql_query)
+
+        metadata["source.query"] = sql_query
+
+        # usually, netloc is empty, and so urlunsplit()
+        # drops the "//"" at the beginning
+        path = url.path if url.netloc else "//" + url.path
+        # doseq: if False: encode arrays differently
+        query_str = urlencode(query_dict, doseq=True)
+
+        connection_string = urlunsplit([url.scheme, url.netloc, path, query_str, None])
+        logging.debug(f"Connect: {connection_string}")
+        eng = sa.create_engine(connection_string)
+        with eng.connect() as con:
+            with con:
+                logging.debug(f"Exceute: {sql_query}")
+                res = con.execute(sa.text(sql_query))
+                data_schema = get_sql_table_schema(res.cursor)
+                logging.debug(f"Schema: {data_schema}")
+                data = [rec._asdict() for rec in res.fetchall()]
+                logging.debug(f"Rows: {len(data)}")
+        # make sure everything is closed
+        eng.dispose()
+
+        data = pickle.dumps(data)
+        data = BytesIO(data)
+
+        metadata["schema"] = data_schema
+        metadata["mediatype"] = DEFAULT_MEDIA_TYPE
+
+    else:
+        raise NotImplementedError(url.scheme)
+
+    return data, metadata

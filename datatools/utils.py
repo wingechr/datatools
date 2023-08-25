@@ -31,6 +31,7 @@ from .constants import (
     DEFAULT_BUFFER_SIZE,
     FILEMOD_WRITE,
     LOCALHOST,
+    STORAGE_SCHEME,
     TIME_FMT,
 )
 from .exceptions import InvalidPath

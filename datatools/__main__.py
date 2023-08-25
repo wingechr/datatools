@@ -8,7 +8,6 @@ import click
 from . import __version__
 from .constants import GLOBAL_LOCATION, LOCAL_LOCATION
 from .exceptions import DatatoolsException
-from .resource import UriResource
 from .storage import Storage
 
 
@@ -68,17 +67,16 @@ def search(storage: Storage, patterns):
 
 @main.group("res")
 @click.pass_context
-@click.argument("uri")
-@click.option("--name", "-n")
-def resource(ctx, uri, name: str = None):
+@click.argument("source_uri")
+def resource(ctx, source_uri):
     storage = ctx.obj
-    resource = UriResource(uri=uri, name=name, storage=storage)
+    resource = storage.resource(source_uri=source_uri)
     ctx.obj = resource
 
 
 @resource.command("save")
 @click.pass_obj
-def data_put(resource: UriResource):
+def resource_save(resource: Storage):
     resource.write(exist_ok=True)
     print(resource.name)
 

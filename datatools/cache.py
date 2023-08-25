@@ -51,14 +51,14 @@ class Cache:
         self.__get_name = get_name or default_get_name
         self.__from_bytes = from_bytes or pickle.loads
         self.__to_bytes = to_bytes or pickle.dumps
-        self.__name_prefix = name_prefix or ""
+        self.__name_prefix = name_prefix or "cache://"
 
     def __call__(self, fun):
         @functools.wraps(fun)
         def _fun(*args, **kwargs):
             # get data_path from function + arguments
             name = self.__name_prefix + self.__get_name(fun, args, kwargs)
-            res = self.__storage.resource(name=name)
+            res = self.__storage.resource(source_uri=name)
 
             # try to get data from store
             if not res.exists():
