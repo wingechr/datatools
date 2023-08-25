@@ -15,12 +15,12 @@ from datatools.utils import (
     get_df_table_schema,
     get_hostname,
     get_now_str,
+    get_resource_path_name,
     get_user_w_host,
     is_file_readonly,
     json_serialize,
     make_file_readonly,
     make_file_writable,
-    normalize_path,
     normalize_sql_query,
     parse_cli_metadata,
     platform_is_windows,
@@ -33,18 +33,16 @@ from . import objects_euqal
 class TestUtils(unittest.TestCase):
     def test_normalize_data_path(self):
         for p, exp_np in [
-            ("/my/path//", "my/path"),
-            ("c:/my/path//", "c/my/path"),
-            ("file://a/b/", "file/a/b"),
-            ("file://a/b#x", "file/a/bx"),
-            ("https://a/b/", "http/a/b"),
-            ("https://a:8000/b", "http/a/b"),
-            ("https://a/b/?a=1#x", "http/a/b/x"),
-            ("https://a/b?a=1#.x", "http/a/b.x"),
-            ("http://a.com#x", "http/a.comx"),
-            ("http://a.com#/x", "http/a.com/x"),
-            ("http://user:pass@a.com", "http/a.com"),
-            ("http://header=token@a.com", "http/a.com"),
+            ("file://a/b/", "a/b"),
+            ("file://a/b#x", "a/bx"),
+            ("https://a/b/", "a/b"),
+            ("https://a:8000/b", "a/b"),
+            ("https://a/b/?a=1#x", "a/b/x"),
+            ("https://a/b?a=1#.x", "a/b.x"),
+            ("http://a.com#x", "a.comx"),
+            ("http://a.com#/x", "a.com/x"),
+            ("http://user:pass@a.com", "a.com"),
+            ("http://header=token@a.com", "a.com"),
             ("Lower  Case with SPACE ! ", "lower_case_with_space"),
             (
                 "François fährt Straßenbahn zum Café Málaga",
@@ -52,13 +50,13 @@ class TestUtils(unittest.TestCase):
             ),
             (
                 "https://www.domain-name.de/path%202021.pdf",
-                "http/www.domain-name.de/path_2021.pdf",
+                "www.domain-name.de/path_2021.pdf",
             ),
         ]:
-            np = normalize_path(p)
+            np = get_resource_path_name(p)
             self.assertEqual(np, exp_np, p)
             # also: normalized path should always normalize to self
-            np = normalize_path(exp_np)
+            np = get_resource_path_name(exp_np)
             self.assertEqual(np, exp_np, exp_np)
 
     def test_path_to_file_uri(self):
@@ -106,40 +104,6 @@ class TestUtils(unittest.TestCase):
             # but we can revers it:
             make_file_writable(filepath)
             self.assertFalse(is_file_readonly(filepath))
-
-            os.remove(filepath)
-
-    def _TODO_test_make_folder_readonly(self):
-        """not really working in windows"""
-        with TemporaryDirectory() as dir:
-            # create a folder
-            dirpath = f"{dir}/test"
-            os.makedirs(dirpath)
-
-            filepath = f"{dirpath}/test.txt"
-
-            # create file
-            with open(filepath, "wb"):
-                pass
-
-            make_file_readonly(dirpath)
-            self.assertTrue(is_file_readonly(dirpath))
-
-            # reading should be ok
-            with open(filepath, "rb"):
-                pass
-
-            # but not writing: rename, delete, create new
-            self.assertRaises(PermissionError, open, filepath, "wb")
-            self.assertRaises(PermissionError, os.rename, filepath, filepath + ".new")
-            self.assertRaises(PermissionError, os.remove, filepath)
-
-            self.assertRaises(PermissionError, os.rename, dirpath, dirpath + ".new")
-            self.assertRaises(PermissionError, os.remove, dirpath)
-
-            # but we can revers it:
-            make_file_writable(dirpath)
-            self.assertFalse(is_file_readonly(dirpath))
 
             os.remove(filepath)
 

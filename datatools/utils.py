@@ -31,10 +31,8 @@ from .constants import (
     DEFAULT_BUFFER_SIZE,
     FILEMOD_WRITE,
     LOCALHOST,
-    STORAGE_SCHEME,
     TIME_FMT,
 )
-from .exceptions import InvalidPath
 
 
 class ExitStack(_ExitStack):
@@ -114,27 +112,24 @@ def wait_for_server(url, timeout_s=30) -> None:
     raise Exception("Timeout")
 
 
-def normalize_path(path: str) -> str:
+def get_resource_path_name(uri: str) -> str:
     """should be all lowercase ascii
-    * uri: replace auth and ports
     * uri: remove query
 
     """
-    _path = path  # save original
-    if is_uri(path):
-        url_parts = urlsplit(path)
-        if url_parts.scheme == "https":
-            url_parts = url_parts._replace(scheme="http")
-        if url_parts.netloc:
-            nl = url_parts.netloc
-            nl = remove_port_from_url_netloc(nl)
-            nl = remove_auth_from_url_netloc(nl)
-            url_parts = url_parts._replace(netloc=nl)
-        # remove query params
-        url_parts = url_parts._replace(query=None)
-        uri = url_parts.geturl()
-        # remove fragment separator
-        path = uri.replace("#", "")
+    url_parts = urlsplit(uri)
+
+    # start with netloc
+    path = url_parts.netloc or ""
+    if path:
+        path = remove_port_from_url_netloc(path)
+        path = remove_auth_from_url_netloc(path)
+
+    # add actual path
+    path = path + (url_parts.path or "")
+
+    # add fragment
+    path = path + (url_parts.fragment or "")
 
     path = unquote_plus(path)
     path = path.lower()
@@ -146,46 +141,18 @@ def normalize_path(path: str) -> str:
     ]:
         path = path.replace(cin, cout)
     path = unidecode.unidecode(path)
-    path = path.replace("\\", "/")
-    path = re.sub("/+", "/", path)
-    # delete : drive
-    path = re.sub(r"[:]+", "", path)
+    path = re.sub(r":", "", path)
     path = re.sub(r"[^a-z0-9/_.\-]+", " ", path)
     path = path.strip()
     path = re.sub(r"\s+", "_", path)
     path = re.sub(r"_+", "_", path)
+    path = re.sub(r"/+", "/", path)
     path = path.strip("/")
+
     if not path:
-        raise InvalidPath(_path)
-    if path != _path:
-        logging.debug(f"Translating {_path} => {path}")
+        raise ValueError(uri)
 
     return path
-
-
-def normalize_name(name: str) -> str:
-    """should be all lowercase ascii
-    * uri: remove query
-
-    """
-    _name = name  # cop
-    name = unquote_plus(name)
-    name = name.lower()
-    for cin, cout in [
-        ("ä", "ae"),
-        ("ö", "oe"),
-        ("ü", "ue"),
-        ("ß", "ss"),
-    ]:
-        name = name.replace(cin, cout)
-    name = unidecode.unidecode(name)
-    name = re.sub(r"[^a-z0-9]+", "_", name)
-    name = name.strip("_")
-
-    if not name:
-        raise InvalidPath(_name)
-
-    return name
 
 
 def get_query_arg(kwargs: dict, key: str, default=None) -> str:
@@ -480,3 +447,11 @@ def guess_mediatype(url: str) -> str:
     if not mediatype:
         logging.warning(f"no mediatype for {url}")
     return mediatype
+
+
+def delete_file(filepath: str) -> str:
+    if not os.path.exists(filepath):
+        return
+    logging.debug(f"DELETING {filepath}")
+    make_file_writable(file_path=filepath)
+    os.remove(filepath)

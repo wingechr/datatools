@@ -2,10 +2,15 @@ import json
 import logging
 from os import makedirs
 from os.path import dirname, isfile
+from typing import Union
 
 import frictionless
 import jsonschema
 import requests
+
+
+def validate(data: object, schema: object) -> None:
+    pass
 
 
 def load_schema():
@@ -87,7 +92,7 @@ def get_jsonschema_validator(schema):
     return validator_function
 
 
-def validate_json_schema(data, schema: str | dict | bool = True) -> object:
+def validate_json_schema(data, schema: Union[str, dict, bool] = True) -> object:
     if schema is True:
         schema = data["$schema"]
     if isinstance(schema, str):

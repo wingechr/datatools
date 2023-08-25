@@ -4,12 +4,11 @@ __all__ = [
     "constants",
     "utils",
     "storage",
-    "cache",
     "Storage",
     "StorageGlobal",
     "StorageEnv",
 ]
 
 
-from . import cache, constants, exceptions, storage, utils
+from . import constants, exceptions, storage, utils
 from .storage import Storage, StorageEnv, StorageGlobal

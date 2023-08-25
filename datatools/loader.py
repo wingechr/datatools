@@ -17,8 +17,8 @@ import sqlalchemy as sa
 from .constants import DEFAULT_MEDIA_TYPE, PARAM_SQL_QUERY
 from .utils import (
     get_df_table_schema,
+    get_resource_path_name,
     get_sql_table_schema,
-    normalize_name,
     normalize_sql_query,
     parse_content_type,
     remove_auth_from_uri_or_path,
@@ -51,8 +51,8 @@ def _load_from_zip(filepath, load, kwargs):
         # find
         filename_in_zip = None
         for zf in zfile.filelist:
-            logging.debug(zf.filename)
-            if normalize_name(zf.filename) + ".zip" == assumed_filename_in_zip:
+            zf_norm_name = get_resource_path_name(zf.filename.lower + ".zip")
+            if zf_norm_name == assumed_filename_in_zip:
                 filename_in_zip = zf.filename
                 break
         if not filename_in_zip:
@@ -100,10 +100,12 @@ def _load_xarray(source: Union[str, BufferedReader], **kwargs):
     return xarray.load_dataarray(source, **kwargs)
 
 
-def _load_beautifulsoup(source: Union[str, BufferedReader], **kwargs):
+def _load_beautifulsoup(
+    source: Union[str, BufferedReader], features="html.parser", **kwargs
+):
     if bs4 is None:
         raise ImportError("bs4")
-    return bs4.BeautifulSoup(source, features="lxml", **kwargs)
+    return bs4.BeautifulSoup(source, features=features, **kwargs)
 
 
 def load_file(filepath: str, **kwargs):
@@ -142,7 +144,7 @@ def load_file(filepath: str, **kwargs):
         return bdata.decode(encoding=None, **kwargs)
     elif re.match(r".*\.(html)$", filepath):
         with open(filepath, "rb") as file:
-            return _load_beautifulsoup(file, **kwargs)
+            return _load_beautifulsoup(file, features="html.parser", **kwargs)
     elif re.match(r".*\.(csv)$", filepath):
         with open(filepath, "rb") as file:
             return pd.read_csv(file, **kwargs)

@@ -1,13 +1,13 @@
-import abc
+import functools
 import hashlib
 import json
 import logging
 import os
+import pickle
 import re
 from io import BufferedReader
 from tempfile import NamedTemporaryFile
-from typing import Iterable, Union
-from urllib.parse import urlsplit
+from typing import Callable, Iterable, Union
 
 import jsonpath_ng
 
@@ -16,84 +16,24 @@ from .constants import (
     GLOBAL_LOCATION,
     LOCAL_LOCATION,
     ROOT_METADATA_PATH,
-    STORAGE_SCHEME,
 )
 from .exceptions import DataDoesNotExists, DataExists, InvalidPath
 from .loader import load_file, open_uri
+from .schema import validate
 from .utils import (
     as_byte_iterator,
     as_uri,
+    delete_file,
     get_now_str,
+    get_resource_path_name,
     get_user_w_host,
     is_file_readonly,
     json_serialize,
     make_file_readonly,
-    make_file_writable,
-    normalize_path,
 )
 
 
-def delete_file(filepath: str) -> str:
-    if not os.path.exists(filepath):
-        return
-    logging.debug(f"DELETING {filepath}")
-    make_file_writable(file_path=filepath)
-    os.remove(filepath)
-
-
-def is_metadata_path(path: str):
-    return ".metadata." in path
-
-
-def is_temp_path(path: str):
-    return "+" in path
-
-
-class AbstractStorage(abc.ABC):
-    @abc.abstractmethod
-    def resource(self, source_uri: str) -> "AbstractStorageResource":
-        ...
-
-
-class AbstractStorageResource(abc.ABC):
-    @abc.abstractproperty
-    def metadata(self) -> "AbstractStorageResourceMetadata":
-        ...
-
-    @abc.abstractmethod
-    def exists(self) -> bool:
-        ...
-
-    @abc.abstractmethod
-    def delete(self, delete_metadata: bool = False) -> None:
-        ...
-
-    @abc.abstractmethod
-    def write(
-        self, data: Union[BufferedReader, bytes, Iterable], exist_ok=False
-    ) -> None:
-        ...
-
-    @abc.abstractmethod
-    def save(self, exist_ok=False) -> None:
-        ...
-
-    @abc.abstractmethod
-    def open(self) -> BufferedReader:
-        ...
-
-
-class AbstractStorageResourceMetadata(abc.ABC):
-    @abc.abstractmethod
-    def get(self, key: str) -> object:
-        ...
-
-    @abc.abstractmethod
-    def update(self, metadata: dict) -> None:
-        ...
-
-
-class Storage(AbstractStorage):
+class Storage:
     def __init__(self, location=None):
         self.__location = os.path.abspath(location or LOCAL_LOCATION)
 
@@ -104,15 +44,26 @@ class Storage(AbstractStorage):
     def __str__(self):
         return f"Storage({self.location})"
 
-    def resource(self, source_uri: str) -> "AbstractStorageResource":
-        return StorageResource(storage=self, source_uri=source_uri)
+    def resource(self, source_uri: str) -> "Resource":
+        return Resource(storage=self, source_uri=source_uri)
+
+    def cache(
+        self,
+        get_name: Callable = None,
+        from_bytes: Callable = None,
+        to_bytes: Callable = None,
+        name_prefix: str = None,
+    ) -> "Cache":
+        return Cache(
+            storage=self,
+            get_name=get_name,
+            from_bytes=from_bytes,
+            to_bytes=to_bytes,
+            name_prefix=name_prefix,
+        )
 
     def check(self, fix=False):
-        for name in self.search():
-            res = self.resource(source_uri=name)
-
-            # logging.debug(res.filepath)
-
+        for res in self.find_resources():
             if not is_file_readonly(res.filepath):
                 if fix:
                     make_file_readonly(res.filepath)
@@ -120,48 +71,44 @@ class Storage(AbstractStorage):
                 else:
                     logging.warning(f"File not readonly: {res.filepath}")
 
-            norm_path = normalize_path(name)
+    @classmethod
+    def is_metadata_path(cls, path: str):
+        return ".metadata." in path
 
-            # ignore case not now:
-            if norm_path != name:
-                logging.warning(f"invalid path: {name}")
+    @classmethod
+    def is_temp_path(cls, path: str):
+        return "+" in path
 
-    def search(self, *path_patterns) -> Iterable[str]:
+    def find_resources(self, *path_patterns) -> Iterable["Resource"]:
         path_patterns = [re.compile(".*" + p.lower()) for p in path_patterns]
         for rt, _ds, fs in os.walk(self.location):
             rt_rl = os.path.relpath(rt, self.location).replace("\\", "/")
             for filename in fs:
                 path = f"{rt_rl}/{filename}"
-                if is_metadata_path(path):
+                if self.is_metadata_path(path):
                     continue
-                if is_temp_path(path):
+                if self.is_temp_path(path):
                     continue
                 if all(p.match(path) for p in path_patterns):
-                    yield path
+                    yield self.resource("data://" + path)
 
 
-class StorageResource(AbstractStorageResource):
+class Resource:
     def __init__(self, storage: "Storage", source_uri: str):
         self.__storage = storage
         self.__source_uri = as_uri(source_uri)
+        self.__name = get_resource_path_name(self.__source_uri)
+        self.__data_uri = "data://" + self.__name
 
-        url = urlsplit(self.__source_uri)
-        if url.scheme == STORAGE_SCHEME:
-            name = url.path
-        else:
-            name = self.__source_uri
-        self.__name = normalize_path(name)
-
-        if is_metadata_path(self.__name):
+        if self.__storage.is_metadata_path(self.__name):
             raise InvalidPath(self.__name)
-        if is_temp_path(self.__name):
+        if self.__storage.is_temp_path(self.__name):
             raise InvalidPath(self.__name)
 
-        self.__uri = f"{STORAGE_SCHEME}:///{self.__name}"
         self.__filepath = os.path.abspath(self.__storage.location + "/" + self.__name)
 
     def __str__(self):
-        return f"Resource('{self.source_uri}')"
+        return f"Resource('{self.data_uri}')"
 
     @property
     def name(self):
@@ -172,12 +119,16 @@ class StorageResource(AbstractStorageResource):
         return self.__source_uri
 
     @property
+    def data_uri(self):
+        return self.__data_uri
+
+    @property
     def filepath(self):
         return self.__filepath
 
     @property
-    def metadata(self) -> "AbstractStorageResourceMetadata":
-        return StorageResourceMetadata(resource=self)
+    def metadata(self) -> "Metadata":
+        return Metadata(resource=self)
 
     def exists(self) -> bool:
         return os.path.exists(self.filepath)
@@ -239,7 +190,7 @@ class StorageResource(AbstractStorageResource):
             "size": size,
             "source.user": get_user_w_host(),
             "source.datetime": get_now_str(),
-            "source.name": self.__name,
+            "source.name": self.name,
         }
         self.metadata.update(metadata)
 
@@ -249,13 +200,17 @@ class StorageResource(AbstractStorageResource):
         file = open(self.filepath, "rb")
         return file
 
-    def load(self, **kwargs):
+    def load(self, validate_schema=False, **kwargs):
         self.save(exist_ok=True)
-        return load_file(filepath=self.filepath, **kwargs)
+        data = load_file(filepath=self.filepath, **kwargs)
+        if validate_schema:
+            schema = self.metadata.get("schema")
+            validate(data, schema)
+        return data
 
 
-class StorageResourceMetadata(AbstractStorageResourceMetadata):
-    def __init__(self, resource: "AbstractStorageResource"):
+class Metadata:
+    def __init__(self, resource: "Resource"):
         self.__resource = resource
         self.__filepath = self.__resource.filepath + ".metadata.json"
 
@@ -316,6 +271,77 @@ class StorageResourceMetadata(AbstractStorageResourceMetadata):
     def __create_metadata_path_pattern(self, metadata_path: str) -> str:
         metadata_path_pattern = jsonpath_ng.parse(metadata_path)
         return metadata_path_pattern
+
+
+class Cache:
+    def __init__(
+        self,
+        storage: Storage = None,
+        get_name: Callable = None,
+        from_bytes: Callable = None,
+        to_bytes: Callable = None,
+        name_prefix: str = None,
+    ):
+        self.__storage = storage or Storage()
+        self.__get_name = get_name or self.default_get_name
+        self.__from_bytes = from_bytes or pickle.loads
+        self.__to_bytes = to_bytes or pickle.dumps
+        self.__name_prefix = name_prefix or "cache/"
+
+    def __call__(self, fun):
+        @functools.wraps(fun)
+        def _fun(*args, **kwargs):
+            # get data_path from function + arguments
+            name = self.__name_prefix + self.__get_name(fun, args, kwargs)
+            uri = "cache:///" + name
+            res = self.__storage.resource(source_uri=uri)
+
+            # try to get data from store
+            if not res.exists():
+                # actually call function and write data
+                data = fun(*args, **kwargs)
+                byte_data = self.__to_bytes(data)
+                res.write(data=byte_data)
+
+                # add job description as metadata
+                job_description = self.get_job_description(fun, args, kwargs)
+                metadata = {"source.creation": job_description}
+                res.metadata.update(metadata)
+
+            # load data from storage
+            with res.open() as file:
+                byte_data = file.read()
+            data = self.__from_bytes(byte_data)
+            return data
+
+        return _fun
+
+    @classmethod
+    def get_hash(cls, object):
+        bytes = json.dumps(
+            object, sort_keys=True, ensure_ascii=False, default=json_serialize
+        ).encode()
+        job_id = hashlib.md5(bytes).hexdigest()
+        return job_id
+
+    @classmethod
+    def get_job_description(cls, fun, args, kwargs):
+        return {
+            "function": fun.__name__,
+            "args": args,
+            "kwargs": kwargs,
+            "description": fun.__doc__,  # todo: maybe cleanup into plain text
+        }
+
+    @classmethod
+    def default_get_name(cls, fun, args, kwargs):
+        f_name = f"{fun.__name__}"
+        job_desc = cls.get_job_description(fun, args, kwargs)
+        # we only hash part of it:
+        job_id = cls.get_hash({"args": job_desc["args"], "kwargs": job_desc["kwargs"]})
+        # we can shorten the hash: 8 to 10 chars should be enough
+        job_id = job_id[:8]
+        return f"{f_name}_{job_id}.pickle"
 
 
 class StorageGlobal(Storage):

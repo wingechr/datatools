@@ -9,7 +9,7 @@ import click
 from . import __version__
 from .constants import GLOBAL_LOCATION, LOCAL_LOCATION
 from .exceptions import DatatoolsException
-from .storage import Storage, StorageResource, StorageResourceMetadata
+from .storage import Metadata, Resource, Storage
 from .utils import parse_cli_metadata
 
 
@@ -63,8 +63,8 @@ def check(storage: Storage, fix):
 @click.pass_obj
 @click.argument("patterns", nargs=-1)
 def search(storage: Storage, patterns):
-    for result in storage.search(*patterns):
-        print(result)
+    for res in storage.find_resources(*patterns):
+        print(res.data_uri)
 
 
 @main.group("res")
@@ -78,9 +78,9 @@ def resource(ctx, source_uri):
 
 @resource.command("save")
 @click.pass_obj
-def resource_save(resource: StorageResource):
+def resource_save(resource: Resource):
     resource.save(exist_ok=True)
-    print(resource.name)
+    print(resource.data_uri)
 
 
 @resource.group("meta")
@@ -93,7 +93,7 @@ def resource_meta(ctx):
 @resource_meta.command("get")
 @click.pass_obj
 @click.argument("key", required=False)
-def resource_meta_get(metadata: StorageResourceMetadata, key=None):
+def resource_meta_get(metadata: Metadata, key=None):
     result = metadata.get(key)
     result_str = json.dumps(result, indent=2, ensure_ascii=True)
     print(result_str)
@@ -102,7 +102,7 @@ def resource_meta_get(metadata: StorageResourceMetadata, key=None):
 @resource_meta.command("update")
 @click.pass_obj
 @click.argument("metadata_key_vals", nargs=-1)
-def resource_meta_update(metadata: StorageResourceMetadata, metadata_key_vals):
+def resource_meta_update(metadata: Metadata, metadata_key_vals):
     new_metadata = parse_cli_metadata(metadata_key_vals)
     metadata.update(new_metadata)
 

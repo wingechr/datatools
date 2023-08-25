@@ -1,18 +1,23 @@
 import hashlib
+import json
 import logging
 import os
+import pickle
+import sqlite3
 import subprocess as sp
 import sys
-
-# import secrets
 import unittest
 from tempfile import TemporaryDirectory
 
-from datatools.cache import Cache
 from datatools.constants import DEFAULT_HASH_METHOD
 from datatools.exceptions import DataDoesNotExists, DataExists
 from datatools.storage import Storage
-from datatools.utils import get_free_port, make_file_writable, wait_for_server
+from datatools.utils import (
+    get_free_port,
+    make_file_writable,
+    platform_is_unix,
+    wait_for_server,
+)
 
 from . import objects_euqal
 
@@ -124,7 +129,7 @@ class TestLocalStorage(TestBase):
     def test_cache_decorator(self):
         context = {"counter": 0}
 
-        @Cache(self.storage, name_prefix="myproject/cache/")
+        @self.storage.cache()
         def test_fun_sum(a, b):
             logging.debug("running test_fun_sum")
             context["counter"] += 1
@@ -140,3 +145,59 @@ class TestLocalStorage(TestBase):
         self.assertEqual(test_fun_sum(1, 2), 3)
         # counted up, because new signature
         self.assertEqual(context["counter"], 2)
+
+
+class TestResource(TestBase):
+    def test_resource(self):
+        # in memory sqlite3 database
+        query = "select cast(101 as int) as value;"
+        uri = f"sqlite:///:memory:?q={query}#/testquery"
+        res = self.storage.resource(uri)
+        with res.open() as file:
+            bdata = file.read()
+        data = pickle.loads(bdata)
+        self.assertEqual(data[0]["value"], 101)
+
+        # sqlite file
+        db_filepath = self.static_dir + "/test.db"
+
+        con = sqlite3.connect(db_filepath)
+        cur = con.cursor()
+        cur.execute("create table test(value int);")
+        cur.execute("insert into test values(102);")
+        cur.close()
+        con.commit()
+        con.close()
+
+        # file should be created by sqlalchemy
+        # only for sqlite:
+        # in need an additional slash in linux for abs path
+        if platform_is_unix:
+            db_filepath = "/" + db_filepath
+        uri = f"sqlite://{db_filepath}?q=select value from test#/testquery"
+
+        res = self.storage.resource(uri)
+        with res.open() as file:
+            bdata = file.read()
+        data = pickle.loads(bdata)
+        self.assertEqual(data[0]["value"], 102)
+
+        # create files in static dir
+        fpath = os.path.join(self.static_dir, "testfile.json")
+        with open(fpath, "w", encoding="utf-8") as file:
+            json.dump({"value": 103}, file, ensure_ascii=False)
+
+        # load from path
+        uri = fpath
+        res = self.storage.resource(uri)
+        with res.open() as file:
+            data = json.load(file)
+        self.assertEqual(data["value"], 103)
+
+        # load from webserver
+
+        uri = self.static_url + "/testfile.json"
+        res = self.storage.resource(uri)
+        with res.open() as file:
+            data = json.load(file)
+        self.assertEqual(data["value"], 103)
