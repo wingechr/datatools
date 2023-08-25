@@ -8,6 +8,7 @@ import sys
 import unittest
 from tempfile import TemporaryDirectory
 
+from datatools.cache import Cache
 from datatools.constants import DEFAULT_HASH_METHOD
 from datatools.exceptions import DataDoesNotExists, DataExists
 from datatools.storage import Storage
@@ -76,51 +77,44 @@ class TestLocalStorage(TestBase):
         data = b"hello world"
         data_path_user = "/My/path"
 
-        self.assertFalse(self.storage.data_exists(data_path_user))
+        res = self.storage.resource(data_path_user)
+        self.assertFalse(res.exists())
 
         logging.debug("save data")
-        data_path = self.storage.data_put(data=data, data_path=data_path_user)
-        self.assertTrue(self.storage.data_exists(data_path_user))
-        self.assertEqual(data_path, "my/path")
+        res.write(data)
+        self.assertTrue(res.exists())
+        self.assertEqual(res.name, "my/path")
 
         logging.debug("save again will fail")
-        self.assertRaises(
-            DataExists,
-            self.storage.data_put,
-            data=data,
-            data_path=data_path_user,
-        )
+        self.assertRaises(DataExists, res.write, data)
 
         logging.debug("read data")
-        with self.storage.data_open(data_path=data_path_user) as file:
+        with res.open() as file:
             _data = file.read()
         self.assertEqual(data, _data)
 
         logging.debug("delete (twice, which is allowed)")
-        self.storage.data_delete(data_path=data_path_user)
+        res.delete()
         # reading now will raise error
-        self.assertRaises(
-            DataDoesNotExists, self.storage.data_open, data_path=data_path_user
-        )
-        self.storage.data_delete(data_path=data_path_user)
+        self.assertRaises(DataDoesNotExists, res.open)
+        res.delete()
 
         logging.debug("save again")
-        self.storage.data_put(data=data, data_path=data_path_user)
+        res.write(data)
 
         logging.debug("save metadata")
         metadata = {"a": [1, 2, 3], "b.c[0]": "test"}
-        self.storage.metadata_set(data_path=data_path_user, metadata=metadata)
+        res.metadata.update(metadata)
 
         logging.debug("update metadata")
         metadata = {"b.c[1]": "test2"}
-        self.storage.metadata_set(data_path=data_path_user, metadata=metadata)
+        res.metadata.update(metadata)
 
         logging.debug("get metadata")
-        metadata_b_c = self.storage.metadata_get(
-            data_path=data_path_user, metadata_path="b.c"
-        )
-        self.assertTrue(objects_euqal(metadata_b_c, ["test", "test2"]))
-        metadata_all = self.storage.metadata_get(data_path=data_path_user)
+
+        metadata_b_c = res.metadata.get("b.c")
+        self.assertTrue(objects_euqal(metadata_b_c, ["test", "test2"]), metadata_b_c)
+        metadata_all = res.metadata.get()
         self.assertTrue(
             metadata_all["hash"][DEFAULT_HASH_METHOD],
             getattr(hashlib, DEFAULT_HASH_METHOD)(data).hexdigest,
@@ -130,7 +124,7 @@ class TestLocalStorage(TestBase):
     def test_cache_decorator(self):
         context = {"counter": 0}
 
-        @self.storage.cache(path_prefix="myproject/cache/")  # use defaults
+        @Cache(self.storage, name_prefix="myproject/cache/")
         def test_fun_sum(a, b):
             logging.debug("running test_fun_sum")
             context["counter"] += 1

@@ -1,10 +1,9 @@
 import functools
 import hashlib
 import json
-import logging
 import pickle
-from typing import Callable
 
+from . import storage
 from .utils import json_serialize
 
 
@@ -25,7 +24,7 @@ def get_job_description(fun, args, kwargs):
     }
 
 
-def default_get_path(fun, args, kwargs):
+def default_get_name(fun, args, kwargs):
     f_name = f"{fun.__name__}"
     job_desc = get_job_description(fun, args, kwargs)
     # we only hash part of it:
@@ -35,37 +34,48 @@ def default_get_path(fun, args, kwargs):
     return f"cache/{f_name}_{job_id}.pickle"
 
 
-def cache(
-    storage, get_path=None, from_bytes=None, to_bytes=None, path_prefix=None
-) -> Callable:
-    """ """
-    get_path = get_path or default_get_path
-    from_bytes = from_bytes or pickle.loads
-    to_bytes = to_bytes or pickle.dumps
-    path_prefix = path_prefix or ""
+def default_storage():
+    return storage.Storage()
 
-    def decorator(fun):
+
+class Cache:
+    def __init__(
+        self,
+        storage_instance: storage.AbstractStorage = None,
+        get_name=None,
+        from_bytes=None,
+        to_bytes=None,
+        name_prefix=None,
+    ):
+        self.__storage = storage_instance or default_storage()
+        self.__get_name = get_name or default_get_name
+        self.__from_bytes = from_bytes or pickle.loads
+        self.__to_bytes = to_bytes or pickle.dumps
+        self.__name_prefix = name_prefix or ""
+
+    def __call__(self, fun):
         @functools.wraps(fun)
         def _fun(*args, **kwargs):
             # get data_path from function + arguments
-            data_path = path_prefix + get_path(fun, args, kwargs)
+            name = self.__name_prefix + self.__get_name(fun, args, kwargs)
+            res = self.__storage.resource(name=name)
+
             # try to get data from store
-            if not storage.data_exists(data_path=data_path):
-                job_description = get_job_description(fun, args, kwargs)
-                # actually call function
+            if not res.exists():
+                # actually call function and write data
                 data = fun(*args, **kwargs)
+                byte_data = self.__to_bytes(data)
+                res.write(data=byte_data)
+
+                # add job description as metadata
+                job_description = get_job_description(fun, args, kwargs)
                 metadata = {"source.creation": job_description}
-                byte_data = to_bytes(data)
-                norm_data_path = storage.data_put(byte_data, data_path)
-                storage.metadata_set(data_path=norm_data_path, metadata=metadata)
+                res.metadata.update(metadata)
 
-            with storage.data_open(data_path=data_path) as file:
+            # load data from storage
+            with res.open() as file:
                 byte_data = file.read()
-            logging.debug("Loaded from cache")
-            data = from_bytes(byte_data)
-
+            data = self.__from_bytes(byte_data)
             return data
 
         return _fun
-
-    return decorator

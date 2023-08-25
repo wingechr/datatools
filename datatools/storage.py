@@ -29,38 +29,63 @@ from .utils import (
 )
 
 
-class StorageAbstractBase(abc.ABC):
-    @abc.abstractmethod
-    def data_exists(self, data_path) -> bool:
-        ...
+def delete_file(filepath: str) -> str:
+    if not os.path.exists(filepath):
+        return
+    logging.debug(f"DELETING {filepath}")
+    make_file_writable(file_path=filepath)
+    os.remove(filepath)
 
-    @abc.abstractmethod
-    def data_delete(self, data_path: str, delete_metadata=False) -> None:
-        ...
 
-    @abc.abstractmethod
-    def data_put(
-        self,
-        data: Union[BufferedReader, bytes, Iterable],
-        data_path: str,
-        exist_ok=False,
-    ) -> str:
-        ...
+def is_metadata_path(path: str):
+    return ".metadata." in path
 
-    @abc.abstractmethod
-    def data_open(self, data_path: str) -> BufferedReader:
-        ...
 
-    @abc.abstractmethod
-    def metadata_get(self, data_path: str, metadata_path: str = None) -> object:
-        ...
+def is_temp_path(path: str):
+    return "+" in path
 
+
+class AbstractStorage(abc.ABC):
     @abc.abstractmethod
-    def metadata_set(self, data_path: str, metadata: dict) -> None:
+    def resource(self, name: str) -> "AbstractStorageResource":
         ...
 
 
-class StorageBase(StorageAbstractBase):
+class AbstractStorageResource(abc.ABC):
+    @abc.abstractproperty
+    def metadata(self) -> "AbstractStorageResourceMetadata":
+        ...
+
+    @abc.abstractmethod
+    def exists(self) -> bool:
+        ...
+
+    @abc.abstractmethod
+    def delete(self, delete_metadata: bool = False) -> None:
+        ...
+
+    @abc.abstractmethod
+    def write(
+        self, data: Union[BufferedReader, bytes, Iterable], exist_ok=False
+    ) -> None:
+        ...
+
+    @abc.abstractmethod
+    def open(self) -> BufferedReader:
+        ...
+
+
+class AbstractStorageResourceMetadata(abc.ABC):
+    @abc.abstractmethod
+    def get(self, key: str) -> object:
+        ...
+
+    @abc.abstractmethod
+    def update(self, metadata: dict) -> None:
+        ...
+
+
+class Storage(AbstractStorage):
     def __init__(self, location=None):
         self.__location = os.path.abspath(location or LOCAL_LOCATION)
 
@@ -71,189 +96,9 @@ class StorageBase(StorageAbstractBase):
     def __str__(self):
         return f"Storage({self.location})"
 
-    def _get_norm_data_path(self, data_path: str) -> str:
-        """should be all lowercase
-        Returns:
-            str: norm_data_path
-        Raises:
-            InvalidPath
-        """
-        norm_data_path = normalize_path(data_path)
+    def resource(self, name: str) -> "AbstractStorageResource":
+        return StorageResource(storage=self, name=name)
 
-        # TODO: create function is_metadata_path
-        if self._is_metadata_path(norm_data_path):
-            raise InvalidPath(data_path)
-
-        return norm_data_path
-
-    def _is_metadata_path(self, path: str):
-        return ".metadata." in path
-
-    def _is_temp_path(self, path: str):
-        return "+" in path
-
-    def _create_metadata_path_pattern(self, metadata_path: str) -> str:
-        metadata_path_pattern = jsonpath_ng.parse(metadata_path)
-        return metadata_path_pattern
-
-    def _get_data_filepath(self, norm_data_path: str) -> str:
-        data_filepath = os.path.join(self.location, norm_data_path)
-        data_filepath = os.path.abspath(data_filepath)
-        return data_filepath
-
-    def _get_metadata_filepath(self, norm_data_path: str) -> str:
-        data_filepath = self._get_data_filepath(norm_data_path=norm_data_path)
-        metadata_filepath = data_filepath + ".metadata.json"
-        metadata_filepath = os.path.abspath(metadata_filepath)
-        return metadata_filepath
-
-    def _get_existing_data_filepath(self, data_path: str) -> str:
-        norm_data_path = self._get_norm_data_path(data_path=data_path)
-        data_filepath = self._get_data_filepath(norm_data_path=norm_data_path)
-        if os.path.exists(data_filepath):
-            return data_filepath
-        raise DataDoesNotExists(data_path)
-
-    def data_exists(self, data_path) -> bool:
-        try:
-            self._get_existing_data_filepath(data_path=data_path)
-            return True
-        except DataDoesNotExists:
-            return False
-
-    def data_delete(self, data_path: str, delete_metadata=False) -> None:
-        try:
-            data_filepath = self._get_existing_data_filepath(data_path=data_path)
-        except DataDoesNotExists:
-            return
-        make_file_writable(file_path=data_filepath)
-        logging.debug(f"DELETING {data_filepath}")
-        os.remove(data_filepath)
-
-        if delete_metadata:
-            norm_data_path = self._get_norm_data_path(data_path=data_path)
-            metadata_filepath = self._get_metadata_filepath(
-                norm_data_path=norm_data_path
-            )
-            if os.path.exists(metadata_filepath):
-                logging.debug(f"DELETING {metadata_filepath}")
-                os.remove(metadata_filepath)
-
-        return
-
-    def data_put(
-        self,
-        data: Union[BufferedReader, bytes, Iterable],
-        data_path: str,
-        exist_ok=False,
-    ) -> str:
-        norm_data_path = self._get_norm_data_path(data_path=data_path)
-        data_filepath = self._get_data_filepath(norm_data_path=norm_data_path)
-        if os.path.exists(data_filepath):
-            if not exist_ok:
-                raise DataExists(norm_data_path)
-            logging.info(f"Skipping existing file: {norm_data_path}")
-            return norm_data_path
-
-        # write data
-        tmp_dir = os.path.dirname(data_filepath)
-        tmp_prefix = os.path.basename(data_filepath) + "+"
-
-        hash_method = DEFAULT_HASH_METHOD
-        hasher = getattr(hashlib, hash_method)()
-        size = 0
-
-        os.makedirs(tmp_dir, exist_ok=True)
-        with NamedTemporaryFile(
-            "wb", dir=tmp_dir, prefix=tmp_prefix, delete=False
-        ) as file:
-            logging.debug(f"WRITING {file.name}")
-            for chunk in as_byte_iterator(data):
-                file.write(chunk)
-                size += len(chunk)
-                hasher.update(chunk)
-
-        try:
-            logging.debug(f"MOVE {file.name} => {data_filepath}")
-            os.rename(file.name, data_filepath)
-        except Exception:
-            logging.debug(f"DEL {file.name}")
-            os.remove(file.name)
-            raise
-        make_file_readonly(data_filepath)
-
-        metadata = {
-            f"hash.{hash_method}": hasher.hexdigest(),
-            "size": size,
-            "source.user": get_user_w_host(),
-            "source.datetime": get_now_str(),
-            "source.name": norm_data_path,
-        }
-
-        self.metadata_set(data_path=norm_data_path, metadata=metadata)
-
-        return norm_data_path
-
-    def data_open(self, data_path: str) -> BufferedReader:
-        data_filepath = self._get_existing_data_filepath(data_path=data_path)
-        logging.debug(f"READING {data_filepath}")
-        file = open(data_filepath, "rb")
-        return file
-
-    def metadata_get(self, data_path: str, metadata_path: str = None) -> object:
-        metadata_path = metadata_path or ROOT_METADATA_PATH
-        norm_data_path = self._get_norm_data_path(data_path=data_path)
-        metadata_path_pattern = self._create_metadata_path_pattern(
-            metadata_path=metadata_path
-        )
-        metadata_filepath = self._get_metadata_filepath(norm_data_path=norm_data_path)
-        if not os.path.exists(metadata_filepath):
-            return None
-        logging.debug(f"READING {metadata_filepath}")
-        with open(metadata_filepath, "rb") as file:
-            metadata = json.load(file)
-        match = metadata_path_pattern.find(metadata)
-        result = [x.value for x in match]
-        # TODO: we always get a list (multiple matches),
-        # but most of the time, we want only one
-
-        if len(result) == 0:
-            result = None
-        elif len(result) == 1:
-            result = result[0]
-        else:
-            logging.warning("multiple results in metadata found")
-
-        logging.debug(f"get metadata: {metadata_path} => {result}")
-        return result
-
-    def metadata_set(self, data_path: str, metadata: dict) -> None:
-        norm_data_path = self._get_norm_data_path(data_path=data_path)
-        metadata_filepath = self._get_metadata_filepath(norm_data_path=norm_data_path)
-
-        if not os.path.exists(metadata_filepath):
-            _metadata = {}
-        else:
-            logging.debug(f"READING {metadata_filepath}")
-            with open(metadata_filepath, "rb") as file:
-                _metadata = json.load(file)
-
-        for metadata_path, value in metadata.items():
-            metadata_path_pattern = self._create_metadata_path_pattern(metadata_path)
-            logging.debug(f"update metadata: {metadata_path} => {value}")
-            metadata_path_pattern.update_or_create(_metadata, value)
-
-        metadata_bytes = json.dumps(
-            _metadata, indent=2, ensure_ascii=False, default=json_serialize
-        ).encode()
-
-        os.makedirs(os.path.dirname(metadata_filepath), exist_ok=True)
-        logging.debug(f"WRITING {metadata_filepath}")
-        with open(metadata_filepath, "wb") as file:
-            file.write(metadata_bytes)
-
-
-class Storage(StorageBase):
     def check(self, fix=False):
         """scan location and check for problems"""
         for rt, _ds, fs in os.walk(self.location):
@@ -272,10 +117,10 @@ class Storage(StorageBase):
                 filepath = f"{rt}/{filename}"
                 filepath_rel = f"{rt_rl}/{filename}"
 
-                if self._is_metadata_path(filepath_rel):
+                if is_metadata_path(filepath_rel):
                     continue
 
-                if self._is_temp_path(filename):
+                if is_temp_path(filename):
                     logging.warning(f"Possibly incomplete tempfile: {filepath}")
                     continue
 
@@ -312,10 +157,167 @@ class Storage(StorageBase):
             rt_rl = os.path.relpath(rt, self.location).replace("\\", "/")
             for filename in fs:
                 path = f"{rt_rl}/{filename}"
-                if self._is_metadata_path(path):
+                if is_metadata_path(path):
+                    continue
+                if is_temp_path(path):
                     continue
                 if all(p.match(path) for p in path_patterns):
                     yield path
+
+
+class StorageResource(AbstractStorageResource):
+    def __init__(self, storage: "Storage", name: str):
+        self.__storage = storage
+        self.__name = self.__get_norm_name(name)
+        self.__filepath = os.path.abspath(self.__storage.location + "/" + self.__name)
+
+    @property
+    def name(self):
+        return self.__name
+
+    def __get_norm_name(self, name: str) -> str:
+        norm_name = normalize_path(name)
+
+        if is_metadata_path(norm_name):
+            raise InvalidPath(norm_name)
+
+        if is_temp_path(norm_name):
+            raise InvalidPath(norm_name)
+
+        return norm_name
+
+    @property
+    def metadata(self) -> "AbstractStorageResourceMetadata":
+        return StorageResourceMetadata(resource=self)
+
+    def exists(self) -> bool:
+        return os.path.exists(self.__filepath)
+
+    def delete(self, delete_metadata: bool = False) -> None:
+        delete_file(self.__filepath)
+
+        if delete_metadata:
+            self.metadata.delete()
+
+    def write(
+        self, data: Union[BufferedReader, bytes, Iterable], exist_ok=False
+    ) -> None:
+        if self.exists():
+            if not exist_ok:
+                raise DataExists(self.__filepath)
+            logging.info(f"Overwriting existing file: {self.__filepath}")
+
+        # write data into temporary file
+        tmp_dir = os.path.dirname(self.__filepath)
+        tmp_prefix = os.path.basename(self.__filepath) + "+"
+
+        hash_method = DEFAULT_HASH_METHOD
+        hasher = getattr(hashlib, hash_method)()
+        size = 0
+
+        os.makedirs(tmp_dir, exist_ok=True)
+        with NamedTemporaryFile(
+            "wb", dir=tmp_dir, prefix=tmp_prefix, delete=False
+        ) as file:
+            logging.debug(f"WRITING {file.name}")
+            for chunk in as_byte_iterator(data):
+                file.write(chunk)
+                size += len(chunk)
+                hasher.update(chunk)
+
+        # move to final location
+        try:
+            logging.debug(f"MOVE {file.name} => {self.__filepath}")
+            os.rename(file.name, self.__filepath)
+        except Exception:
+            delete_file(file.name)
+            raise
+        make_file_readonly(self.__filepath)
+
+        # update metadata
+        metadata = {
+            f"hash.{hash_method}": hasher.hexdigest(),
+            "size": size,
+            "source.user": get_user_w_host(),
+            "source.datetime": get_now_str(),
+            "source.name": self.__name,
+        }
+        self.metadata.update(metadata)
+
+    def open(self) -> BufferedReader:
+        if not os.path.exists(self.__filepath):
+            raise DataDoesNotExists(self.name)
+
+        logging.debug(f"READING {self.__filepath}")
+        file = open(self.__filepath, "rb")
+        return file
+
+    def _get_metadata_filepath(self):
+        return self.__filepath + ".metadata.json"
+
+
+class StorageResourceMetadata(AbstractStorageResourceMetadata):
+    def __init__(self, resource: "AbstractStorageResource"):
+        self.__resource = resource
+        self.__filepath = self.__resource._get_metadata_filepath()
+
+    def __read(self) -> dict:
+        if not os.path.exists(self.__filepath):
+            metadata = {}
+        else:
+            logging.debug(f"READING {self.__filepath}")
+            with open(self.__filepath, "rb") as file:
+                metadata = json.load(file)
+        return metadata
+
+    def update(self, metadata: dict) -> None:
+        # get existing metadata
+        _metadata = self.__read()
+
+        # update
+        for key, value in metadata.items():
+            metadata_path_pattern = self.__create_metadata_path_pattern(
+                metadata_path=key
+            )
+            logging.debug(f"update metadata: {key} => {value}")
+            metadata_path_pattern.update_or_create(_metadata, value)
+
+        # convert to bytes
+        metadata_bytes = json.dumps(
+            _metadata, indent=2, ensure_ascii=False, default=json_serialize
+        ).encode()
+
+        # save
+        os.makedirs(os.path.dirname(self.__filepath), exist_ok=True)
+        logging.debug(f"WRITING {self.__filepath}")
+        with open(self.__filepath, "wb") as file:
+            file.write(metadata_bytes)
+
+    def get(self, key: str = None) -> object:
+        metadata = self.__read()
+
+        key = key or ROOT_METADATA_PATH
+        metadata_path_pattern = self.__create_metadata_path_pattern(metadata_path=key)
+        match = metadata_path_pattern.find(metadata)
+        result = [x.value for x in match]
+
+        # TODO: we always get a list (multiple matches),
+        # but most of the time, we want only one
+        if len(result) == 0:
+            result = None
+        elif len(result) == 1:
+            result = result[0]
+        else:
+            logging.warning("multiple results in metadata found")
+
+        return result
+
+    def _delete(self):
+        delete_file(self.__filepath)
+
+    def __create_metadata_path_pattern(self, metadata_path: str) -> str:
+        metadata_path_pattern = jsonpath_ng.parse(metadata_path)
+        return metadata_path_pattern
 
 
 class StorageGlobal(Storage):

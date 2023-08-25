@@ -3,13 +3,15 @@ import os
 import pickle
 import re
 from io import BufferedReader, BytesIO
-from typing import Callable, Tuple
+from typing import Callable, Iterable, Tuple, Union
 from urllib.parse import parse_qs, unquote, urlencode, urlsplit, urlunsplit
 
 import requests
 import sqlalchemy as sa
 
+from . import storage
 from .constants import DEFAULT_MEDIA_TYPE, PARAM_SQL_QUERY
+from .exceptions import DataExists
 from .utils import (
     as_uri,
     get_sql_table_schema,
@@ -21,56 +23,16 @@ from .utils import (
 )
 
 
-def get_default_storage():
-    from .storage import Storage
-
-    return Storage(location=None)
+def default_storage():
+    return storage.Storage()
 
 
-class Metadata:
-    def __init__(self, resource: "Resource"):
-        self.__resource = resource
-
-    def __getitem__(self, metadata_path):
-        return self.__resource.storage.metadata_get(
-            data_path=self.__resource.name, metadata_path=metadata_path
-        )
-
-    def __setitem__(self, metadata_path, value):
-        metadata = {metadata_path: value}
-        return self.__resource.storage.metadata_set(
-            data_path=self.__resource.name, metadata=metadata
-        )
-
-    def get(self, metadata_path, default_value=None, save=False):
-        result = self[metadata_path]
-        if result is None:
-            if isinstance(default_value, Callable):
-                # pass resource
-                result = default_value(self.__resource)
-                if result is not None:
-                    logging.debug(f"meta data from function: {metadata_path}={result}")
-            else:
-                result = default_value
-                if result is not None:
-                    logging.debug(f"meta data from default: {metadata_path}={result}")
-            if result is not None and save:
-                self[metadata_path] = result
-        return result
-
-
-class Resource:
-    def __init__(self, uri: str, name: str = None, storage: "storage.Storage" = None):
-        self.__storage = storage or get_default_storage()
-
-        # TODO
-        uri = uri or "data:///" + name
-
+class UriResource(storage.StorageResource):
+    def __init__(self, uri: str, storage: "storage.Storage" = None):
         self.__uri = as_uri(uri)
-        self.__name = normalize_path(name or uri)
+        super().__init__(storage=storage or default_storage(), name=self.__uri)
 
-        url_parts = urlsplit(self.uri)
-
+        url_parts = urlsplit(self.__uri)
         self.__scheme = url_parts.scheme
         self.__netloc = url_parts.netloc
         self.__path = url_parts.path
@@ -81,10 +43,6 @@ class Resource:
         return (
             f"Resource(uri='{self.uri}', name='{self.name}', storage='{self.storage}')"
         )
-
-    @property
-    def metadata(self):
-        return Metadata(resource=self)
 
     @property
     def scheme(self):
@@ -110,19 +68,7 @@ class Resource:
     def uri(self):
         return self.__uri
 
-    @property
-    def name(self):
-        return self.__name
-
-    @property
-    def storage(self):
-        return self.__storage
-
-    @property
-    def filepath(self):
-        return self.storage._get_existing_data_filepath(data_path=self.name)
-
-    def _open(self, **metadata_kwargs) -> Tuple[BufferedReader, dict]:
+    def __read_source(self) -> Tuple[BufferedReader, dict]:
         metadata = {}
         metadata["source.path"] = remove_auth_from_uri_or_path(self.uri)
 
@@ -208,44 +154,17 @@ class Resource:
 
         return data, metadata
 
-    def _write(self, data: BufferedReader):
-        # protocol routing
-        if self.scheme == "file":
-            file_path = uri_to_filepath_abs(self.uri)
-            if os.path.exist(file_path):
-                raise FileExistsError(file_path)
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            logging.debug(f"WRTIE: {file_path}")
-            with open(file_path, "wb") as file:
-                file.write(data.read())
-        else:
-            raise NotImplementedError(self.scheme)
+    def write(self, exist_ok=False) -> None:
+        if self.exists():
+            if not exist_ok:
+                raise DataExists(self)
+            return
 
-    def _save_if_not_exist(self):
-        if not self.storage.data_exists(self.name):
-            metadata_old = self.storage.metadata_get(data_path=self.name) or {}
-            # use old metadata as opening hints
-            data, metadata = self._open(**metadata_old)
-            norm_name = self.storage.data_put(data=data, data_path=self.name)
-            if norm_name != self.name:
-                logging.warning(
-                    f"storage uses different name {norm_name} instead of {self.name}"
-                )
-            self.storage.metadata_set(data_path=self.name, metadata=metadata)
+        data, metadata = self.__read_source()
+        super().write(data=data, exist_ok=exist_ok)
+        self.metadata.update(metadata)
 
     def open(self) -> BufferedReader:
-        self._save_if_not_exist()
-        return self.storage.data_open(data_path=self.name)
-
-    @property
-    def is_in_storage(self) -> bool:
-        return self.storage.data_exists(data_path=self.name)
-
-    def remove_from_storage(self, delete_metadata=False) -> None:
-        self.storage.data_delete(data_path=self.name, delete_metadata=delete_metadata)
-
-    @staticmethod
-    def _storage_resource(storage, uri=None, name=None) -> "Resource":
-        if isinstance(uri, Resource):
-            uri = uri.uri
-        return Resource(uri=uri, name=name, storage=storage)
+        # make sure that data exists in storage
+        self.write(exist_ok=True)
+        return super().open()
