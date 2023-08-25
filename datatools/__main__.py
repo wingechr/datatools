@@ -1,5 +1,6 @@
 # coding: utf-8
 
+import json
 import logging
 import sys
 
@@ -8,7 +9,8 @@ import click
 from . import __version__
 from .constants import GLOBAL_LOCATION, LOCAL_LOCATION
 from .exceptions import DatatoolsException
-from .storage import Storage
+from .storage import Storage, StorageResource, StorageResourceMetadata
+from .utils import parse_cli_metadata
 
 
 @click.group()
@@ -76,9 +78,33 @@ def resource(ctx, source_uri):
 
 @resource.command("save")
 @click.pass_obj
-def resource_save(resource: Storage):
-    resource.write(exist_ok=True)
+def resource_save(resource: StorageResource):
+    resource.save(exist_ok=True)
     print(resource.name)
+
+
+@resource.group("meta")
+@click.pass_context
+def resource_meta(ctx):
+    resource = ctx.obj
+    ctx.obj = resource.metadata
+
+
+@resource_meta.command("get")
+@click.pass_obj
+@click.argument("key", required=False)
+def resource_meta_get(metadata: StorageResourceMetadata, key=None):
+    result = metadata.get(key)
+    result_str = json.dumps(result, indent=2, ensure_ascii=True)
+    print(result_str)
+
+
+@resource_meta.command("update")
+@click.pass_obj
+@click.argument("metadata_key_vals", nargs=-1)
+def resource_meta_update(metadata: StorageResourceMetadata, metadata_key_vals):
+    new_metadata = parse_cli_metadata(metadata_key_vals)
+    metadata.update(new_metadata)
 
 
 if __name__ == "__main__":

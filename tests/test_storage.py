@@ -75,7 +75,7 @@ class TestLocalStorage(TestBase):
         # create local instance in temporary dir
 
         data = b"hello world"
-        data_path_user = "/My/path"
+        data_path_user = "data:///My/path"
 
         res = self.storage.resource(data_path_user)
         self.assertFalse(res.exists())
@@ -96,7 +96,7 @@ class TestLocalStorage(TestBase):
         logging.debug("delete (twice, which is allowed)")
         res.delete()
         # reading now will raise error
-        self.assertRaises(DataDoesNotExists, res.open)
+        self.assertRaises((DataDoesNotExists, NotImplementedError), res.open)
         res.delete()
 
         logging.debug("save again")

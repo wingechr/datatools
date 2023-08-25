@@ -1,9 +1,8 @@
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 __all__ = [
     "exceptions",
     "constants",
     "utils",
-    "resource",
     "storage",
     "cache",
     "Storage",
@@ -12,5 +11,5 @@ __all__ = [
 ]
 
 
-from . import cache, constants, exceptions, resource, storage, utils
+from . import cache, constants, exceptions, storage, utils
 from .storage import Storage, StorageEnv, StorageGlobal

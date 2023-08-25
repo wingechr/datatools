@@ -31,7 +31,7 @@ def default_get_name(fun, args, kwargs):
     job_id = get_hash({"args": job_desc["args"], "kwargs": job_desc["kwargs"]})
     # we can shorten the hash: 8 to 10 chars should be enough
     job_id = job_id[:8]
-    return f"cache/{f_name}_{job_id}.pickle"
+    return f"{f_name}_{job_id}.pickle"
 
 
 def default_storage():

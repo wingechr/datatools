@@ -4,7 +4,6 @@ import os
 import pickle
 import sqlite3
 
-from datatools.resource import UriResource
 from datatools.utils import platform_is_unix
 
 from .test_storage import TestBase
@@ -15,7 +14,7 @@ class TestResource(TestBase):
         # in memory sqlite3 database
         query = "select cast(101 as int) as value;"
         uri = f"sqlite:///:memory:?q={query}#/testquery"
-        res = UriResource(uri=uri, storage=self.storage)
+        res = self.storage.resource(uri)
         with res.open() as file:
             bdata = file.read()
         data = pickle.loads(bdata)
@@ -39,7 +38,7 @@ class TestResource(TestBase):
             db_filepath = "/" + db_filepath
         uri = f"sqlite://{db_filepath}?q=select value from test#/testquery"
 
-        res = UriResource(uri=uri, storage=self.storage)
+        res = self.storage.resource(uri)
         with res.open() as file:
             bdata = file.read()
         data = pickle.loads(bdata)
@@ -52,7 +51,7 @@ class TestResource(TestBase):
 
         # load from path
         uri = fpath
-        res = UriResource(uri=uri, storage=self.storage)
+        res = self.storage.resource(uri)
         with res.open() as file:
             data = json.load(file)
         self.assertEqual(data["value"], 103)
@@ -60,7 +59,7 @@ class TestResource(TestBase):
         # load from webserver
 
         uri = self.static_url + "/testfile.json"
-        res = UriResource(uri=uri, storage=self.storage)
+        res = self.storage.resource(uri)
         with res.open() as file:
             data = json.load(file)
         self.assertEqual(data["value"], 103)

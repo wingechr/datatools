@@ -3,43 +3,33 @@ import hashlib
 import json
 import logging
 import os
-import pickle
 import re
-from io import BufferedReader, BytesIO
+from io import BufferedReader
 from tempfile import NamedTemporaryFile
-from typing import Iterable, Tuple, Union
-from urllib.parse import parse_qs, unquote, urlencode, urlsplit, urlunsplit
+from typing import Iterable, Union
+from urllib.parse import urlsplit
 
 import jsonpath_ng
-import requests
-import sqlalchemy as sa
 
-from . import loader
 from .constants import (
     DEFAULT_HASH_METHOD,
-    DEFAULT_MEDIA_TYPE,
     GLOBAL_LOCATION,
     LOCAL_LOCATION,
-    PARAM_SQL_QUERY,
     ROOT_METADATA_PATH,
     STORAGE_SCHEME,
 )
 from .exceptions import DataDoesNotExists, DataExists, InvalidPath
+from .loader import load_file, open_uri
 from .utils import (
     as_byte_iterator,
     as_uri,
     get_now_str,
-    get_sql_table_schema,
     get_user_w_host,
     is_file_readonly,
     json_serialize,
     make_file_readonly,
     make_file_writable,
     normalize_path,
-    normalize_sql_query,
-    parse_content_type,
-    remove_auth_from_uri_or_path,
-    uri_to_filepath_abs,
 )
 
 
@@ -178,10 +168,6 @@ class StorageResource(AbstractStorageResource):
         return self.__name
 
     @property
-    def uri(self):
-        return self.__uri
-
-    @property
     def source_uri(self):
         return self.__source_uri
 
@@ -203,11 +189,12 @@ class StorageResource(AbstractStorageResource):
             self.metadata.delete()
 
     def save(self, exist_ok=False) -> None:
+        """save from source"""
         if self.exists():
             if not exist_ok:
                 raise DataDoesNotExists(self)
             return
-        byte_data, metadata = self.__read_source()
+        byte_data, metadata = open_uri(self.source_uri)
         self.write(data=byte_data, exist_ok=exist_ok)
         self.metadata.update(metadata)
 
@@ -216,12 +203,12 @@ class StorageResource(AbstractStorageResource):
     ) -> None:
         if self.exists():
             if not exist_ok:
-                raise DataExists(self.__filepath)
-            logging.info(f"Overwriting existing file: {self.__filepath}")
+                raise DataExists(self)
+            logging.info(f"Overwriting existing file: {self.filepath}")
 
         # write data into temporary file
-        tmp_dir = os.path.dirname(self.__filepath)
-        tmp_prefix = os.path.basename(self.__filepath) + "+"
+        tmp_dir = os.path.dirname(self.filepath)
+        tmp_prefix = os.path.basename(self.filepath) + "+"
 
         hash_method = DEFAULT_HASH_METHOD
         hasher = getattr(hashlib, hash_method)()
@@ -239,12 +226,12 @@ class StorageResource(AbstractStorageResource):
 
         # move to final location
         try:
-            logging.debug(f"MOVE {file.name} => {self.__filepath}")
-            os.rename(file.name, self.__filepath)
+            logging.debug(f"MOVE {file.name} => {self.filepath}")
+            os.rename(file.name, self.filepath)
         except Exception:
             delete_file(file.name)
             raise
-        make_file_readonly(self.__filepath)
+        make_file_readonly(self.filepath)
 
         # update metadata
         metadata = {
@@ -258,13 +245,13 @@ class StorageResource(AbstractStorageResource):
 
     def open(self) -> BufferedReader:
         self.save(exist_ok=True)
-        logging.debug(f"READING {self.__filepath}")
+        logging.debug(f"READING {self.filepath}")
         file = open(self.filepath, "rb")
         return file
 
     def load(self, **kwargs):
         self.save(exist_ok=True)
-        return loader.load(filepath=self.filepath, **kwargs)
+        return load_file(filepath=self.filepath, **kwargs)
 
 
 class StorageResourceMetadata(AbstractStorageResourceMetadata):

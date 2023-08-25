@@ -9,6 +9,8 @@ from io import BufferedReader, BytesIO
 from typing import Tuple, Union
 from urllib.parse import parse_qs, unquote, urlencode, urlsplit, urlunsplit
 
+import numpy as np
+import pandas as pd
 import requests
 import sqlalchemy as sa
 
@@ -34,7 +36,6 @@ try:
     import xarray
 except ImportError:
     xarray = None
-
 
 # optional
 try:
@@ -105,7 +106,7 @@ def _load_beautifulsoup(source: Union[str, BufferedReader], **kwargs):
     return bs4.BeautifulSoup(source, features="lxml", **kwargs)
 
 
-def load(filepath: str, **kwargs):
+def load_file(filepath: str, **kwargs):
     if re.match(r".*\.(zip)$", filepath):
         if re.match(r".*\.(shp).zip$", filepath):
             return _load_geopandas(filepath, **kwargs)
@@ -198,7 +199,7 @@ def get_metadata(obj, **kwargs):
     return metadata
 
 
-def load_uri(uri) -> Tuple[BufferedReader, dict]:
+def open_uri(uri) -> Tuple[BufferedReader, dict]:
     metadata = {}
     metadata["source.path"] = remove_auth_from_uri_or_path(uri)
     url = urlsplit(uri)
