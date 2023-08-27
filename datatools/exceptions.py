@@ -1,4 +1,6 @@
 class DatatoolsException(Exception):
+    """Base class for Exceptions in this package"""
+
     pass
 
 

@@ -18,12 +18,14 @@ from datatools.utils import (
     get_resource_path_name,
     get_user_w_host,
     is_file_readonly,
+    is_uri,
     json_serialize,
     make_file_readonly,
     make_file_writable,
     normalize_sql_query,
     parse_cli_metadata,
     platform_is_windows,
+    uri_to_data_path,
     uri_to_filepath_abs,
 )
 
@@ -53,6 +55,8 @@ class TestUtils(unittest.TestCase):
                 "www.domain-name.de/path_2021.pdf",
             ),
         ]:
+            if is_uri(p):
+                p = uri_to_data_path(p)
             np = get_resource_path_name(p)
             self.assertEqual(np, exp_np, p)
             # also: normalized path should always normalize to self

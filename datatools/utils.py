@@ -4,8 +4,8 @@ import datetime
 import inspect
 import json
 import logging
-import mimetypes
 import os
+import pickle
 import re
 import socket
 import sys
@@ -112,11 +112,7 @@ def wait_for_server(url, timeout_s=30) -> None:
     raise Exception("Timeout")
 
 
-def get_resource_path_name(uri: str) -> str:
-    """should be all lowercase ascii
-    * uri: remove query
-
-    """
+def uri_to_data_path(uri: str) -> str:
     url_parts = urlsplit(uri)
 
     # start with netloc
@@ -132,6 +128,17 @@ def get_resource_path_name(uri: str) -> str:
     path = path + (url_parts.fragment or "")
 
     path = unquote_plus(path)
+
+    return path
+
+
+def get_resource_path_name(path: str) -> str:
+    """should be all lowercase ascii
+    * uri: remove query
+
+    """
+    _path = path
+
     path = path.lower()
     for cin, cout in [
         ("ä", "ae"),
@@ -150,7 +157,7 @@ def get_resource_path_name(uri: str) -> str:
     path = path.strip("/")
 
     if not path:
-        raise ValueError(uri)
+        raise ValueError(_path)
 
     return path
 
@@ -435,23 +442,42 @@ def get_df_table_schema(df: pd.DataFrame):
     return {"fields": fields}
 
 
-def guess_mediatype(url: str) -> str:
-    mediatype, _ = mimetypes.guess_type(url=url)
-
-    if not mediatype:
-        if re.match(r"^.*\.url$", url):
-            return
-        else:
-            raise Exception(url)
-
-    if not mediatype:
-        logging.warning(f"no mediatype for {url}")
-    return mediatype
-
-
 def delete_file(filepath: str) -> str:
     if not os.path.exists(filepath):
         return
     logging.debug(f"DELETING {filepath}")
     make_file_writable(file_path=filepath)
     os.remove(filepath)
+
+
+class ByteSerializer:
+    mediatype = None
+    suffix = None
+
+    def dumps(data: object, **kwargs) -> bytes:
+        raise NotImplementedError()
+
+    def loads(data: bytes, **kwargs) -> object:
+        raise NotImplementedError()
+
+
+class JsonSerializer(ByteSerializer):
+    mediatype = "application/json"
+    suffix = ".json"
+
+    def dumps(self, data: object, **kwargs) -> bytes:
+        return json.dumps(data, **kwargs).encode()
+
+    def loads(self, data: bytes, **kwargs) -> object:
+        return json.loads(data, **kwargs)
+
+
+class PickleSerializer(ByteSerializer):
+    mediatype = "application/x-pickle"
+    suffix = ".pickle"
+
+    def dumps(self, data: object, **kwargs) -> bytes:
+        return pickle.dumps(data, **kwargs)
+
+    def loads(self, data: bytes, **kwargs) -> object:
+        return pickle.loads(data, **kwargs)

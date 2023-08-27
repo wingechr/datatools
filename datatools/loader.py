@@ -5,8 +5,7 @@ import logging
 import pickle
 import re
 import zipfile
-from io import BufferedReader, BytesIO
-from typing import Tuple, Union
+from io import BytesIO
 from urllib.parse import parse_qs, unquote, urlencode, urlsplit, urlunsplit
 
 import numpy as np
@@ -14,8 +13,9 @@ import pandas as pd
 import requests
 import sqlalchemy as sa
 
-from .constants import DEFAULT_MEDIA_TYPE, PARAM_SQL_QUERY
+from .constants import PARAM_SQL_QUERY
 from .utils import (
+    PickleSerializer,
     get_df_table_schema,
     get_resource_path_name,
     get_sql_table_schema,
@@ -44,152 +44,7 @@ except ImportError:
     bs4 = None
 
 
-def _load_from_zip(filepath, load, kwargs):
-    assumed_filename_in_zip = filepath.split("/")[-1]
-    with open(filepath, "rb") as file:
-        zfile = zipfile.ZipFile(file)
-        # find
-        filename_in_zip = None
-        for zf in zfile.filelist:
-            zf_norm_name = get_resource_path_name(zf.filename.lower + ".zip")
-            if zf_norm_name == assumed_filename_in_zip:
-                filename_in_zip = zf.filename
-                break
-        if not filename_in_zip:
-            raise Exception(f"cannot find file in zip: {filepath}")
-        file_in_zip = zfile.open(filename_in_zip)
-        return load(file_in_zip, **kwargs)
-
-
-def _load_xyz(buf):
-    if xarray is None:
-        raise ImportError("xarray")
-    df = pd.read_csv(
-        buf,
-        header=None,
-        sep=" ",
-        names=["x", "y", "z"],
-        dtype={"x": int, "y": int, "z": float},
-    )
-    ds = df.set_index(["x", "y"])["z"]
-    ds = xarray.DataArray.from_series(ds)
-    return ds
-
-
-def _load_asciigrid(buf):
-    bdata = buf.read()
-    sdata = bdata.decode(encoding="ascii")
-    lines = sdata.splitlines()
-    ascii_grid = np.loadtxt(lines, skiprows=6)
-    # metadata
-    for ln in lines[:6]:
-        k, v = re.match("^([^ ]+)[ ]+([^ ]+)$", ln).groups()
-        ascii_grid.dtype.metadata[k] = float(v)
-    return ascii_grid
-
-
-def _load_geopandas(source: Union[str, BufferedReader], **kwargs):
-    if geopandas is None:
-        raise ImportError("geopandas")
-    return geopandas.read_file(source, **kwargs)
-
-
-def _load_xarray(source: Union[str, BufferedReader], **kwargs):
-    if xarray is None:
-        raise ImportError("xarray")
-    return xarray.load_dataarray(source, **kwargs)
-
-
-def _load_beautifulsoup(
-    source: Union[str, BufferedReader], features="html.parser", **kwargs
-):
-    if bs4 is None:
-        raise ImportError("bs4")
-    return bs4.BeautifulSoup(source, features=features, **kwargs)
-
-
-def load_file(filepath: str, **kwargs):
-    if re.match(r".*\.(zip)$", filepath):
-        if re.match(r".*\.(shp).zip$", filepath):
-            return _load_geopandas(filepath, **kwargs)
-        elif re.match(r".*\.(gpkg).zip$", filepath):
-            return _load_from_zip(load=_load_geopandas, kwargs=kwargs)
-        elif re.match(r".*\.(csv).zip$", filepath):
-            return pd.read_csv(filepath, **kwargs)
-        else:
-            # plain zip
-            raise Exception(filepath)
-    elif re.match(r".*\.(gz)$", filepath):
-        if re.match(r".*\.(asc).gz$", filepath):
-            with open(filepath, "rb") as file:
-                zfile = gzip.open(file)
-                return _load_asciigrid(zfile, **kwargs)
-        else:
-            # plain gz
-            raise Exception(filepath)
-    elif re.match(r".*\.(bz2)$", filepath):
-        if re.match(r".*\.(nc).bz2$", filepath):
-            with open(filepath, "rb") as file:
-                zfile = bz2.open(file)
-                return _load_xarray(zfile, **kwargs)
-        else:
-            # plain bz2
-            raise Exception(filepath)
-    elif re.match(r".*\.(json)$", filepath):
-        with open(filepath, "rb") as file:
-            return json.load(file, **kwargs)
-    elif re.match(r".*\.(txt|md|rst)$", filepath):
-        with open(filepath, "rb") as file:
-            bdata = file.read()
-        return bdata.decode(encoding=None, **kwargs)
-    elif re.match(r".*\.(html)$", filepath):
-        with open(filepath, "rb") as file:
-            return _load_beautifulsoup(file, features="html.parser", **kwargs)
-    elif re.match(r".*\.(csv)$", filepath):
-        with open(filepath, "rb") as file:
-            return pd.read_csv(file, **kwargs)
-    elif re.match(r".*\.(xls|xlsx)$", filepath):
-        with open(filepath, "rb") as file:
-            return pd.read_excel(sheet_name=None, **kwargs)
-    elif re.match(r".*\.(shx|dbf|cpg|prj)$", filepath):
-        # find associated shp
-        filepath_shp = re.sub("[^.]+$", "shp", filepath)
-        return _load_geopandas(filepath_shp, **kwargs)
-    elif re.match(r".*\.(geojson|gpkg|shp)$", filepath):
-        with open(filepath, "rb") as file:
-            return _load_geopandas(file, **kwargs)
-    elif re.match(r".*\.(png)$", filepath):
-        with open(filepath, "rb") as file:
-            return _load_xarray(file, **kwargs)
-    elif re.match(r".*\.(tif|tiff)$", filepath):
-        with open(filepath, "rb") as file:
-            return _load_xarray(file, **kwargs)
-    elif re.match(r".*\.(nc|nc4)$", filepath):
-        # xarray
-        with open(filepath, "rb") as file:
-            return _load_xarray(file, **kwargs)
-    elif re.match(r".*\.(asc)$", filepath):
-        # ascii grid
-        with open(filepath, "rb") as file:
-            return _load_asciigrid(file, **kwargs)
-    elif re.match(r".*\.(xyz)$", filepath):
-        # point coords
-        with open(filepath, "rb") as file:
-            return _load_xyz(file, **kwargs)
-    elif re.match(r".*\.(pkl|pickle)$", filepath):
-        # point coords
-        with open(filepath, "rb") as file:
-            return pickle.load(file, **kwargs)
-    elif re.match(r".*\.(tfw)$", filepath):
-        # projection string for tif (text)
-        raise Exception(filepath)
-    elif re.match(r".*\.(qgz|pdf|docx|woff|woff2|ipynb|py|js|css)$", filepath):
-        raise Exception(filepath)
-    else:
-        raise Exception(filepath)
-
-
-def get_metadata(obj, **kwargs):
+def _TODO_get_metadata(obj, **kwargs):
     metadata = {}
     if isinstance(obj, pd.DataFrame):
         metadata["schema"] = get_df_table_schema(obj)
@@ -201,18 +56,248 @@ def get_metadata(obj, **kwargs):
     return metadata
 
 
-def open_uri(uri) -> Tuple[BufferedReader, dict]:
-    metadata = {}
-    metadata["source.path"] = remove_auth_from_uri_or_path(uri)
-    url = urlsplit(uri)
+class FileLoaderMeta(type):
+    _pattern_classes = []
 
-    # protocol routing
-    if url.scheme == "file":
+    def __init__(cls, name, bases, dct):
+        if cls.filename_pattern:
+            cls._pattern_classes.append((cls.filename_pattern, cls))
+
+
+class FileLoader(metaclass=FileLoaderMeta):
+    filename_pattern = None
+
+    @classmethod
+    def load(cls, filepath, **kwargs):
+        for pat, class_ in cls._pattern_classes:
+            if re.match(pat, filepath):
+                inst = class_()
+                return inst.load(filepath, **kwargs)
+        raise NotImplementedError(filepath)
+
+
+class FileLoaderOpen_(metaclass=FileLoaderMeta):
+    filename_pattern = None
+
+    def load(self, filepath, **kwargs):
+        with open(filepath, "rb") as file:
+            return self._load(file=file, **kwargs)
+
+    def _load(self, file, **kwargs):
+        raise NotImplementedError()
+
+
+class FileLoaderOpenGz_(FileLoaderOpen_):
+    def load(self, filepath, **kwargs):
+        with super().open(filepath, "rb") as file:
+            zfile = gzip.open(file)
+            return self._load(file=zfile, **kwargs)
+
+
+class FileLoaderOpenBz2_(FileLoaderOpen_):
+    def load(self, filepath, **kwargs):
+        with super().open(filepath, "rb") as file:
+            zfile = bz2.open(file)
+            return self._load(file=zfile, **kwargs)
+
+
+class FileLoaderOpenZip_(FileLoader):
+    def load(self, filepath, **kwargs):
+        assumed_filename_in_zip = filepath.split("/")[-1]
+        with open(filepath, "rb") as file:
+            zfile = zipfile.ZipFile(file)
+            # find
+            filename_in_zip = None
+            for zf in zfile.filelist:
+                zf_norm_name = get_resource_path_name(zf.filename.lower + ".zip")
+                if zf_norm_name == assumed_filename_in_zip:
+                    filename_in_zip = zf.filename
+                    break
+            if not filename_in_zip:
+                raise Exception(f"cannot find file in zip: {filepath}")
+            file_in_zip = zfile.open(filename_in_zip)
+            return self._load(file=file_in_zip, **kwargs)
+
+
+class FileLoaderPickle(FileLoaderOpen_):
+    filename_pattern = r".*\.(pkl|pickle)$"
+
+    def _load(self, file, **kwargs):
+        return pickle.load(file, **kwargs)
+
+
+class FileLoaderXarray(FileLoaderOpen_):
+    filename_pattern = r".*\.(tif|tiff|png|nc|nc4)$"
+
+    def _load(self, file, **kwargs):
+        if xarray is None:
+            raise ImportError("xarray")
+        return xarray.load_dataarray(file, **kwargs)
+
+
+class FileLoaderXYZ(FileLoaderOpen_):
+    filename_pattern = r".*\.(xyz)$"
+
+    def _load(self, file, **kwargs):
+        if xarray is None:
+            raise ImportError("xarray")
+        df = pd.read_csv(
+            file,
+            header=None,
+            sep=" ",
+            names=["x", "y", "z"],
+            dtype={"x": int, "y": int, "z": float},
+        )
+        ds = df.set_index(["x", "y"])["z"]
+        ds = xarray.DataArray.from_series(ds)
+        return ds
+
+
+class FileLoaderAsciigrid(FileLoaderOpen_):
+    filename_pattern = r".*\.(asc)$"
+
+    def _load(self, file, **kwargs):
+        bdata = file.read()
+        sdata = bdata.decode(encoding="ascii")
+        lines = sdata.splitlines()
+        ascii_grid = np.loadtxt(lines, skiprows=6)
+        # metadata
+        for ln in lines[:6]:
+            k, v = re.match("^([^ ]+)[ ]+([^ ]+)$", ln).groups()
+            ascii_grid.dtype.metadata[k] = float(v)
+        return ascii_grid
+
+
+class FileLoaderJson(FileLoaderOpen_):
+    filename_pattern = r".*\.(json)$"
+
+    def _load(self, file, **kwargs):
+        return json.load(file, **kwargs)
+
+
+class FileLoaderText(FileLoaderOpen_):
+    filename_pattern = r".*\.(txt|md|rst)$"
+
+    def _load(self, file, **kwargs):
+        return file.read().decode(encoding=None, **kwargs)
+
+
+class FileLoaderHtml(FileLoaderOpen_):
+    filename_pattern = r".*\.(html)$"
+
+    def _load(self, file, **kwargs):
+        if bs4 is None:
+            raise ImportError("bs4")
+        return bs4.BeautifulSoup(file, features="html.parser", **kwargs)
+
+
+class FileLoaderCsv(FileLoaderOpen_):
+    filename_pattern = r".*\.(csv)$"
+
+    def _load(self, file, **kwargs):
+        return pd.read_csv(file, **kwargs)
+
+
+class FileLoaderExcel(FileLoaderOpen_):
+    filename_pattern = r".*\.(xls|xlsx)$"
+
+    def _load(self, file, **kwargs):
+        return pd.read_excel(sheet_name=None, **kwargs)
+
+
+class FileLoaderGeo(FileLoaderOpen_):
+    filename_pattern = r".*\.(geojson|gpkg|shp)$"
+
+    def _load(self, file, **kwargs):
+        if geopandas is None:
+            raise ImportError("geopandas")
+        return geopandas.read_file(file, **kwargs)
+
+
+class FileLoaderXarrayBz2(FileLoaderOpenBz2_):
+    filename_pattern = r".*\.(nc).bz2$"
+
+    def _load(self, file, **kwargs):
+        return FileLoaderXarray(file, **kwargs)
+
+
+class FileLoaderAsciigridGz(FileLoaderOpenGz_):
+    filename_pattern = r".*\.(asc).gz$"
+
+    def _load(self, file, **kwargs):
+        return FileLoaderAsciigrid()._load(file, **kwargs)
+
+
+class FileLoaderShapefile(FileLoader):
+    filename_pattern = r".*\.(shx|dbf|cpg|prj)$"
+
+    def _load(self, filepath, **kwargs):
+        filepath_shp = re.sub("[^.]+$", "shp", filepath)
+        if geopandas is None:
+            raise ImportError("geopandas")
+        return geopandas.read_file(filepath_shp, **kwargs)
+
+
+class FileLoaderShapefileZip(FileLoaderShapefile):
+    filename_pattern = r".*\.(shp).zip$"
+
+
+class FileLoaderGeoZip(FileLoaderOpenZip_):
+    filename_pattern = r".*\.(gpkg).zip$"
+
+    def _load(self, file, **kwargs):
+        return FileLoaderGeo()._load(file, **kwargs)
+
+
+class FileLoaderCsvZip(FileLoaderOpenZip_):
+    filename_pattern = r".*\.(csv).zip"
+
+    def _load(self, file, **kwargs):
+        return FileLoaderCsv()._load(file, **kwargs)
+
+
+class UriLoaderMeta(type):
+    _pattern_classes = []
+
+    def __init__(cls, name, bases, dct):
+        if cls.uri_pattern:
+            cls._pattern_classes.append((cls.uri_pattern, cls))
+
+
+class UriLoader(metaclass=UriLoaderMeta):
+    uri_pattern = None
+    serializer = None
+
+    @classmethod
+    def open_data_metadata(cls, uri, **kwargs):
+        for pat, class_ in cls._pattern_classes:
+            if re.match(pat, uri):
+                inst = class_()
+                return inst.open_data_metadata(uri, **kwargs)
+        raise NotImplementedError(uri)
+
+
+class UriLoaderFile(UriLoader):
+    uri_pattern = "^file://"
+
+    def open_data_metadata(self, uri, **kwargs):
+        metadata = {}
+        metadata["source.path"] = remove_auth_from_uri_or_path(uri)
         file_path = uri_to_filepath_abs(uri)
         logging.debug(f"OPEN: {file_path}")
         data = open(file_path, "rb")
 
-    elif url.scheme in ["http", "https"]:
+        return data, metadata
+
+
+class UriLoaderHttp(UriLoader):
+    uri_pattern = "^https?://"
+
+    def open_data_metadata(self, uri, **kwargs):
+        url = urlsplit(uri)
+        metadata = {}
+        metadata["source.path"] = remove_auth_from_uri_or_path(uri)
+
         # because we want to encode auth headers
         # in the uri, we place it in the netloc
         # part before the @host (instead of the basic auth)
@@ -238,14 +323,23 @@ def open_uri(uri) -> Tuple[BufferedReader, dict]:
 
         res.raise_for_status()
         content_type = res.headers.get("Content-Type")
+
         if content_type:
-            _meta = parse_content_type(content_type)
-            metadata.update(_meta)
-            logging.info(_meta)
+            metadata.update(parse_content_type(content_type))
 
         data = res.raw
+        return data, metadata
 
-    elif "sql" in url.scheme:
+
+class UriLoaderSql(UriLoader):
+    uri_pattern = r"^[\w]*sql[\w]*://"
+    serializer = PickleSerializer()
+
+    def open_data_metadata(self, uri, **kwargs):
+        metadata = {}
+        metadata["source.path"] = remove_auth_from_uri_or_path(uri)
+        url = urlsplit(uri)
+
         # pop sql query
         query_dict = parse_qs(url.query)
         sql_query = query_dict.pop(PARAM_SQL_QUERY)[0]
@@ -274,13 +368,10 @@ def open_uri(uri) -> Tuple[BufferedReader, dict]:
         # make sure everything is closed
         eng.dispose()
 
-        data = pickle.dumps(data)
+        data = self.serializer.dumps(data)
         data = BytesIO(data)
 
         metadata["schema"] = data_schema
-        metadata["mediatype"] = DEFAULT_MEDIA_TYPE
+        metadata["mediatype"] = self.serializer.mediatype
 
-    else:
-        raise NotImplementedError(url.scheme)
-
-    return data, metadata
+        return data, metadata

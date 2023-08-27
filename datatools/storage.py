@@ -3,7 +3,6 @@ import hashlib
 import json
 import logging
 import os
-import pickle
 import re
 from io import BufferedReader
 from tempfile import NamedTemporaryFile
@@ -18,9 +17,11 @@ from .constants import (
     ROOT_METADATA_PATH,
 )
 from .exceptions import DataDoesNotExists, DataExists, InvalidPath
-from .loader import load_file, open_uri
+from .loader import FileLoader, UriLoader
 from .schema import validate
 from .utils import (
+    ByteSerializer,
+    PickleSerializer,
     as_byte_iterator,
     as_uri,
     delete_file,
@@ -30,6 +31,7 @@ from .utils import (
     is_file_readonly,
     json_serialize,
     make_file_readonly,
+    uri_to_data_path,
 )
 
 
@@ -64,23 +66,16 @@ class Storage:
     def cache(
         self,
         get_name: Callable = None,
-        from_bytes: Callable = None,
-        to_bytes: Callable = None,
+        serializer: ByteSerializer = None,
     ) -> "Cache":
         """
         Args:
             get_name (Callable, optional): TODO
-            from_bytes (Callable, optional): TODO
-            to_bytes (Callable, optional): TODO
+            serializer (ByteSerializer, optional): TODO
         Returns:
             Callable function decorator
         """
-        return Cache(
-            storage=self,
-            get_name=get_name,
-            from_bytes=from_bytes,
-            to_bytes=to_bytes,
-        )
+        return Cache(storage=self, get_name=get_name, serializer=serializer)
 
     def check(self, fix=False):
         """check for problems in storage"""
@@ -233,7 +228,7 @@ class Resource:
         """Load data using loading functions determined by the resource's mediatype"""
         if not self.exists():
             self.save()
-        data = load_file(filepath=self.filepath, **kwargs)
+        data = FileLoader.load(filepath=self.filepath, **kwargs)
         if validate_schema:
             schema = self.metadata.get("schema")
             validate(data, schema)
@@ -251,7 +246,8 @@ class UriResource(Resource):
             name (str, optional): if not specified: name will be generated from uri
         """
         self.__source_uri = as_uri(source_uri)
-        super().__init__(storage=storage, name=name or self.__source_uri)
+        name = name or uri_to_data_path(source_uri)
+        super().__init__(storage=storage, name=name)
 
     @property
     def source_uri(self):
@@ -264,7 +260,7 @@ class UriResource(Resource):
             if not exist_ok:
                 raise DataDoesNotExists(self)
             return
-        byte_data, metadata = open_uri(self.source_uri)
+        byte_data, metadata = UriLoader.open_data_metadata(self.source_uri)
         super().write(data=byte_data, exist_ok=exist_ok)
         self.metadata.update(metadata)
 
@@ -362,17 +358,17 @@ class Metadata:
 class Cache:
     """Decorator"""
 
+    default_serializer = PickleSerializer()
+
     def __init__(
         self,
         storage: Storage = None,
         get_name: Callable = None,
-        from_bytes: Callable = None,
-        to_bytes: Callable = None,
+        serializer: ByteSerializer = None,
     ):
         self.__storage = storage or Storage()
         self.__get_name = get_name or self.default_get_name
-        self.__from_bytes = from_bytes or pickle.loads
-        self.__to_bytes = to_bytes or pickle.dumps
+        self.__serializer = serializer or self.default_serializer
 
     def __call__(self, fun):
         @functools.wraps(fun)
@@ -385,7 +381,7 @@ class Cache:
             if not res.exists():
                 # actually call function and write data
                 data = fun(*args, **kwargs)
-                byte_data = self.__to_bytes(data)
+                byte_data = self.__serializer.dumps(data)
                 res.write(data=byte_data)
 
                 # add job description as metadata
@@ -397,21 +393,19 @@ class Cache:
             with res.open() as file:
                 byte_data = file.read()
 
-            data = self.__from_bytes(byte_data)
+            data = self.__serializer.loads(byte_data)
             return data
 
         return _fun
 
-    @classmethod
-    def get_hash(cls, object):
+    def get_hash(self, object):
         bytes = json.dumps(
             object, sort_keys=True, ensure_ascii=False, default=json_serialize
         ).encode()
         job_id = hashlib.md5(bytes).hexdigest()
         return job_id
 
-    @classmethod
-    def get_job_description(cls, fun, args, kwargs):
+    def get_job_description(self, fun, args, kwargs):
         return {
             "function": fun.__name__,
             "args": args,
@@ -419,15 +413,16 @@ class Cache:
             "description": fun.__doc__,  # todo: maybe cleanup into plain text
         }
 
-    @classmethod
-    def default_get_name(cls, fun, args, kwargs):
+    def default_get_name(self, fun, args, kwargs):
         f_name = f"{fun.__name__}"
-        job_desc = cls.get_job_description(fun, args, kwargs)
+        job_desc = self.get_job_description(fun, args, kwargs)
         # we only hash part of it:
-        job_id = cls.get_hash({"args": job_desc["args"], "kwargs": job_desc["kwargs"]})
+        job_id = self.get_hash({"args": job_desc["args"], "kwargs": job_desc["kwargs"]})
         # we can shorten the hash: 8 to 10 chars should be enough
         job_id = job_id[:8]
-        return f"cache/{f_name}_{job_id}.pickle"
+        suffix = self.__serializer.suffix
+        prefix = "cache/"
+        return f"{prefix}{f_name}_{job_id}{suffix}"
 
 
 class StorageGlobal(Storage):

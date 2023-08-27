@@ -2,7 +2,6 @@ import hashlib
 import json
 import logging
 import os
-import pickle
 import sqlite3
 import subprocess as sp
 import sys
@@ -11,6 +10,7 @@ from tempfile import TemporaryDirectory
 
 from datatools.constants import DEFAULT_HASH_METHOD
 from datatools.exceptions import DataDoesNotExists, DataExists
+from datatools.loader import UriLoaderSql
 from datatools.storage import Storage
 from datatools.utils import (
     get_free_port,
@@ -151,11 +151,11 @@ class TestResource(TestBase):
     def test_resource(self):
         # in memory sqlite3 database
         query = "select cast(101 as int) as value;"
-        uri = f"sqlite:///:memory:?q={query}#/testquery"
+        uri = f"sqlite:///:memory:?q={query}#/testquery.pickle"
         res = self.storage.resource(uri)
         with res.open() as file:
             bdata = file.read()
-        data = pickle.loads(bdata)
+        data = UriLoaderSql.serializer.loads(bdata)
         self.assertEqual(data[0]["value"], 101)
 
         # sqlite file
@@ -174,12 +174,12 @@ class TestResource(TestBase):
         # in need an additional slash in linux for abs path
         if platform_is_unix:
             db_filepath = "/" + db_filepath
-        uri = f"sqlite://{db_filepath}?q=select value from test#/testquery"
+        uri = f"sqlite://{db_filepath}?q=select value from test#/testquery.pickle"
 
         res = self.storage.resource(uri)
         with res.open() as file:
             bdata = file.read()
-        data = pickle.loads(bdata)
+        data = UriLoaderSql.serializer.loads(bdata)
         self.assertEqual(data[0]["value"], 102)
 
         # create files in static dir
