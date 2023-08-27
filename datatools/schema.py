@@ -1,24 +1,36 @@
 import json
-import logging
-from os import makedirs
-from os.path import dirname, isfile
-from typing import Union
 
 import frictionless
 import jsonschema
-import requests
+
+from . import storage
 
 
 def validate(data: object, schema: object) -> None:
-    pass
+    if not schema:
+        raise Exception("No schema")
+
+    if is_jsonschema(schema):
+        validator = get_jsonschema_validator(schema)
+        validator(data)
+    elif is_frictionlessschema(schema):
+        resource = {
+            "name": "todo",
+            "schema": schema,
+            "profile": "tabular-data-resource",
+            "data": data,
+        }
+        validate_resource(resource)
+    else:
+        raise NotImplementedError()
 
 
-def load_schema():
-    raise NotImplementedError
+def is_jsonschema(schema: object):
+    return "type" in schema
 
 
-def get_local_path():
-    raise NotImplementedError
+def is_frictionlessschema(schema: object):
+    return "fields" in schema
 
 
 def validate_resource(resource_descriptor):
@@ -36,16 +48,12 @@ def validate_resource(resource_descriptor):
         raise ValueError(err_str)
 
 
-def get_jsonschema(schema_url, cache_dir=None, encoding="utf-8"):
-    local_path = get_local_path(schema_url, cache_dir=cache_dir)
-    if not isfile(local_path):
-        makedirs(dirname(local_path), exist_ok=True)
-        res = requests.get(schema_url)
-        res.raise_for_status()
-        res = json.dumps(res.json(), indent=4, ensure_ascii=False)
-        with open(local_path, "w", encoding=encoding) as file:
-            file.write(res)
-    with open(local_path, "r", encoding=encoding) as file:
+def get_jsonschema_storage():
+    return storage.StorageGlobal()
+
+
+def get_jsonschema(schema_url):
+    with get_jsonschema_storage().resource(source_uri=schema_url).open() as file:
         return json.load(file)
 
 
@@ -90,22 +98,3 @@ def get_jsonschema_validator(schema):
             raise ValueError(err_str)
 
     return validator_function
-
-
-def validate_json_schema(data, schema: Union[str, dict, bool] = True) -> object:
-    if schema is True:
-        schema = data["$schema"]
-    if isinstance(schema, str):
-        schema = load_schema(schema)
-
-    jsonschema.validate(data, schema)
-    logging.debug("Validation ok")
-
-    return data
-
-
-def validate_resource_schema(data, schema):
-    if not schema:
-        raise Exception("no schema")
-    validate_resource({"data": data, "schema": schema})
-    return data

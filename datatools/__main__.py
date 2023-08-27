@@ -10,7 +10,7 @@ from . import __version__
 from .constants import GLOBAL_LOCATION, LOCAL_LOCATION
 from .exceptions import DatatoolsException
 from .storage import Metadata, Resource, Storage
-from .utils import parse_cli_metadata
+from .utils import as_uri, parse_cli_metadata
 
 
 @click.group()
@@ -69,9 +69,10 @@ def search(storage: Storage, patterns):
 
 @main.group("res")
 @click.pass_context
-@click.argument("source_uri")
-def resource(ctx, source_uri):
+@click.argument("path")
+def resource(ctx, path):
     storage = ctx.obj
+    source_uri = as_uri(path)
     resource = storage.resource(source_uri=source_uri)
     ctx.obj = resource
 
