@@ -43,6 +43,12 @@ try:
 except ImportError:
     bs4 = None
 
+# optional
+try:
+    import rioxarray
+except ImportError:
+    rioxarray = None
+
 
 def _TODO_get_metadata(obj, **kwargs):
     metadata = {}
@@ -89,32 +95,35 @@ class FileLoaderOpen_(metaclass=FileLoaderMeta):
 
 class FileLoaderOpenGz_(FileLoaderOpen_):
     def load(self, filepath, **kwargs):
-        with super().open(filepath, "rb") as file:
+        with open(filepath, "rb") as file:
             zfile = gzip.open(file)
             return self._load(file=zfile, **kwargs)
 
 
 class FileLoaderOpenBz2_(FileLoaderOpen_):
     def load(self, filepath, **kwargs):
-        with super().open(filepath, "rb") as file:
+        with open(filepath, "rb") as file:
             zfile = bz2.open(file)
             return self._load(file=zfile, **kwargs)
 
 
 class FileLoaderOpenZip_(FileLoader):
     def load(self, filepath, **kwargs):
-        assumed_filename_in_zip = filepath.split("/")[-1]
+        assumed_filename_in_zip = filepath.replace("\\", "/").split("/")[-1].lower()
         with open(filepath, "rb") as file:
             zfile = zipfile.ZipFile(file)
             # find
             filename_in_zip = None
             for zf in zfile.filelist:
-                zf_norm_name = get_resource_path_name(zf.filename.lower + ".zip")
+                zf_norm_name = get_resource_path_name(zf.filename.lower() + ".zip")
                 if zf_norm_name == assumed_filename_in_zip:
                     filename_in_zip = zf.filename
                     break
             if not filename_in_zip:
-                raise Exception(f"cannot find file in zip: {filepath}")
+                files = [z.filename.lower() for z in zfile.filelist]
+                raise Exception(
+                    f"cannot find file in zip: {assumed_filename_in_zip}, {files}"
+                )
             file_in_zip = zfile.open(filename_in_zip)
             return self._load(file=file_in_zip, **kwargs)
 
@@ -126,13 +135,22 @@ class FileLoaderPickle(FileLoaderOpen_):
         return pickle.load(file, **kwargs)
 
 
-class FileLoaderXarray(FileLoaderOpen_):
-    filename_pattern = r".*\.(tif|tiff|png|nc|nc4)$"
+class FileLoaderXarrayDataarray_TODO(metaclass=FileLoaderMeta):
+    filename_pattern = r".*\.(tif|tiff|png)$"
+
+    def load(self, filepath, **kwargs):
+        if rioxarray is None:
+            raise ImportError("rioxarray")
+        return rioxarray.open_rasterio(filepath)
+
+
+class FileLoaderXarrayDataset(FileLoaderOpen_):
+    filename_pattern = r".*\.(nc|nc4)$"
 
     def _load(self, file, **kwargs):
         if xarray is None:
             raise ImportError("xarray")
-        return xarray.load_dataarray(file, **kwargs)
+        return xarray.load_dataset(file, **kwargs)
 
 
 class FileLoaderXYZ(FileLoaderOpen_):
@@ -161,10 +179,13 @@ class FileLoaderAsciigrid(FileLoaderOpen_):
         sdata = bdata.decode(encoding="ascii")
         lines = sdata.splitlines()
         ascii_grid = np.loadtxt(lines, skiprows=6)
-        # metadata
+        # metadata (store in dtype)
+        metadata = {}
         for ln in lines[:6]:
             k, v = re.match("^([^ ]+)[ ]+([^ ]+)$", ln).groups()
-            ascii_grid.dtype.metadata[k] = float(v)
+            metadata[k] = float(v)
+        ascii_grid.dtype = np.dtype(ascii_grid.dtype, metadata=metadata)
+
         return ascii_grid
 
 
@@ -202,11 +223,12 @@ class FileLoaderExcel(FileLoaderOpen_):
     filename_pattern = r".*\.(xls|xlsx)$"
 
     def _load(self, file, **kwargs):
-        return pd.read_excel(sheet_name=None, **kwargs)
+        # sheet_name=None: load all sheets
+        return pd.read_excel(file, sheet_name=None, **kwargs)
 
 
 class FileLoaderGeo(FileLoaderOpen_):
-    filename_pattern = r".*\.(geojson|gpkg|shp)$"
+    filename_pattern = r".*\.(geojson|gpkg)$"
 
     def _load(self, file, **kwargs):
         if geopandas is None:
@@ -214,11 +236,11 @@ class FileLoaderGeo(FileLoaderOpen_):
         return geopandas.read_file(file, **kwargs)
 
 
-class FileLoaderXarrayBz2(FileLoaderOpenBz2_):
+class FileLoaderXarrayDatasetBz2(FileLoaderOpenBz2_):
     filename_pattern = r".*\.(nc).bz2$"
 
     def _load(self, file, **kwargs):
-        return FileLoaderXarray(file, **kwargs)
+        return FileLoaderXarrayDataset()._load(file, **kwargs)
 
 
 class FileLoaderAsciigridGz(FileLoaderOpenGz_):
@@ -229,9 +251,9 @@ class FileLoaderAsciigridGz(FileLoaderOpenGz_):
 
 
 class FileLoaderShapefile(FileLoader):
-    filename_pattern = r".*\.(shx|dbf|cpg|prj)$"
+    filename_pattern = r".*\.(shp|shx|dbf|cpg|prj)$"
 
-    def _load(self, filepath, **kwargs):
+    def load(self, filepath, **kwargs):
         filepath_shp = re.sub("[^.]+$", "shp", filepath)
         if geopandas is None:
             raise ImportError("geopandas")
@@ -240,6 +262,11 @@ class FileLoaderShapefile(FileLoader):
 
 class FileLoaderShapefileZip(FileLoaderShapefile):
     filename_pattern = r".*\.(shp).zip$"
+
+    def load(self, filepath, **kwargs):
+        if geopandas is None:
+            raise ImportError("geopandas")
+        return geopandas.read_file(filepath, **kwargs)
 
 
 class FileLoaderGeoZip(FileLoaderOpenZip_):
