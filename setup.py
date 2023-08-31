@@ -30,6 +30,7 @@ if __name__ == "__main__":
             "rioxarray",
             "beautifulsoup4",
             "openpyxl",
+            "rioxarray"
             # "pyproj",
             # "gdal",
         ],
