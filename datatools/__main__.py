@@ -64,7 +64,7 @@ def check(storage: Storage, fix):
 @click.argument("patterns", nargs=-1)
 def search(storage: Storage, patterns):
     for res in storage.find_resources(*patterns):
-        print(res.data_uri)
+        print(res)
 
 
 @main.group("res")
