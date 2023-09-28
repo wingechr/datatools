@@ -81,7 +81,7 @@ def resource(ctx, path):
 @click.pass_obj
 def resource_save(resource: Resource):
     resource.save(exist_ok=True)
-    print(resource.data_uri)
+    print(resource.name)
 
 
 @resource.group("meta")
