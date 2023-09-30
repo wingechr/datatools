@@ -401,16 +401,29 @@ def as_byte_iterator(data: Union[bytes, Iterable, BufferedReader]) -> Iterable[b
         raise NotImplementedError(type(data))
 
 
-def detect_encoding(sample_data: bytes):
+def detect_encoding(sample_data: bytes) -> str:
     result = chardet.detect(sample_data)
     if result["confidence"] < 1:
         logging.warning(f"Chardet encoding detection < 100%: {result}")
     return result["encoding"]
 
 
-def detect_csv_dialect(sample_data: str):
+def detect_csv_dialect(sample_data: str) -> dict:
     dialect = csv.Sniffer().sniff(sample_data)
-    return dialect
+    dialect_dict = dict(
+        (k, v)
+        for k, v in dialect.__dict__.items()
+        if k
+        in [
+            "lineterminator",
+            "quoting",
+            "doublequote",
+            "delimiter",
+            "quotechar",
+            "skipinitialspace",
+        ]
+    )
+    return dialect_dict
 
 
 def get_sql_table_schema(cursor):
