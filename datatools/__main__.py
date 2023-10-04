@@ -70,10 +70,11 @@ def search(storage: Storage, patterns):
 @main.group("res")
 @click.pass_context
 @click.argument("path")
-def resource(ctx, path):
+@click.option("--name", "-n")
+def resource(ctx, path, name=None):
     storage = ctx.obj
     source_uri = as_uri(path)
-    resource = storage.resource(source_uri=source_uri)
+    resource = storage.resource(source_uri=source_uri, name=name)
     ctx.obj = resource
 
 
