@@ -20,10 +20,10 @@ if __name__ == "__main__":
             "chardet",
             "frictionless<5",  # frictionless no longer works with python3.7
             "jsonschema",
+            "xarray",
         ],
         install_recommends=[  # this does not do anything, just for information
             "geopandas",
-            "xarray",
             "h5netcdf",
             "scipy",
             "lxml",

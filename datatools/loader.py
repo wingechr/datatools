@@ -143,37 +143,44 @@ class FileLoaderXarrayDataset(FileLoaderOpen_):
 class FileLoaderXYZ(FileLoaderOpen_):
     filename_pattern = r".*\.(xyz)$"
 
-    def _load(self, file, **kwargs):
+    def _load(self, file, **kwargs) -> pd.Series:
         if xarray is None:
             raise ImportError("xarray")
         df = pd.read_csv(
             file,
             header=None,
             sep=" ",
-            names=["x", "y", "z"],
+            names=["x", "y", "z"],  # no column header
             dtype={"x": int, "y": int, "z": float},
         )
-        ds = df.set_index(["x", "y"])["z"]
-        ds = xarray.DataArray.from_series(ds)
+        ds = df.set_index(["y", "x"])["z"]
+
         return ds
 
 
 class FileLoaderAsciigrid(FileLoaderOpen_):
     filename_pattern = r".*\.(asc)$"
 
-    def _load(self, file, **kwargs):
+    def _load(self, file, **kwargs) -> np.array:
+        n_header = 6
+
         bdata = file.read()
         sdata = bdata.decode(encoding="ascii")
         lines = sdata.splitlines()
-        ascii_grid = np.loadtxt(lines, skiprows=6)
         # metadata (store in dtype)
-        metadata = {}
-        for ln in lines[:6]:
+        header = {}
+        for ln in lines[:n_header]:
             k, v = re.match("^([^ ]+)[ ]+([^ ]+)$", ln).groups()
-            metadata[k] = float(v)
-        ascii_grid.dtype = np.dtype(ascii_grid.dtype, metadata=metadata)
-
-        return ascii_grid
+            header[k.upper()] = float(v)
+        assert set(header) == set(
+            ["NODATA_VALUE", "NROWS", "NCOLS", "CELLSIZE", "YLLCENTER", "XLLCENTER"]
+        )
+        arr = np.loadtxt(
+            lines, skiprows=n_header, dtype=np.dtype("float", metadata=header)
+        )
+        arr[arr == header["NODATA_VALUE"]] = np.NAN
+        assert arr.shape == (header["NROWS"], header["NCOLS"])
+        return arr
 
 
 class FileLoaderJson(FileLoaderOpen_):
