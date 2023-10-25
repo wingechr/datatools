@@ -25,14 +25,15 @@ if __name__ == "__main__":
         install_recommends=[  # this does not do anything, just for information
             "geopandas",
             "h5netcdf",
+            "netCDF4",
             "scipy",
             "lxml",
             "rioxarray",
             "beautifulsoup4",
             "openpyxl",
-            "rioxarray"
-            # "pyproj",
-            # "gdal",
+            "rioxarray",
+            "pyproj",
+            "gdal",
         ],
         name="wingechr-datatools",
         description=None,

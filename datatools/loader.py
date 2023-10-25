@@ -44,6 +44,12 @@ except ImportError:
 
 # optional
 try:
+    from osgeo import gdal
+except ImportError:
+    gdal = None
+
+# optional
+try:
     import rioxarray
 except ImportError:
     rioxarray = None
@@ -128,34 +134,42 @@ class FileLoaderXarrayDataarray_TODO(metaclass=FileLoaderMeta):
     def load(self, filepath, **kwargs):
         if rioxarray is None:
             raise ImportError("rioxarray")
-        return rioxarray.open_rasterio(filepath)
+        arr = rioxarray.open_rasterio(filepath)
+
+        # crs_wkt is not accurate, try to read with gdal
+        if gdal:
+            gds = gdal.Open(filepath)
+            crs_str = gds.GetProjection()
+            # geotransform_tuple = gds.GetGeoTransform()
+            del gds  # close
+
+            # spatial_ref coord has attribue of same name as well as crs_wkt
+            arr.coords["spatial_ref"].attrs["spatial_ref"] = crs_str
+            arr.coords["spatial_ref"].attrs["crs_wkt"] = crs_str
+
+        return arr
 
 
 class FileLoaderXarrayDataset(FileLoaderOpen_):
     filename_pattern = r".*\.(nc|nc4)$"
 
-    def _load(self, file, **kwargs):
+    def _load(self, file, decode_cf=False, **kwargs):
         if xarray is None:
             raise ImportError("xarray")
-        return xarray.load_dataset(file, **kwargs)
+        return xarray.load_dataset(file, decode_cf=decode_cf, **kwargs)
 
 
 class FileLoaderXYZ(FileLoaderOpen_):
     filename_pattern = r".*\.(xyz)$"
 
-    def _load(self, file, **kwargs) -> pd.Series:
-        if xarray is None:
-            raise ImportError("xarray")
+    def _load(self, file, **kwargs) -> pd.DataFrame:
         df = pd.read_csv(
             file,
             header=None,
             sep=" ",
             names=["x", "y", "z"],  # no column header
-            dtype={"x": int, "y": int, "z": float},
         )
-        ds = df.set_index(["y", "x"])["z"]
-
-        return ds
+        return df
 
 
 class FileLoaderAsciigrid(FileLoaderOpen_):
@@ -227,7 +241,17 @@ class FileLoaderGeo(FileLoaderOpen_):
     def _load(self, file, **kwargs):
         if geopandas is None:
             raise ImportError("geopandas")
-        return geopandas.read_file(file, **kwargs)
+        gdf = geopandas.read_file(file, **kwargs)
+
+        # For some reason, new geojson does not properly set custom crs?
+        # try to fix it (if itsseekable)
+        if file.name.endswith(".geojson"):
+            file.seek(0)
+            data = json.load(file)
+            crs = data["crs"]["properties"]["name"]
+            gdf = gdf.set_crs(crs, allow_override=True)
+
+        return gdf
 
 
 class FileLoaderXarrayDatasetBz2(FileLoaderOpenBz2_):
