@@ -197,6 +197,20 @@ class FileLoaderAsciigrid(FileLoaderOpen_):
         return arr
 
 
+class FileLoaderXYZZip(FileLoaderOpenZip_):
+    filename_pattern = r".*\.xyz.zip"
+
+    def _load(self, file, **kwargs):
+        return FileLoaderXYZ()._load(file, **kwargs)
+
+
+class FileLoaderAsciigridZip(FileLoaderOpenZip_):
+    filename_pattern = r".*\.asc.zip"
+
+    def _load(self, file, **kwargs):
+        return FileLoaderAsciigrid()._load(file, **kwargs)
+
+
 class FileLoaderJson(FileLoaderOpen_):
     filename_pattern = r".*\.(json)$"
 
