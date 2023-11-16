@@ -6,6 +6,7 @@ import pickle
 import re
 import zipfile
 from io import BytesIO
+from tempfile import NamedTemporaryFile
 from urllib.parse import parse_qs, unquote, urlencode, urlsplit, urlunsplit
 
 import numpy as np
@@ -16,6 +17,7 @@ import sqlalchemy as sa
 from .constants import PARAM_SQL_QUERY
 from .utils import (
     PickleSerializer,
+    get_df_table_schema,
     get_resource_path_name,
     get_sql_table_schema,
     normalize_sql_query,
@@ -73,6 +75,15 @@ class FileLoader(metaclass=FileLoaderMeta):
                 inst = class_()
                 return inst.load(filepath, **kwargs)
         raise NotImplementedError(filepath)
+
+    @classmethod
+    def open_data_metadata(cls, data, suffix="", **kwargs) -> bytes:
+        # TODO also check for data type/schema
+        for pat, class_ in cls._pattern_classes:
+            if re.match(pat, suffix):
+                inst = class_()
+                return inst.open_data_metadata(data, suffix, **kwargs)
+        raise NotImplementedError(suffix)
 
 
 class FileLoaderOpen_(metaclass=FileLoaderMeta):
@@ -267,6 +278,27 @@ class FileLoaderGeo(FileLoaderOpen_):
 
         return gdf
 
+    def open_data_metadata(cls, data, suffix="", **kwargs):
+        if geopandas is None:
+            raise ImportError("geopandas")
+        if not isinstance(data, geopandas.GeoDataFrame):
+            raise TypeError(type(data).__name__)
+
+        metadata = {}
+        metadata["schema"] = get_df_table_schema(data)
+
+        # geopandas metadata
+        metadata["geometryType"] = str(data.geometry.geom_type.values[0])  # first shape
+        metadata["crs"] = str(data.crs)
+        metadata["bounds"] = [round(x, 1) for x in data.total_bounds]
+
+        filepath = NamedTemporaryFile(suffix=suffix).name
+        data.to_file(filepath)
+        with open(filepath, "rb") as file:
+            bytedata = file.read()
+
+        return bytedata, metadata
+
 
 class FileLoaderXarrayDatasetBz2(FileLoaderOpenBz2_):
     filename_pattern = r".*\.(nc).bz2$"
@@ -391,7 +423,7 @@ class UriLoaderHttp(UriLoader):
 
 
 class UriLoaderSql(UriLoader):
-    uri_pattern = r"^[\w]*sql[\w]*://"
+    uri_pattern = r"^[\w]*sql[\w+]*://"
     serializer = PickleSerializer()
 
     def open_data_metadata(self, uri, **kwargs):

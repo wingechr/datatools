@@ -16,7 +16,7 @@ from .constants import (
     LOCAL_LOCATION,
     ROOT_METADATA_PATH,
 )
-from .exceptions import DataDoesNotExists, DataExists, InvalidPath
+from .exceptions import DataExists, InvalidPath
 from .loader import FileLoader, UriLoader
 from .schema import validate
 from .utils import (
@@ -237,6 +237,21 @@ class Resource:
             validate(data, schema)
         return data
 
+    def save(self, data, exist_ok=False, **kwargs):
+        """Save data using functions determined by the resource's mediatype"""
+        # sometimes the suffix can have multiple parts, e.g. .tar.bz2
+        # I don't want to guess which it is, so I use the whole name as suffix
+        # We only need it for the temporary file.
+        suffix = self.name.replace("/", "-")
+
+        if self.exists():
+            if not exist_ok:
+                raise DataExists(self)
+            return
+        byte_data, metadata = FileLoader.open_data_metadata(data, suffix=suffix)
+        self.write(data=byte_data, exist_ok=exist_ok)
+        self.metadata.update(metadata)
+
 
 class UriResource(Resource):
     """Resource that can be automatically loaded from external uri"""
@@ -261,7 +276,7 @@ class UriResource(Resource):
         """save from source"""
         if self.exists():
             if not exist_ok:
-                raise DataDoesNotExists(self)
+                raise DataExists(self)
             return
         byte_data, metadata = UriLoader.open_data_metadata(self.source_uri)
         super().write(data=byte_data, exist_ok=exist_ok)

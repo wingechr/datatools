@@ -69,13 +69,14 @@ def normalize_sql_query(query: str) -> str:
     Returns:
         str: The prettified SQL query.
     """
-    return sqlparse.format(
+    query = sqlparse.format(
         query,
         reindent=False,
         keyword_case="upper",
         strip_comments=True,
         strip_whitespace=True,
     )
+    return query
 
 
 def get_free_port() -> int:
