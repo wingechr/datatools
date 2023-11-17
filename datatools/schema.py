@@ -1,9 +1,20 @@
 import json
 
 import frictionless
+import genson
 import jsonschema
 
 from . import storage
+
+
+def infer_schema_from_objects(data: list):
+    builder = genson.SchemaBuilder()
+    builder.add_schema({"type": "object", "properties": {}})
+    for item in data:
+        builder.add_object(item)
+    item_schema = builder.to_schema()
+    schema = {"type": "array", "items": item_schema}
+    return schema
 
 
 def validate(data: object, schema: object) -> None:

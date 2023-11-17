@@ -15,6 +15,7 @@ import requests
 import sqlalchemy as sa
 
 from .constants import PARAM_SQL_QUERY
+from .schema import infer_schema_from_objects
 from .utils import (
     PickleSerializer,
     get_df_table_schema,
@@ -55,6 +56,10 @@ try:
     import rioxarray
 except ImportError:
     rioxarray = None
+
+
+JSON_INDENT = 2
+JSON_ENCODING = "utf-8"
 
 
 class FileLoaderMeta(type):
@@ -228,6 +233,20 @@ class FileLoaderJson(FileLoaderOpen_):
     def _load(self, file, **kwargs):
         return json.load(file, **kwargs)
 
+    def open_data_metadata(cls, data, suffix="", **kwargs):
+        if not isinstance(data, (list, dict)):
+            raise TypeError(type(data).__name__)
+
+        stringdata = json.dumps(data, indent=JSON_INDENT, ensure_ascii=False)
+        bytedata = stringdata.encode(JSON_ENCODING)
+
+        metadata = {}
+        # TODO: only infer if schema not in metadata
+        if isinstance(data, list):
+            metadata["schema"] = infer_schema_from_objects(data)
+
+        return bytedata, metadata
+
 
 class FileLoaderText(FileLoaderOpen_):
     filename_pattern = r".*\.(txt|md|rst)$"
@@ -249,7 +268,25 @@ class FileLoaderCsv(FileLoaderOpen_):
     filename_pattern = r".*\.(csv)$"
 
     def _load(self, file, **kwargs):
-        return pd.read_csv(file, **kwargs)
+        return pd.read_csv(file, low_memory=False, **kwargs)
+
+    def open_data_metadata(cls, data, suffix="", **kwargs):
+        if not isinstance(data, pd.DataFrame):
+            raise TypeError(type(data).__name__)
+
+        metadata = {}
+        metadata["schema"] = get_df_table_schema(data)
+
+        filepath = NamedTemporaryFile(suffix=suffix).name
+
+        # only save index if any of its levels are named
+        save_index = any(data.index.names)
+        data.to_csv(filepath, index=save_index)
+
+        with open(filepath, "rb") as file:
+            bytedata = file.read()
+
+        return bytedata, metadata
 
 
 class FileLoaderExcel(FileLoaderOpen_):
@@ -285,6 +322,7 @@ class FileLoaderGeo(FileLoaderOpen_):
             raise TypeError(type(data).__name__)
 
         metadata = {}
+        # TODO: only infer if schema not in metadata
         metadata["schema"] = get_df_table_schema(data)
 
         # geopandas metadata

@@ -21,6 +21,8 @@ if __name__ == "__main__":
             "frictionless<5",  # frictionless no longer works with python3.7
             "jsonschema",
             "xarray",
+            "openpyxl",
+            "genson",
         ],
         install_recommends=[  # this does not do anything, just for information
             "geopandas",
@@ -39,7 +41,7 @@ if __name__ == "__main__":
         description=None,
         long_description=None,
         long_description_content_type="text/markdown",
-        version="0.5.0",
+        version="0.6.0",
         author="Christian Winger",
         author_email="c@wingechr.de",
         url="https://github.com/wingechr/datatools",
