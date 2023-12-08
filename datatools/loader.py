@@ -17,7 +17,7 @@ import sqlalchemy as sa
 from .constants import PARAM_SQL_QUERY
 from .schema import infer_schema_from_objects
 from .utils import (
-    PickleSerializer,
+    get_byte_serializer,
     get_df_table_schema,
     get_resource_path_name,
     get_sql_table_schema,
@@ -395,14 +395,13 @@ class UriLoaderMeta(type):
 
 class UriLoader(metaclass=UriLoaderMeta):
     uri_pattern = None
-    serializer = None
 
     @classmethod
-    def open_data_metadata(cls, uri, **kwargs):
+    def open_data_metadata(cls, uri, suffix=None, **kwargs):
         for pat, class_ in cls._pattern_classes:
             if re.match(pat, uri):
                 inst = class_()
-                return inst.open_data_metadata(uri, **kwargs)
+                return inst.open_data_metadata(uri, suffix=suffix, **kwargs)
         raise NotImplementedError(uri)
 
 
@@ -462,9 +461,8 @@ class UriLoaderHttp(UriLoader):
 
 class UriLoaderSql(UriLoader):
     uri_pattern = r"^[\w]*sql[\w+]*://"
-    serializer = PickleSerializer()
 
-    def open_data_metadata(self, uri, **kwargs):
+    def open_data_metadata(self, uri, suffix=None, **kwargs):
         metadata = {}
         metadata["source.path"] = remove_auth_from_uri_or_path(uri)
         url = urlsplit(uri)
@@ -497,10 +495,13 @@ class UriLoaderSql(UriLoader):
         # make sure everything is closed
         eng.dispose()
 
-        data = self.serializer.dumps(data)
-        data = BytesIO(data)
+        # get serializer from suffix
 
+        serializer = get_byte_serializer(suffix)
+
+        data = serializer.dumps(data)
+        data = BytesIO(data)
         metadata["schema"] = data_schema
-        metadata["mediatype"] = self.serializer.mediatype
+        metadata["mediatype"] = serializer.mediatype
 
         return data, metadata

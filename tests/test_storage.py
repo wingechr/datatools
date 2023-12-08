@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 import os
+import pickle
 import sqlite3
 import subprocess as sp
 import sys
@@ -10,7 +11,6 @@ from tempfile import TemporaryDirectory
 
 from datatools.constants import DEFAULT_HASH_METHOD
 from datatools.exceptions import DataDoesNotExists, DataExists
-from datatools.loader import UriLoaderSql
 from datatools.storage import Storage
 from datatools.utils import (
     get_free_port,
@@ -155,7 +155,7 @@ class TestResource(TestBase):
         res = self.storage.resource(uri)
         with res.open() as file:
             bdata = file.read()
-        data = UriLoaderSql.serializer.loads(bdata)
+        data = pickle.loads(bdata)
         self.assertEqual(data[0]["value"], 101)
 
         # sqlite file
@@ -179,7 +179,8 @@ class TestResource(TestBase):
         res = self.storage.resource(uri)
         with res.open() as file:
             bdata = file.read()
-        data = UriLoaderSql.serializer.loads(bdata)
+        data = pickle.loads(bdata)
+
         self.assertEqual(data[0]["value"], 102)
 
         # create files in static dir

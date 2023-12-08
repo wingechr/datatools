@@ -27,6 +27,7 @@ from .utils import (
     delete_file,
     get_now_str,
     get_resource_path_name,
+    get_suffix,
     get_user_w_host,
     is_file_readonly,
     json_serialize,
@@ -239,10 +240,7 @@ class Resource:
 
     def save(self, data, exist_ok=False, **kwargs):
         """Save data using functions determined by the resource's mediatype"""
-        # sometimes the suffix can have multiple parts, e.g. .tar.bz2
-        # I don't want to guess which it is, so I use the whole name as suffix
-        # We only need it for the temporary file.
-        suffix = self.name.replace("/", "-")
+        suffix = get_suffix(self.name)
 
         if self.exists():
             if not exist_ok:
@@ -278,7 +276,10 @@ class UriResource(Resource):
             if not exist_ok:
                 raise DataExists(self)
             return
-        byte_data, metadata = UriLoader.open_data_metadata(self.source_uri)
+        suffix = get_suffix(self.name)
+        byte_data, metadata = UriLoader.open_data_metadata(
+            self.source_uri, suffix=suffix
+        )
         super().write(data=byte_data, exist_ok=exist_ok)
         self.metadata.update(metadata)
 

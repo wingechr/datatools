@@ -10,12 +10,15 @@ import numpy as np
 import pandas as pd
 
 from datatools.utils import (
+    CsvSerializer,
     as_byte_iterator,
     filepath_abs_to_uri,
     get_df_table_schema,
     get_hostname,
     get_now_str,
     get_resource_path_name,
+    get_sql_uri,
+    get_suffix,
     get_user_w_host,
     is_file_readonly,
     is_uri,
@@ -190,3 +193,33 @@ class TestUtils(unittest.TestCase):
             ),
             schema,
         )
+
+    def test_get_sql_uri(self):
+        self.assertEqual(
+            get_sql_uri(
+                connection_string_uri="mssql+pyodbc://"
+                "?odbc_connect=driver=sql server;server=myserver",
+                sql_query="select a, b from t",
+            ),
+            "mssql+pyodbc://?odbc_connect=driver=sql server;server=myserver&q="
+            "SELECT%20a%2C%20b%20FROM%20t",
+        )
+
+    def test_get_suffix(self):
+        for path, suffix in [
+            ("filename.png", ".png"),
+            ("filename.csv.zip", ".csv.zip"),
+            ("path/filename.csv.zip", ".csv.zip"),
+            ("path.path/filename.csv.zip", ".csv.zip"),
+            ("path/.gitignore", ""),
+            ("path/gitignore", ""),
+        ]:
+            self.assertEqual(get_suffix(path), suffix)
+
+
+class TestSerializers(unittest.TestCase):
+    def test_CsvSerializer(self):
+        serializer = CsvSerializer()
+        data = {"a": [1, 2], "b": [3, 4]}
+        bdata = bytes(serializer.dumps(data))
+        self.assertEqual(bdata, b"a,b\n1,3\n2,4\n")

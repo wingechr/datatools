@@ -2,6 +2,7 @@ import atexit
 import csv
 import datetime
 import inspect
+import io
 import json
 import logging
 import os
@@ -14,7 +15,7 @@ from contextlib import ExitStack as _ExitStack
 from io import BufferedReader
 from pathlib import Path
 from typing import Iterable, Union
-from urllib.parse import unquote, unquote_plus, urlsplit
+from urllib.parse import quote, unquote, unquote_plus, urlsplit
 
 import chardet
 import numpy as np
@@ -31,6 +32,7 @@ from .constants import (
     DEFAULT_BUFFER_SIZE,
     FILEMOD_WRITE,
     LOCALHOST,
+    PARAM_SQL_QUERY,
     TIME_FMT,
 )
 
@@ -475,6 +477,35 @@ class ByteSerializer:
         raise NotImplementedError()
 
 
+class CsvSerializer(ByteSerializer):
+    mediatype = "text/csv"
+    suffix = ".csv"
+
+    def dumps(
+        self,
+        data: object,
+        encoding="utf-8",
+        sep=",",
+        lineterminator="\n",
+        **kwargs,
+    ) -> bytes:
+        buf = io.BytesIO()
+        pd.DataFrame(data, **kwargs).to_csv(
+            buf,
+            index=False,
+            encoding=encoding,
+            sep=sep,
+            lineterminator=lineterminator,
+            **kwargs,
+        )
+        bdata = buf.getvalue()
+        return bdata
+
+    def loads(self, data: bytes, encoding="utf-8", sep=",", **kwargs) -> object:
+        buf = io.BytesIO(data)
+        return pd.read_csv(buf, encoding=encoding, sep=sep, **kwargs)
+
+
 class JsonSerializer(ByteSerializer):
     mediatype = "application/json"
     suffix = ".json"
@@ -495,3 +526,36 @@ class PickleSerializer(ByteSerializer):
 
     def loads(self, data: bytes, **kwargs) -> object:
         return pickle.loads(data, **kwargs)
+
+
+def get_sql_uri(connection_string_uri: str, sql_query: str) -> str:
+    sql_query = normalize_sql_query(sql_query)
+
+    if "?" in connection_string_uri:
+        connection_string_uri += "&"
+    else:
+        connection_string_uri += "?"
+    uri = connection_string_uri + PARAM_SQL_QUERY + "=" + quote(sql_query)
+
+    return uri
+
+
+def get_suffix(path: str) -> str:
+    suffix = ""
+    while True:
+        path, ext = os.path.splitext(path)
+        if not ext:
+            break
+        suffix = ext + suffix
+    return suffix
+
+
+def get_byte_serializer(suffix: str) -> ByteSerializer:
+    if suffix == ".json":
+        return JsonSerializer()
+    elif suffix == ".csv":
+        return CsvSerializer()
+    elif suffix in (".pickle", ".pkl"):
+        return PickleSerializer()
+    else:
+        raise KeyError(suffix)
