@@ -559,3 +559,36 @@ def get_byte_serializer(suffix: str) -> ByteSerializer:
         return PickleSerializer()
     else:
         raise KeyError(suffix)
+
+
+def df_to_values(df: pd.DataFrame) -> list:
+    """get values from DataFrame, replace nans with None
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        data
+
+    Returns
+    -------
+    list
+        list of dicts
+    """
+    df = df.astype(object)  # None values need object type
+    df = df.where(~df.isna(), other=None)
+    data = df.to_dict(orient="records")
+    return data
+
+
+def get_err_message(err: Exception) -> str:
+    try:
+        return err["message"]
+    except Exception:
+        pass
+
+    try:
+        return err.message
+    except Exception:
+        pass
+
+    return str(err)

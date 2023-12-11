@@ -22,3 +22,11 @@ class DataDoesNotExists(DatatoolsException):
 
 class IntegrityError(DatatoolsException):
     pass
+
+
+class ValidationError(DatatoolsException):
+    pass
+
+
+class SchemaError(DatatoolsException):
+    pass

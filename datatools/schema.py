@@ -1,10 +1,14 @@
 import json
+from typing import Union
 
 import frictionless
 import genson
 import jsonschema
+import pandas as pd
 
 from . import storage
+from .exceptions import SchemaError, ValidationError
+from .utils import get_err_message
 
 
 def infer_schema_from_objects(data: list):
@@ -17,9 +21,28 @@ def infer_schema_from_objects(data: list):
     return schema
 
 
-def validate(data: object, schema: object) -> None:
+def validate(data: Union[list, pd.DataFrame], schema: dict) -> None:
+    """validate date against schema
+
+    Parameters
+    ----------
+    data : Union[list,pd.DataFrame]
+        data object: either a list of dicts or a DataFrame
+    schema : dict
+        schema object, either a json schema or a frictionless table schema
+
+    Raises
+    ------
+    Exception
+        _description_
+    NotImplementedError
+        _description_
+    """
     if not schema:
         raise Exception("No schema")
+
+    if isinstance(data, pd.DataFrame):
+        pass
 
     if is_jsonschema(schema):
         validator = get_jsonschema_validator(schema)
@@ -45,18 +68,21 @@ def is_frictionlessschema(schema: object):
 
 
 def validate_resource(resource_descriptor):
-    res = frictionless.Resource(resource_descriptor)
+    try:
+        res = frictionless.Resource(resource_descriptor)
+    except frictionless.exception.FrictionlessException as exc:
+        raise SchemaError(exc)
+
     rep = res.validate()
 
     if rep.stats["errors"]:
         errors = []
-        for task in rep.tasks:
-            for err in task["errors"]:
-                errors.append(err["message"])
-
+        for report_task in rep.tasks:
+            for err in report_task.errors:
+                err_msg = get_err_message(err)
+                errors.append(err_msg)
         err_str = "\n".join(errors)
-        # logging.error(err_str)
-        raise ValueError(err_str)
+        raise ValidationError(err_str)
 
 
 def get_jsonschema_storage():
@@ -94,7 +120,10 @@ def get_jsonschema_validator(schema):
 
     validator_cls = jsonschema.validators.validator_for(schema)
     # check if schema is valid
-    validator_cls.check_schema(schema)
+    try:
+        validator_cls.check_schema(schema)
+    except Exception as exc:
+        raise SchemaError(exc)
     validator = validator_cls(schema)
 
     def validator_function(instance):
@@ -106,6 +135,6 @@ def get_jsonschema_validator(schema):
         if errors:
             err_str = "\n".join(errors)
             # logging.error(err_str)
-            raise ValueError(err_str)
+            raise ValidationError(err_str)
 
     return validator_function

@@ -12,6 +12,7 @@ import pandas as pd
 from datatools.utils import (
     CsvSerializer,
     as_byte_iterator,
+    df_to_values,
     filepath_abs_to_uri,
     get_df_table_schema,
     get_hostname,
@@ -215,6 +216,14 @@ class TestUtils(unittest.TestCase):
             ("path/gitignore", ""),
         ]:
             self.assertEqual(get_suffix(path), suffix)
+
+    def test_df_to_values(self):
+        self.assertEqual(
+            df_to_values(
+                pd.DataFrame({"s": ["a", "b"], "i": [1, None], "f": [1.5, np.nan]})
+            ),
+            [{"f": 1.5, "i": 1.0, "s": "a"}, {"f": None, "i": None, "s": "b"}],
+        )
 
 
 class TestSerializers(unittest.TestCase):

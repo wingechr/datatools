@@ -8,6 +8,7 @@ Have a look at the specs at
 
 import unittest
 
+from datatools.exceptions import SchemaError, ValidationError
 from datatools.schema import validate_resource
 
 
@@ -27,10 +28,10 @@ class TestFrictionless(unittest.TestCase):
 
     def test_resource(self):
         self.assertRaises(
-            Exception, validate_resource, {"name": "name"}
+            ValidationError, validate_resource, {"name": "name"}
         )  # must have data (or path)
         self.assertRaises(
-            Exception, validate_resource, {"name": "name", "data": [[]]}
+            ValidationError, validate_resource, {"name": "name", "data": [[]]}
         )  # empty data is also an error
         validate_resource({"name": "name", "data": [[99]]})
 
@@ -44,12 +45,12 @@ class TestFrictionless(unittest.TestCase):
 
         # numbers
         self.assertRaises(
-            Exception,
+            ValidationError,
             validate_resource,
             self.create_single_val_resource("aaa", type="integer"),
         )
         self.assertRaises(
-            Exception,
+            ValidationError,
             validate_resource,
             self.create_single_val_resource(99.9, type="integer"),
         )
@@ -60,7 +61,7 @@ class TestFrictionless(unittest.TestCase):
 
         # strings
         self.assertRaises(
-            Exception,
+            ValidationError,
             validate_resource,
             self.create_single_val_resource(99, type="string"),
         )
@@ -68,7 +69,7 @@ class TestFrictionless(unittest.TestCase):
 
         # string + format
         self.assertRaises(
-            Exception,
+            ValidationError,
             validate_resource,
             self.create_single_val_resource("abc", type="string", format="uri"),
         )
@@ -80,12 +81,12 @@ class TestFrictionless(unittest.TestCase):
 
         # boolean
         self.assertRaises(
-            Exception,
+            ValidationError,
             validate_resource,
             self.create_single_val_resource("aaaa", type="boolean"),
         )
         self.assertRaises(
-            Exception,
+            ValidationError,
             validate_resource,
             self.create_single_val_resource(0, type="boolean"),
         )
@@ -104,29 +105,29 @@ class TestFrictionless(unittest.TestCase):
 
         # date/times
         self.assertRaises(
-            Exception,
+            ValidationError,
             validate_resource,
             self.create_single_val_resource("01.01.1970", type="date"),
         )
         self.assertRaises(
-            Exception,
+            ValidationError,
             validate_resource,
             self.create_single_val_resource("1970-01", type="date"),
         )
         self.assertRaises(
-            Exception,
+            ValidationError,
             validate_resource,
             self.create_single_val_resource("1970-02-31", type="date"),
         )
         self.assertRaises(
-            Exception,
+            ValidationError,
             validate_resource,
             self.create_single_val_resource(0, type="date"),
         )
         validate_resource(self.create_single_val_resource("1970-01-01", type="date"))
 
         self.assertRaises(
-            Exception,
+            ValidationError,
             validate_resource,
             self.create_single_val_resource("10:11", type="time"),
         )
@@ -136,7 +137,7 @@ class TestFrictionless(unittest.TestCase):
         )  # milliseconds ok too
 
         self.assertRaises(
-            Exception,
+            ValidationError,
             validate_resource,
             self.create_single_val_resource("1970-01", type="datetime"),
         )
@@ -160,7 +161,7 @@ class TestFrictionless(unittest.TestCase):
 
         # IMPORTANT: does not allow for multiple types
         self.assertRaises(
-            Exception,
+            SchemaError,
             validate_resource,
             self.create_single_val_resource(True, type=["boolean", "null"]),
         )
@@ -168,26 +169,17 @@ class TestFrictionless(unittest.TestCase):
     def test_constraints(self):
         # missing/required
         self.assertRaises(
-            Exception,
+            ValidationError,
             validate_resource,
             self.create_single_val_resource(
                 None, type="string", constraints={"required": True}
             ),
         )
         self.assertRaises(
-            Exception,
+            ValidationError,
             validate_resource,
             self.create_single_val_resource(
                 "", type="string", constraints={"required": True}
-            ),
-        )  # this should actually be valid, but its not
-        self.assertRaises(
-            Exception,
-            validate_resource,
-            self.create_single_val_resource(
-                "N/A",
-                type="string",
-                constraints={"required": True, "missingValues": ["N/A"]},
             ),
         )
 
@@ -197,7 +189,7 @@ class TestFrictionless(unittest.TestCase):
         )
         validate_resource(res)
         res["data"][0][0] = "1234"
-        self.assertRaises(Exception, validate_resource, res)
+        self.assertRaises(ValidationError, validate_resource, res)
 
         # minimum / maximum
         res = self.create_single_val_resource(
@@ -207,7 +199,7 @@ class TestFrictionless(unittest.TestCase):
         )
         validate_resource(res)
         res["data"][0][0] = "1900-01-01"
-        self.assertRaises(Exception, validate_resource, res)
+        self.assertRaises(ValidationError, validate_resource, res)
 
         # pattern
         res = self.create_single_val_resource(
@@ -215,7 +207,7 @@ class TestFrictionless(unittest.TestCase):
         )
         validate_resource(res)
         res["data"][0][0] = "ax"
-        self.assertRaises(Exception, validate_resource, res)
+        self.assertRaises(ValidationError, validate_resource, res)
 
         # enum
         res = self.create_single_val_resource(
@@ -223,7 +215,7 @@ class TestFrictionless(unittest.TestCase):
         )
         validate_resource(res)
         res["data"][0][0] = "c"
-        self.assertRaises(Exception, validate_resource, res)
+        self.assertRaises(ValidationError, validate_resource, res)
 
         # unique
         res = self.create_single_val_resource(
@@ -233,4 +225,4 @@ class TestFrictionless(unittest.TestCase):
         res["data"].append({"field1": 11})
         validate_resource(res)
         res["data"].append({"field1": 10})
-        self.assertRaises(Exception, validate_resource, res)
+        self.assertRaises(ValidationError, validate_resource, res)

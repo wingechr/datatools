@@ -8,15 +8,14 @@ Have a look at the specs at
 
 import unittest
 
-import jsonschema
-
+from datatools.exceptions import SchemaError, ValidationError
 from datatools.schema import get_jsonschema_validator
 
 
 class TestJsonSchema(unittest.TestCase):
     def test_invalid_schema(self):
         self.assertRaises(
-            jsonschema.exceptions.SchemaError,
+            SchemaError,
             get_jsonschema_validator,
             {"type": "invalid"},
         )
@@ -32,10 +31,10 @@ class TestJsonSchema(unittest.TestCase):
         validator = get_jsonschema_validator({"type": ["string", "boolean"]})
         validator("i am string")
         validator(True)
-        self.assertRaises(Exception, validator, 1)
+        self.assertRaises(ValidationError, validator, 1)
 
         validator = get_jsonschema_validator({"type": "integer"})
-        self.assertRaises(Exception, validator, "100")
+        self.assertRaises(ValidationError, validator, "100")
         validator(100)
 
     def test_enum(self):
@@ -46,7 +45,7 @@ class TestJsonSchema(unittest.TestCase):
 
         validator = get_jsonschema_validator({"enum": ["v1", "v2"]})
         validator("v1")
-        self.assertRaises(Exception, validator, "V2")
+        self.assertRaises(ValidationError, validator, "V2")
 
     def test_maximum_minimum(self):
         """
@@ -61,15 +60,15 @@ class TestJsonSchema(unittest.TestCase):
         validator = get_jsonschema_validator({"maximum": 100})
         validator(-1)
         validator(100)
-        self.assertRaises(Exception, validator, 100.01)
+        self.assertRaises(ValidationError, validator, 100.01)
 
         validator = get_jsonschema_validator({"exclusiveMaximum": 100})
         validator(-1)
-        self.assertRaises(Exception, validator, 100)
+        self.assertRaises(ValidationError, validator, 100)
 
         validator = get_jsonschema_validator({"exclusiveMinimum": float("-inf")})
         validator(0)
-        self.assertRaises(Exception, validator, float("-inf"))
+        self.assertRaises(ValidationError, validator, float("-inf"))
 
         # non numeric are ok
         validator = get_jsonschema_validator({"maximum": 100})
@@ -86,7 +85,7 @@ class TestJsonSchema(unittest.TestCase):
 
         validator = get_jsonschema_validator({"minLength": 5, "maxLength": 5})
         validator("09112")
-        self.assertRaises(Exception, validator, "9112")
+        self.assertRaises(ValidationError, validator, "9112")
 
         # non string are ok
         validator(9112)
@@ -102,8 +101,8 @@ class TestJsonSchema(unittest.TestCase):
         validator(None)  # only tests arrays
         validator([1])
         validator([1, None])
-        self.assertRaises(Exception, validator, [])
-        self.assertRaises(Exception, validator, [1, 2, 3])
+        self.assertRaises(ValidationError, validator, [])
+        self.assertRaises(ValidationError, validator, [1, 2, 3])
 
     def test_required(self):
         """
@@ -116,7 +115,7 @@ class TestJsonSchema(unittest.TestCase):
 
         validator = get_jsonschema_validator({"required": ["a", "b"]})
         validator({"a": 1, "b": 2, "c": 3})
-        self.assertRaises(Exception, validator, {"a": 1, "c": 3})
+        self.assertRaises(ValidationError, validator, {"a": 1, "c": 3})
 
     def test_pattern(self):
         """
@@ -127,9 +126,28 @@ class TestJsonSchema(unittest.TestCase):
 
         validator = get_jsonschema_validator({"pattern": "^a.*$"})
         validator("aa")
-        self.assertRaises(Exception, validator, "Aa")  # case sensitive
+        self.assertRaises(ValidationError, validator, "Aa")  # case sensitive
 
         validator = get_jsonschema_validator({"pattern": "a[0-9]{1,2}"})
         validator("a1x")
         validator("a11x")
-        self.assertRaises(Exception, validator, "ax")
+        self.assertRaises(ValidationError, validator, "ax")
+
+    def test_additional_properties(self):
+        validator_wo_add_prop = get_jsonschema_validator(
+            {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {"x": {"type": "integer"}},
+            }
+        )
+        validator_w_add_prop = get_jsonschema_validator(
+            {
+                "type": "object",
+                "properties": {"x": {"type": "integer"}},
+            }
+        )
+        validator_w_add_prop({"x": 1})
+        validator_wo_add_prop({"x": 1})
+        validator_w_add_prop({"x": 1, "y": 2})
+        self.assertRaises(ValidationError, validator_wo_add_prop, {"x": 1, "y": 2})
