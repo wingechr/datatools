@@ -8,7 +8,7 @@ import pandas as pd
 
 from . import storage
 from .exceptions import SchemaError, ValidationError
-from .utils import get_err_message
+from .utils import df_to_values, get_err_message
 
 
 def infer_schema_from_objects(data: list):
@@ -42,7 +42,7 @@ def validate(data: Union[list, pd.DataFrame], schema: dict) -> None:
         raise Exception("No schema")
 
     if isinstance(data, pd.DataFrame):
-        pass
+        data = df_to_values(data)
 
     if is_jsonschema(schema):
         validator = get_jsonschema_validator(schema)
