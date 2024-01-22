@@ -1,4 +1,4 @@
-name: publish
+name: mkdocs gh-deploy
 
 on:
   workflow_run:
