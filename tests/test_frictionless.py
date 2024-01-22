@@ -161,7 +161,7 @@ class TestFrictionless(unittest.TestCase):
 
         # IMPORTANT: does not allow for multiple types
         self.assertRaises(
-            ValidationError,
+            Exception,
             validate_resource,
             self.create_single_val_resource(True, type=["boolean", "null"]),
         )

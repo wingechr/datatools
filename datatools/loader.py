@@ -501,7 +501,7 @@ class UriLoaderSql(UriLoader):
 
         connection_string = urlunsplit([url.scheme, url.netloc, path, query_str, None])
         logging.debug(f"Connect: {connection_string}")
-        eng = sa.create_engine(connection_string, use_setinputsizes=False)
+        eng = sa.create_engine(connection_string)
         with eng.connect() as con:
             with con:
                 logging.debug(f"Exceute: {sql_query}")
