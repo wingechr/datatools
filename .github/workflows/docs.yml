@@ -1,13 +1,9 @@
 name: mkdocs gh-deploy
 
 on:
-  workflow_run:
-    workflows:
-      - test
+  push:
     branches:
       - main
-    types:
-      - completed
 
 jobs:
   publish:
