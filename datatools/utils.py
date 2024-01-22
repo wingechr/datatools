@@ -37,6 +37,10 @@ from .constants import (
 )
 
 
+def get_pandas_version() -> tuple:
+    return tuple(int(x) for x in pd.__version__.split("."))
+
+
 class ExitStack(_ExitStack):
     __singleton_instance = None
 
@@ -490,14 +494,21 @@ class CsvSerializer(ByteSerializer):
         **kwargs,
     ) -> bytes:
         buf = io.BytesIO()
+        to_csv_kwargs = {
+            "index": False,
+            "encoding": encoding,
+            "sep": sep,
+            "lineterminator": lineterminator,
+        }
+        if get_pandas_version() < (1, 5):
+            to_csv_kwargs["line_terminator"] = to_csv_kwargs.pop("lineterminator")
+
         pd.DataFrame(data, **kwargs).to_csv(
             buf,
-            index=False,
-            encoding=encoding,
-            sep=sep,
-            lineterminator=lineterminator,
+            **to_csv_kwargs,
             **kwargs,
         )
+
         bdata = buf.getvalue()
         return bdata
 

@@ -1,12 +1,9 @@
 # install package itself to install it's dependencies
 .
--r docs/requirements-docs.txt
 
 # developer dependencies
-black
-isort
-flake8
 prettier
 bumpversion
 tox
 setuptools
+wheel

@@ -8,7 +8,7 @@ Have a look at the specs at
 
 import unittest
 
-from datatools.exceptions import SchemaError, ValidationError
+from datatools.exceptions import ValidationError
 from datatools.schema import validate_resource
 
 
@@ -161,7 +161,7 @@ class TestFrictionless(unittest.TestCase):
 
         # IMPORTANT: does not allow for multiple types
         self.assertRaises(
-            SchemaError,
+            ValidationError,
             validate_resource,
             self.create_single_val_resource(True, type=["boolean", "null"]),
         )
