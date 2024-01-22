@@ -20,7 +20,6 @@ if __name__ == "__main__":
             "chardet",
             "frictionless<5",  # frictionless no longer works with python3.7
             "jsonschema",
-            "xarray",
             "openpyxl",
             "genson",
         ],
@@ -36,6 +35,7 @@ if __name__ == "__main__":
             "rioxarray",
             "pyproj",
             "gdal",
+            "xarray",
         ],
         name="wingechr-datatools",
         description=None,

@@ -16,7 +16,7 @@ from .constants import (
     LOCAL_LOCATION,
     ROOT_METADATA_PATH,
 )
-from .exceptions import DataExists, InvalidPath
+from .exceptions import DataExists, DatatoolsException, InvalidPath
 from .loader import FileLoader, UriLoader
 from .schema import validate
 from .utils import (
@@ -155,6 +155,11 @@ class Resource:
         """
         return Metadata(resource=self)
 
+    @property
+    def is_writable(self) -> bool:
+        """can user write customdata to resource?"""
+        return True
+
     def exists(self) -> bool:
         """Check if resource ecists in storage.
 
@@ -174,14 +179,10 @@ class Resource:
         if delete_metadata:
             self.metadata.delete()
 
-    def write(
-        self, data: Union[BufferedReader, bytes, Iterable], exist_ok=False
-    ) -> None:
+    def _write(self, data: Union[BufferedReader, bytes, Iterable]) -> None:
         """Write binary data into storage"""
         if self.exists():
-            if not exist_ok:
-                raise DataExists(self)
-            logging.info(f"Overwriting existing file: {self.filepath}")
+            raise DataExists(self)
 
         # write data into temporary file
         tmp_dir = os.path.dirname(self.filepath)
@@ -220,10 +221,10 @@ class Resource:
         }
         self.metadata.update(metadata)
 
-    def open(self) -> BufferedReader:
+    def _open(self) -> BufferedReader:
         """Open resource as binary BufferedReader"""
         if not self.exists():
-            self.save()
+            self.download()
         logging.debug(f"READING {self.filepath}")
         file = open(self.filepath, "rb")
         return file
@@ -231,24 +232,29 @@ class Resource:
     def load(self, validate_schema=False, **kwargs):
         """Load data using loading functions determined by the resource's mediatype"""
         if not self.exists():
-            self.save()
+            self.download()
         data = FileLoader.load(filepath=self.filepath, **kwargs)
         if validate_schema:
             schema = self.metadata.get("schema")
             validate(data, schema)
         return data
 
-    def save(self, data, exist_ok=False, **kwargs):
+    def save(self, data, **kwargs):
         """Save data using functions determined by the resource's mediatype"""
-        suffix = get_suffix(self.name)
 
         if self.exists():
-            if not exist_ok:
-                raise DataExists(self)
-            return
-        byte_data, metadata = FileLoader.open_data_metadata(data, suffix=suffix)
-        self.write(data=byte_data, exist_ok=exist_ok)
+            raise DataExists(self)
+        if not self.is_writable:
+            raise DatatoolsException("Cannot write to resource")
+
+        suffix = get_suffix(self.name)
+        handler = FileLoader.get_handler(data, suffix=suffix)
+        byte_data, metadata = handler.encode_data_metadata(data, suffix=suffix)
+        self._write(data=byte_data)
         self.metadata.update(metadata)
+
+    def download(self, **kwargs):
+        raise DatatoolsException("Not a remote resource")
 
 
 class UriResource(Resource):
@@ -270,17 +276,25 @@ class UriResource(Resource):
         """URI of data source"""
         return self.__source_uri
 
-    def save(self, exist_ok=False) -> None:
+    @property
+    def is_writable(self) -> bool:
+        """can user write customdata to resource?"""
+        # cannot overwrite remote source
+        return False
+
+    def download(self, exist_ok: bool = False) -> None:
         """save from source"""
+
         if self.exists():
-            if not exist_ok:
-                raise DataExists(self)
-            return
+            if exist_ok:
+                logging.info("Resource already downloaded.")
+                return
+            raise DataExists(self)
+
         suffix = get_suffix(self.name)
-        byte_data, metadata = UriLoader.open_data_metadata(
-            self.source_uri, suffix=suffix
-        )
-        super().write(data=byte_data, exist_ok=exist_ok)
+        handler = UriLoader.get_handler(self.source_uri)
+        byte_data, metadata = handler.open_data_metadata(self.source_uri, suffix=suffix)
+        super()._write(data=byte_data)
         self.metadata.update(metadata)
 
 
@@ -401,7 +415,7 @@ class Cache:
                 # actually call function and write data
                 data = fun(*args, **kwargs)
                 byte_data = self.__serializer.dumps(data)
-                res.write(data=byte_data)
+                res._write(data=byte_data)
 
                 # add job description as metadata
                 job_description = self.get_job_description(fun, args, kwargs)
@@ -409,7 +423,7 @@ class Cache:
                 res.metadata.update(metadata)
 
             # load data from storage
-            with res.open() as file:
+            with res._open() as file:
                 byte_data = file.read()
 
             data = self.__serializer.loads(byte_data)

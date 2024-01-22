@@ -97,7 +97,7 @@ def get_jsonschema_storage():
 
 
 def get_jsonschema(schema_url):
-    with get_jsonschema_storage().resource(source_uri=schema_url).open() as file:
+    with get_jsonschema_storage().resource(source_uri=schema_url)._open() as file:
         return json.load(file)
 
 

@@ -9,8 +9,10 @@ import sys
 import unittest
 from tempfile import TemporaryDirectory
 
+import pandas as pd
+
 from datatools.constants import DEFAULT_HASH_METHOD
-from datatools.exceptions import DataDoesNotExists, DataExists
+from datatools.exceptions import DataDoesNotExists, DataExists, DatatoolsException
 from datatools.storage import Storage
 from datatools.utils import (
     get_free_port,
@@ -79,33 +81,33 @@ class TestLocalStorage(TestBase):
     def test_storage(self):
         # create local instance in temporary dir
 
-        data = b"hello world"
+        bdata = b"hello world"
         data_path_user = "data:///My/path"
 
         res = self.storage.resource(data_path_user)
         self.assertFalse(res.exists())
 
         logging.debug("save data")
-        res.write(data)
+        res._write(bdata)
         self.assertTrue(res.exists())
         self.assertEqual(res.name, "my/path")
 
         logging.debug("save again will fail")
-        self.assertRaises(DataExists, res.write, data)
+        self.assertRaises(DataExists, res._write, bdata)
 
         logging.debug("read data")
-        with res.open() as file:
+        with res._open() as file:
             _data = file.read()
-        self.assertEqual(data, _data)
+        self.assertEqual(bdata, _data)
 
         logging.debug("delete (twice, which is allowed)")
         res.delete()
         # reading now will raise error
-        self.assertRaises((DataDoesNotExists, NotImplementedError), res.open)
+        self.assertRaises((DataDoesNotExists, NotImplementedError), res._open)
         res.delete()
 
         logging.debug("save again")
-        res.write(data)
+        res._write(bdata)
 
         logging.debug("save metadata")
         metadata = {"a": [1, 2, 3], "b.c[0]": "test"}
@@ -122,9 +124,31 @@ class TestLocalStorage(TestBase):
         metadata_all = res.metadata.get()
         self.assertTrue(
             metadata_all["hash"][DEFAULT_HASH_METHOD],
-            getattr(hashlib, DEFAULT_HASH_METHOD)(data).hexdigest,
+            getattr(hashlib, DEFAULT_HASH_METHOD)(bdata).hexdigest,
         )
-        self.assertTrue(metadata_all["size"], len(data))
+        self.assertTrue(metadata_all["size"], len(bdata))
+
+    def test_encode_data_metadata(self):
+        data = {"c1": [1, 2, 3]}
+
+        uri_res = self.storage.resource("http://example.com")
+        self.assertRaises(DatatoolsException, uri_res.save, None)
+
+        json_res = self.storage.resource(name="test_encode_data_metadata.json")
+        json_res.save(data)
+        data2 = json_res.load()
+        self.assertDictEqual(data, data2)
+
+        df = pd.DataFrame(data)
+        pkl_res = self.storage.resource(name="test_encode_data_metadata.pickle")
+        pkl_res.save(df)
+        df2 = pkl_res.load()
+        pd.testing.assert_frame_equal(df, df2)
+
+        csv_res = self.storage.resource(name="test_encode_data_metadata.csv")
+        csv_res.save(df)
+        df2 = csv_res.load()
+        pd.testing.assert_frame_equal(df, df2)
 
     def test_cache_decorator(self):
         context = {"counter": 0}
@@ -153,7 +177,7 @@ class TestResource(TestBase):
         query = "select cast(101 as int) as value;"
         uri = f"sqlite:///:memory:?q={query}#/testquery.pickle"
         res = self.storage.resource(uri)
-        with res.open() as file:
+        with res._open() as file:
             bdata = file.read()
         data = pickle.loads(bdata)
         self.assertEqual(data[0]["value"], 101)
@@ -177,7 +201,7 @@ class TestResource(TestBase):
         uri = f"sqlite://{db_filepath}?q=select value from test#/testquery.pickle"
 
         res = self.storage.resource(uri)
-        with res.open() as file:
+        with res._open() as file:
             bdata = file.read()
         data = pickle.loads(bdata)
 
@@ -191,7 +215,7 @@ class TestResource(TestBase):
         # load from path
         uri = fpath
         res = self.storage.resource(uri)
-        with res.open() as file:
+        with res._open() as file:
             data = json.load(file)
         self.assertEqual(data["value"], 103)
 
@@ -199,6 +223,6 @@ class TestResource(TestBase):
 
         uri = self.static_url + "/testfile.json"
         res = self.storage.resource(uri)
-        with res.open() as file:
+        with res._open() as file:
             data = json.load(file)
         self.assertEqual(data["value"], 103)

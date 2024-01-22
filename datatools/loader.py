@@ -7,6 +7,7 @@ import re
 import zipfile
 from io import BytesIO
 from tempfile import NamedTemporaryFile
+from typing import Tuple
 from urllib.parse import parse_qs, unquote, urlencode, urlsplit, urlunsplit
 
 import numpy as np
@@ -72,6 +73,7 @@ class FileLoaderMeta(type):
 
 class FileLoader(metaclass=FileLoaderMeta):
     filename_pattern = None
+    is_remote = False
 
     @classmethod
     def load(cls, filepath, **kwargs):
@@ -82,17 +84,29 @@ class FileLoader(metaclass=FileLoaderMeta):
         raise NotImplementedError(filepath)
 
     @classmethod
-    def open_data_metadata(cls, data, suffix="", **kwargs) -> bytes:
+    def get_handler(cls, _data, suffix="", **_kwargs) -> bytes:
+        # delegate to correct subclass
         # TODO also check for data type/schema
         for pat, class_ in cls._pattern_classes:
+            print(
+                (
+                    suffix,
+                    bool(re.match(pat, suffix)),
+                    pat,
+                    class_,
+                )
+            )
             if re.match(pat, suffix):
                 inst = class_()
-                return inst.open_data_metadata(data, suffix, **kwargs)
+                return inst
+        raise NotImplementedError(suffix)
+
+    def encode_data_metadata(self, data, suffix="", **_kwargs) -> Tuple[bytes, dict]:
         raise NotImplementedError(suffix)
 
 
-class FileLoaderOpen_(metaclass=FileLoaderMeta):
-    filename_pattern = None
+class FileLoaderOpen_(FileLoader):
+    """Loader that always opens filepaths as file descriptors first"""
 
     def load(self, filepath, **kwargs):
         with open(filepath, "rb") as file:
@@ -142,6 +156,11 @@ class FileLoaderPickle(FileLoaderOpen_):
 
     def _load(self, file, **kwargs):
         return pickle.load(file, **kwargs)
+
+    def encode_data_metadata(cls, data, suffix="", **kwargs) -> Tuple[bytes, dict]:
+        metadata = {}
+        bdata = pickle.dumps(data)
+        return bdata, metadata
 
 
 class FileLoaderXarrayDataarray_TODO(metaclass=FileLoaderMeta):
@@ -233,7 +252,7 @@ class FileLoaderJson(FileLoaderOpen_):
     def _load(self, file, **kwargs):
         return json.load(file, **kwargs)
 
-    def open_data_metadata(cls, data, suffix="", **kwargs):
+    def encode_data_metadata(cls, data, suffix="", **kwargs) -> Tuple[bytes, dict]:
         if not isinstance(data, (list, dict)):
             raise TypeError(type(data).__name__)
 
@@ -270,7 +289,7 @@ class FileLoaderCsv(FileLoaderOpen_):
     def _load(self, file, **kwargs):
         return pd.read_csv(file, low_memory=False, **kwargs)
 
-    def open_data_metadata(cls, data, suffix="", **kwargs):
+    def encode_data_metadata(cls, data, suffix="", **kwargs) -> Tuple[bytes, dict]:
         if not isinstance(data, pd.DataFrame):
             raise TypeError(type(data).__name__)
 
@@ -315,7 +334,7 @@ class FileLoaderGeo(FileLoaderOpen_):
 
         return gdf
 
-    def open_data_metadata(cls, data, suffix="", **kwargs):
+    def encode_data_metadata(cls, data, suffix="", **kwargs) -> Tuple[bytes, dict]:
         if geopandas is None:
             raise ImportError("geopandas")
         if not isinstance(data, geopandas.GeoDataFrame):
@@ -395,20 +414,25 @@ class UriLoaderMeta(type):
 
 class UriLoader(metaclass=UriLoaderMeta):
     uri_pattern = None
+    is_remote = True
 
     @classmethod
-    def open_data_metadata(cls, uri, suffix=None, **kwargs):
+    def get_handler(cls, uri, **_kwargs) -> "UriLoader":
+        # delegate to correct subclass
         for pat, class_ in cls._pattern_classes:
             if re.match(pat, uri):
                 inst = class_()
-                return inst.open_data_metadata(uri, suffix=suffix, **kwargs)
+                return inst
+        raise NotImplementedError(uri)
+
+    def open_data_metadata(self, uri, **kwargs) -> Tuple[bytes, dict]:
         raise NotImplementedError(uri)
 
 
 class UriLoaderFile(UriLoader):
     uri_pattern = "^file://"
 
-    def open_data_metadata(self, uri, **kwargs):
+    def open_data_metadata(self, uri, **kwargs) -> Tuple[bytes, dict]:
         metadata = {}
         metadata["source.path"] = remove_auth_from_uri_or_path(uri)
         file_path = uri_to_filepath_abs(uri)
@@ -421,7 +445,7 @@ class UriLoaderFile(UriLoader):
 class UriLoaderHttp(UriLoader):
     uri_pattern = "^https?://"
 
-    def open_data_metadata(self, uri, **kwargs):
+    def open_data_metadata(self, uri, **kwargs) -> Tuple[bytes, dict]:
         url = urlsplit(uri)
         metadata = {}
         metadata["source.path"] = remove_auth_from_uri_or_path(uri)
@@ -462,7 +486,9 @@ class UriLoaderHttp(UriLoader):
 class UriLoaderSql(UriLoader):
     uri_pattern = r"^[\w]*sql[\w+]*://"
 
-    def open_data_metadata(self, uri, suffix=None, **kwargs):
+    def open_data_metadata(
+        self, uri: str, suffix: str = None, **kwargs
+    ) -> Tuple[bytes, dict]:
         metadata = {}
         metadata["source.path"] = remove_auth_from_uri_or_path(uri)
         url = urlsplit(uri)

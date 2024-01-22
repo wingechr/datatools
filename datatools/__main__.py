@@ -78,10 +78,11 @@ def resource(ctx, path, name=None):
     ctx.obj = resource
 
 
-@resource.command("save")
+@resource.command("download")
 @click.pass_obj
-def resource_save(resource: Resource):
-    resource.save(exist_ok=True)
+@click.option("--exist-ok", "-e", is_flag=True)
+def resource_download(resource: Resource, exist_ok: bool):
+    resource.download(exist_ok=exist_ok)
     print(resource.name)
 
 
