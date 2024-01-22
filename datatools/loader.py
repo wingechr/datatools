@@ -88,14 +88,6 @@ class FileLoader(metaclass=FileLoaderMeta):
         # delegate to correct subclass
         # TODO also check for data type/schema
         for pat, class_ in cls._pattern_classes:
-            print(
-                (
-                    suffix,
-                    bool(re.match(pat, suffix)),
-                    pat,
-                    class_,
-                )
-            )
             if re.match(pat, suffix):
                 inst = class_()
                 return inst

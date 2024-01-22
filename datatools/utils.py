@@ -48,8 +48,6 @@ class ExitStack(_ExitStack):
         if not cls.__singleton_instance:
             cls.__singleton_instance = super().__new__(cls, *args, **kwargs)
 
-            print("register exit stack")
-
             # register __exit__ on normal exit
             atexit.register(cls.__singleton_instance.__exit__, None, None, None)
 
