@@ -9,3 +9,4 @@ flake8
 prettier
 bumpversion
 tox
+setuptools
