@@ -575,9 +575,19 @@ class SchemaDialectSqlalchemy(SchemaDialect):
     def from_table_schema(self, schema: TableSchema) -> sa.Table:
         raise NotImplementedError()
 
+    def _get_table_object(
+        connection_string: str, table_name: str, schema_name: str = None
+    ) -> sa.Table:
+        """Get current  table schema from the database"""
+        metadata = sa.MetaData()
+        eng = sa.create_engine(connection_string)
+        metadata.reflect(bind=eng, only=[table_name], schema=schema_name)
+        table = metadata.tables[table_name]
+        return table
+
     def to_table_schema(
         self,
-        source: sa.Table,
+        source: Union[sa.Table, str],
         ignore_empty_columns: bool = False,
         ignore_columns_order: bool = False,
         parse_from_string: bool = False,
