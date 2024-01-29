@@ -145,6 +145,7 @@ def get_resource_path_name(path: str) -> str:
     _path = path
 
     path = path.lower()
+    path = unquote(path)
     for cin, cout in [
         ("ä", "ae"),
         ("ö", "oe"),

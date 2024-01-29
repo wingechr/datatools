@@ -58,6 +58,7 @@ class TestUtils(unittest.TestCase):
                 "https://www.domain-name.de/path%202021.pdf",
                 "www.domain-name.de/path_2021.pdf",
             ),
+            ("path%202021.pdf", "path_2021.pdf"),
         ]:
             if is_uri(p):
                 p = uri_to_data_path(p)
