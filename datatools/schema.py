@@ -634,13 +634,13 @@ class SchemaDialectSqlalchemy(SchemaDialect):
             (r"^INTEGER$", lambda: TypeInteger(is_nullable=is_nullable)),
             (r"^FLOAT$", lambda: TypeFloat(is_nullable=is_nullable)),
             (
-                r"^VARCHAR\(([0-9]+)\).*$",  # may have COLLATE
+                r"^N?VARCHAR\(([0-9]+)\).*$",  # may have COLLATE
                 lambda max_length: TypeTextMaxLen(
                     max_length=int(max_length), is_nullable=is_nullable
                 ),
             ),
             (
-                r"^VARCHAR.*$",  # may have COLLATE,MUST COME AFTER "^VARCHAR\(([0-9]+)\).*$"  # noqa
+                r"^N?VARCHAR.*$",  # may have COLLATE,MUST COME AFTER "^VARCHAR\(([0-9]+)\).*$"  # noqa
                 lambda: TypeText(is_nullable=is_nullable),
             ),
             (
