@@ -576,7 +576,7 @@ class SchemaDialectSqlalchemy(SchemaDialect):
         raise NotImplementedError()
 
     def _get_table_object(
-        connection_string: str, table_name: str, schema_name: str = None
+        self, connection_string: str, table_name: str, schema_name: str = None
     ) -> sa.Table:
         """Get current  table schema from the database"""
         metadata = sa.MetaData()
