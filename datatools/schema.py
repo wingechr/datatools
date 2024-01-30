@@ -631,7 +631,7 @@ class SchemaDialectSqlalchemy(SchemaDialect):
             (r"^DATETIME2$", lambda: TypeDatetime(is_nullable=is_nullable)),
             (r"^DATE$", lambda: TypeDate(is_nullable=is_nullable)),
             (r"^BIT$", lambda: TypeBool(is_nullable=is_nullable)),
-            (r"^INTEGER$", lambda: TypeInteger(is_nullable=is_nullable)),
+            (r"^.*INT.*$", lambda: TypeInteger(is_nullable=is_nullable)),
             (r"^FLOAT$", lambda: TypeFloat(is_nullable=is_nullable)),
             (
                 r"^N?VARCHAR\(([0-9]+)\).*$",  # may have COLLATE
