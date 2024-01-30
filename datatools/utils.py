@@ -21,6 +21,7 @@ import chardet
 import numpy as np
 import pandas as pd
 import requests
+import sqlalchemy as sa
 import sqlparse
 import tzlocal
 import unidecode
@@ -602,3 +603,12 @@ def get_err_message(err: Exception) -> str:
         pass
 
     return str(err)
+
+
+def sa_create_engine(connection_string: str) -> sa.Engine:
+    kwargs = {}
+    # on sql server: special argument, otherwise reflect does not work
+    if connection_string.startswith("mssql+"):
+        kwargs["use_setinputsizes"] = False
+    engine = sa.create_engine(connection_string, echo=False, **kwargs)
+    return engine

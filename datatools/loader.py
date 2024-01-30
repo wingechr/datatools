@@ -25,6 +25,7 @@ from .utils import (
     normalize_sql_query,
     parse_content_type,
     remove_auth_from_uri_or_path,
+    sa_create_engine,
     uri_to_filepath_abs,
 )
 
@@ -501,7 +502,7 @@ class UriLoaderSql(UriLoader):
 
         connection_string = urlunsplit([url.scheme, url.netloc, path, query_str, None])
         logging.debug(f"Connect: {connection_string}")
-        eng = sa.create_engine(connection_string)
+        eng = sa_create_engine(connection_string)
         with eng.connect() as con:
             with con:
                 logging.debug(f"Exceute: {sql_query}")

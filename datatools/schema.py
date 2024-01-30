@@ -15,7 +15,7 @@ import sqlalchemy as sa
 
 from . import storage
 from .exceptions import SchemaError, ValidationError
-from .utils import df_to_values, get_err_message
+from .utils import df_to_values, get_err_message, sa_create_engine
 
 
 def infer_schema_from_objects(data: list):
@@ -580,7 +580,7 @@ class SchemaDialectSqlalchemy(SchemaDialect):
     ) -> sa.Table:
         """Get current  table schema from the database"""
         metadata = sa.MetaData()
-        eng = sa.create_engine(connection_string)
+        eng = sa_create_engine(connection_string)
         metadata.reflect(bind=eng, only=[table_name], schema=schema_name)
         table = metadata.tables[table_name]
         return table
