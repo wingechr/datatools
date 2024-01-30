@@ -1,5 +1,6 @@
 import datetime
 import json
+import logging
 import math
 import re
 from collections import Counter
@@ -447,6 +448,11 @@ class ConstraintUnique(Constraint):
             raise SchemaError(f"Duplicates in unique columns {self}: {len(duplicates)}")
 
 
+class ConstraintForeignKey(Constraint):
+    def validate(self, value_tuples: Iterable[tuple]):
+        logging.warning("ConstraintForeignKey has no validator yet")
+
+
 class TableSchema(ColumnCollection):
     def __init__(
         self,
@@ -603,8 +609,11 @@ class SchemaDialectSqlalchemy(SchemaDialect):
             if isinstance(constraint, sa.PrimaryKeyConstraint):
                 const_cols = [self._get_column(c) for c in constraint.columns]
                 constraints.append(ConstraintUnique(columns=const_cols))
+            elif isinstance(constraint, sa.ForeignKeyConstraint):
+                const_cols = [self._get_column(c) for c in constraint.columns]
+                constraints.append(ConstraintForeignKey(columns=const_cols))
             else:
-                raise NotImplementedError(type(constraint))
+                logging.error(f"Not implemented: {type(constraint)}")
 
         schema = TableSchema(
             columns=columns,

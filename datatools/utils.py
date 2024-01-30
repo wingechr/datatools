@@ -138,6 +138,24 @@ def uri_to_data_path(uri: str) -> str:
     return path
 
 
+def clean_name(name: str) -> str:
+    name = name.lower()
+    name = unquote(name)
+    for cin, cout in [
+        ("ä", "ae"),
+        ("ö", "oe"),
+        ("ü", "ue"),
+        ("ß", "ss"),
+    ]:
+        name = name.replace(cin, cout)
+    name = unidecode.unidecode(name)
+    name = re.sub(r":", "", name)
+    name = re.sub(r"[^a-z0-9]+", " ", name)
+    name = name.strip()
+    name = re.sub(r"\s+", "_", name)
+    return name
+
+
 def get_resource_path_name(path: str) -> str:
     """should be all lowercase ascii
     * uri: remove query
