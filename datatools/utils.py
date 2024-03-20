@@ -630,3 +630,7 @@ def sa_create_engine(connection_string: str) -> sa.Engine:
         kwargs["use_setinputsizes"] = False
     engine = sa.create_engine(connection_string, echo=False, **kwargs)
     return engine
+
+
+def get_connection_string_uri_mssql_pyodbc(server, database="master"):
+    return f"mssql+pyodbc://?odbc_connect=driver=sql server;server={server};database={database}"  # noqa
