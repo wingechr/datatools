@@ -399,6 +399,10 @@ def json_serialize(x):
         return x.strftime(TIME_FMT)
     elif isinstance(x, np.bool_):
         return bool(x)
+    elif isinstance(x, np.int_):
+        return int(x)
+    elif isinstance(x, np.float_):
+        return float(x)
     elif inspect.isclass(x):
         # classname
         return x.__name__
