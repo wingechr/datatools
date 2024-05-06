@@ -399,10 +399,15 @@ def json_serialize(x):
         return x.strftime(TIME_FMT)
     elif isinstance(x, np.bool_):
         return bool(x)
-    elif isinstance(x, np.int_):
+    elif np.issubdtype(type(x), np.integer):
         return int(x)
-    elif isinstance(x, np.float_):
+    elif np.issubdtype(type(x), np.floating):
         return float(x)
+    elif isinstance(x, pd.Series):
+        # classname
+        x = x.astype("object")
+        x = x.where(pd.notnull(x), None)
+        return dict(x)
     elif inspect.isclass(x):
         # classname
         return x.__name__
@@ -544,7 +549,7 @@ class JsonSerializer(ByteSerializer):
     suffix = ".json"
 
     def dumps(self, data: object, **kwargs) -> bytes:
-        return json.dumps(data, **kwargs).encode()
+        return json.dumps(data, default=json_serialize, **kwargs).encode()
 
     def loads(self, data: bytes, **kwargs) -> object:
         return json.loads(data, **kwargs)

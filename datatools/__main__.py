@@ -10,7 +10,7 @@ from . import __version__
 from .constants import GLOBAL_LOCATION, LOCAL_LOCATION
 from .exceptions import DatatoolsException
 from .storage import Metadata, Resource, Storage
-from .utils import as_uri, parse_cli_metadata
+from .utils import as_uri, json_serialize, parse_cli_metadata
 
 
 @click.group()
@@ -98,7 +98,7 @@ def resource_meta(ctx):
 @click.argument("key", required=False)
 def resource_meta_get(metadata: Metadata, key=None):
     result = metadata.get(key)
-    result_str = json.dumps(result, indent=2, ensure_ascii=True)
+    result_str = json.dumps(result, indent=2, ensure_ascii=True, default=json_serialize)
     print(result_str)
 
 

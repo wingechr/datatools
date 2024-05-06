@@ -23,7 +23,10 @@ def infer_schema_from_objects(data: list):
     builder = genson.SchemaBuilder()
     builder.add_schema({"type": "object", "properties": {}})
     for item in data:
-        builder.add_object(item)
+        try:
+            builder.add_object(item)
+        except genson.schema.node.SchemaGenerationError as exc:
+            logging.warning(f"{exc}: ({type(item)})")
     item_schema = builder.to_schema()
     schema = {"type": "array", "items": item_schema}
     return schema

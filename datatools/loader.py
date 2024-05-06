@@ -22,6 +22,7 @@ from .utils import (
     get_df_table_schema,
     get_resource_path_name,
     get_sql_table_schema,
+    json_serialize,
     normalize_sql_query,
     parse_content_type,
     remove_auth_from_uri_or_path,
@@ -249,7 +250,9 @@ class FileLoaderJson(FileLoaderOpen_):
         if not isinstance(data, (list, dict)):
             raise TypeError(type(data).__name__)
 
-        stringdata = json.dumps(data, indent=JSON_INDENT, ensure_ascii=False)
+        stringdata = json.dumps(
+            data, indent=JSON_INDENT, ensure_ascii=False, default=json_serialize
+        )
         bytedata = stringdata.encode(JSON_ENCODING)
 
         metadata = {}
