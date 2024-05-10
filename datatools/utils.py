@@ -711,7 +711,7 @@ class ByteBufferWrapper:
         return chunk
 
 
-def get_default_media_data_type(name: str) -> Tuple[str, Type]:
+def get_default_media_data_type_by_name(name: str) -> Tuple[str, Type]:
     # defaults, only dependent on name (suffix)
     if re.match(r"^.*\.json$", name):
         return ("application/json", object)
@@ -721,3 +721,11 @@ def get_default_media_data_type(name: str) -> Tuple[str, Type]:
         return ("text/csv", list)
     # default: binary
     return ("application/octet-stream", bytes)
+
+
+def get_default_suffix(media_type: str) -> str:
+    return {
+        "application/json": ".json",
+        "application/x-pickle": ".pickle",
+        "text/csv": ".csv",
+    }.get(media_type)

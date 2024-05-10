@@ -74,15 +74,17 @@ def search(storage: Storage, patterns):
 def resource(ctx, path, name=None):
     storage = ctx.obj
     source_uri = as_uri(path)
-    resource = storage.resource(source_uri=source_uri, name=name)
+    resource = storage.resource(source_uri, name=name)
     ctx.obj = resource
 
 
 @resource.command("save")
 @click.pass_obj
-@click.option("--exist-ok", "-e", is_flag=True)
-def resource_download_save(resource: Resource, exist_ok: bool):
-    resource.download(exist_ok=exist_ok)
+def resource_download_save(resource: Resource):
+    if resource.exists():
+        logging.info("Already saved")
+    else:
+        resource.save()
     print(resource.name)
 
 
@@ -93,11 +95,11 @@ def resource_meta(ctx):
     ctx.obj = resource.metadata
 
 
-@resource_meta.command("get")
+@resource_meta.command("query")
 @click.pass_obj
 @click.argument("key", required=False)
-def resource_meta_get(metadata: Metadata, key=None):
-    result = metadata.get(key)
+def resource_meta_query(metadata: Metadata, key=None):
+    result = metadata.query(key)
     result_str = json.dumps(result, indent=2, ensure_ascii=True, default=json_serialize)
     print(result_str)
 

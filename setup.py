@@ -20,7 +20,6 @@ if __name__ == "__main__":
             "chardet",
             "frictionless<5",  # frictionless no longer works with python3.7
             "jsonschema",
-            "openpyxl",
             "genson",
         ],
         install_recommends=[  # this does not do anything, just for information

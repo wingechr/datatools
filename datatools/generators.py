@@ -1,4 +1,6 @@
 import abc
+import hashlib
+import json
 import logging
 import os
 import re
@@ -11,8 +13,10 @@ from .classes import RegistryAbstractBase
 from .constants import PARAM_SQL_QUERY
 from .utils import (
     BytesIteratorBuffer,
-    get_default_media_data_type,
+    get_default_media_data_type_by_name,
+    get_default_suffix,
     get_sql_table_schema,
+    json_serialize,
     normalize_sql_query,
     remove_auth_from_uri_or_path,
     sa_create_engine,
@@ -42,7 +46,7 @@ class AbstractDataGenerator(RegistryAbstractBase):
         ...
 
     def get_media_data_type(self, name: str) -> Tuple[str, Type]:
-        return get_default_media_data_type(name=name)
+        return get_default_media_data_type_by_name(name=name)
 
     @abc.abstractmethod
     def create_data_metadata(self, **kwargs) -> Tuple[Any, Dict[str, Any]]:
@@ -50,22 +54,49 @@ class AbstractDataGenerator(RegistryAbstractBase):
 
 
 class FunctionDataGenerator(AbstractDataGenerator):
+    # TODO: what would be the default media type
+    # for an arbitrary object? ==> pickle
+
     @classmethod
     def _is_class_for(cls, data_source: Any) -> bool:
-        return isinstance(data_source, Callable)
+        return isinstance(data_source, tuple) and isinstance(data_source[0], Callable)
 
     def create_name(self) -> str:
-        # return fnuction name
-        function = self._data_source
-        return function.__name__
+        # create hash of job
+        function, function_kwargs = self._data_source
+        function_name = function.__name__
+        job_descriptor_obj = {
+            "function": function_name,
+            # "args": [], # we don't use positional arguments
+            "kwargs": function_kwargs,
+            # "description": function.__doc__,  # todo: maybe cleanup into plain text
+        }
+        job_descriptor_bytes = json.dumps(
+            job_descriptor_obj,
+            sort_keys=True,
+            ensure_ascii=False,
+            default=json_serialize,
+        ).encode()
+        job_descriptor_hash = hashlib.md5(job_descriptor_bytes).hexdigest()
+        media_type, _data_type = self.get_media_data_type(name=None)
+        suffix = get_default_suffix(media_type=media_type) or ""
+
+        return f"{function_name}_{job_descriptor_hash}{suffix}"
 
     def get_media_data_type(self, name: str) -> Tuple[str, Type]:
-        media_type, _data_type = get_default_media_data_type(name=name)
-        return media_type, object
+        return "application/x-pickle", object
 
     def create_data_metadata(self, **kwargs) -> Tuple[Any, Dict[str, Any]]:
-        data = self._data_source()
-        metadata = {}
+        function, function_kwargs = self._data_source
+        data = function(**function_kwargs)
+        metadata = {
+            "method": {
+                "function": function.__name__,
+                # "args": [], # we don't use positional arguments
+                "kwargs": function_kwargs,
+                "description": function.__doc__,  # todo: maybe cleanup into plain text
+            }
+        }
         return data, metadata
 
 
@@ -80,14 +111,13 @@ class HttpDataGenerator(AbstractDataGenerator):
     def get_media_data_type(self, name: str) -> Tuple[str, Type]:
         # this can be all kinds of things.
         # SHOULD be determined from suffix, but that will not always work
-        return get_default_media_data_type(name=name)
+        return get_default_media_data_type_by_name(name=name)
 
     def create_data_metadata(self, **kwargs) -> Tuple[Any, Dict[str, Any]]:
         import requests
 
         res = requests.get(self._data_source, stream=True)
         res.raise_for_status()
-        print(res.headers)
         # max_bytes = int(res.headers["Content-Length"])
         chunk_size = 1024
         bytes_iter = res.iter_content(chunk_size=chunk_size)
@@ -109,7 +139,7 @@ class FileDataGenerator(AbstractDataGenerator):
     def get_media_data_type(self, name: str) -> Tuple[str, Type]:
         # this can be all kinds of things.
         # SHOULD be determined from suffix, but that will not always work
-        return get_default_media_data_type(name=name)
+        return get_default_media_data_type_by_name(name=name)
 
     def create_data_metadata(self, **kwargs) -> Tuple[Any, Dict[str, Any]]:
         file_path = uri_to_filepath_abs(self._data_source)
@@ -130,7 +160,7 @@ class SqlpDataGenerator(AbstractDataGenerator):
 
     def get_media_data_type(self, name: str) -> Tuple[str, Type]:
         # get default media type from name (suffix)
-        media_type, _data_type = get_default_media_data_type(name)
+        media_type, _data_type = get_default_media_data_type_by_name(name)
         # per default: save as csv?
         return (media_type, list)
 

@@ -5,6 +5,7 @@ import appdirs
 
 PARAM_SQL_QUERY = "q"
 ROOT_METADATA_PATH = "$"  # root
+MEDIA_TYPE_METADATA_PATH = "mediaType"
 HASHED_DATA_PATH_PREFIX = "hash"
 HASH_METHODS = ["md5", "sha256"]
 

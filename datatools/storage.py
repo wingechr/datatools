@@ -10,7 +10,7 @@ import jsonpath_ng
 # TODO: must be loaded for classes to be registeres
 # there should be a better wayto do that
 from . import converters, generators  # noqa
-from .constants import GLOBAL_LOCATION, ROOT_METADATA_PATH
+from .constants import GLOBAL_LOCATION, MEDIA_TYPE_METADATA_PATH, ROOT_METADATA_PATH
 from .converters import AbstractConverter
 from .exceptions import DataDoesNotExists, DataExists
 from .generators import AbstractDataGenerator
@@ -83,9 +83,9 @@ class Resource:
         name = name or self.__data_generator.create_name()
         name = storage._validate_name(name)
 
-        media_type, data_type = self.__data_generator.get_media_data_type(name=name)
-        self.__media_type = media_type
-        self.__data_type = data_type
+        # media_type, data_type = self.__data_generator.get_media_data_type(name=name)
+        # self.__media_type = media_type
+        # self.__data_type = data_type
 
         self.__storage = storage
         self.__name = name
@@ -107,7 +107,7 @@ class Resource:
             raise DataDoesNotExists(self)
         return self.__storage._resource_delete(resource_name=self.__name)
 
-    def save(self) -> None:
+    def save(self, media_type: str = None) -> None:
         if self.exists():
             raise DataExists(self)
 
@@ -121,10 +121,15 @@ class Resource:
         )
 
         data_type = type(data)  # type from actual data, not from resource
-
+        # priority: function argument, metadata, data generator
+        if not media_type:
+            media_type = self.metadata.query(MEDIA_TYPE_METADATA_PATH)
+        if not media_type:
+            media_type = self.__data_generator.get_media_data_type(name=self.__name)[0]
         converter = AbstractConverter.get_instance(
-            media_type=self.__media_type, data_type=data_type
+            media_type=media_type, data_type=data_type
         )
+
         # get extra kwargs from metadata
         encode_kwargs = {k: self.__metadata.query(k) for k in converter.encode_kwargs}
         bytes_buffer, metadata_encode = converter.encode(data, **encode_kwargs)
@@ -143,18 +148,33 @@ class Resource:
                 method: hasher.hexdigest()
                 for method, hasher in bytes_buffer_wrapper.hashers.items()
             },
+            MEDIA_TYPE_METADATA_PATH: media_type,
         }
 
-        self.metadata.update(metadata_create | metadata_encode | metadata_save)
+        new_metadata = {}  # older python cant do dict1 | dict2
+        new_metadata.update(metadata_create)
+        new_metadata.update(metadata_encode)
+        new_metadata.update(metadata_save)
+
+        self.metadata.update(new_metadata)
 
     def load(self, data_type: Type = None) -> Any:
         if not self.exists():
             self.save()
 
-        data_type = data_type or self.__data_type
+        # priority: function argument, data generator
+        _media_type, _data_type = self.__data_generator.get_media_data_type(
+            name=self.__name
+        )
+
+        if not data_type:
+            data_type = _data_type
+        media_type = self.__metadata.query(MEDIA_TYPE_METADATA_PATH)
+        if not media_type:
+            media_type = _media_type
 
         converter = AbstractConverter.get_instance(
-            media_type=self.__media_type, data_type=data_type or self.__data_type
+            media_type=media_type, data_type=data_type
         )
 
         # get extra kwargs from metadata

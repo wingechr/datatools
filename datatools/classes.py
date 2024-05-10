@@ -20,7 +20,7 @@ class RegistryAbstractBase(abc.ABC, metaclass=RegistryAbstractMetaBase):
 
     @classmethod
     def _get_class(cls, **kwargs) -> Type:
-        for subclass in reversed(cls._subclasses.values()):
+        for subclass in reversed(list(cls._subclasses.values())):
             if subclass._is_class_for(**kwargs):
                 return subclass
         raise NotImplementedError(f"{kwargs} {cls}")
