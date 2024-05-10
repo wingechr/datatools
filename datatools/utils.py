@@ -1,6 +1,7 @@
 import atexit
 import csv
 import datetime
+import hashlib
 import inspect
 import io
 import json
@@ -643,3 +644,63 @@ def sa_create_engine(connection_string: str) -> sa.Engine:
 
 def get_connection_string_uri_mssql_pyodbc(server, database="master"):
     return f"mssql+pyodbc://?odbc_connect=driver=sql server;server={server};database={database}"  # noqa
+
+
+class BytesIteratorBuffer:
+    def __init__(self, bytes_iter) -> None:
+        self.bytes_iter = bytes_iter
+
+        self.buffer = b""
+        self.bytes = 0
+
+    def read(self, n=None):
+        # read more data
+
+        while True:
+            if n is not None and n <= self.bytes:
+                # if bytesare specified and we have enough data
+                break
+            try:
+                chunk = next(self.bytes_iter)
+            except StopIteration:
+                break
+            self.buffer += chunk
+            logging.info(f"read chunk {len(chunk)}")
+            self.bytes += len(chunk)
+
+        # how many do we return
+        n = self.bytes if n is None else min(n, self.bytes)
+        # split buffer
+        data = self.buffer[:n]
+        self.buffer = self.buffer[n:]
+        return data
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        pass
+
+
+class ByteBufferWrapper:
+    def __init__(self, buffer):
+        self.buffer = buffer
+        self.bytes = 0
+        self.hash_md5 = hashlib.md5()
+        self.hash_sha256 = hashlib.sha256()
+
+    def __enter__(self):
+        self.buffer.__enter__()
+        return self
+
+    def __exit__(self, *args):
+        self.buffer.__exit__(*args)
+
+    def read(self, n=None):
+        chunk = self.buffer.read(n)
+
+        self.bytes += len(chunk)
+        self.hash_md5.update(chunk)
+        self.hash_sha256.update(chunk)
+
+        return chunk
