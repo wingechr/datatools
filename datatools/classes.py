@@ -23,4 +23,4 @@ class RegistryAbstractBase(abc.ABC, metaclass=RegistryAbstractMetaBase):
         for subclass in reversed(cls._subclasses.values()):
             if subclass._is_class_for(**kwargs):
                 return subclass
-        raise NotImplementedError(kwargs)
+        raise NotImplementedError(f"{kwargs} {cls}")

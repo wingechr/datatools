@@ -13,9 +13,9 @@ import socket
 import sys
 import time
 from contextlib import ExitStack as _ExitStack
-from io import BufferedReader
+from io import BufferedReader, IOBase
 from pathlib import Path
-from typing import Iterable, Union
+from typing import Iterable, Tuple, Type, Union
 from urllib.parse import quote, unquote, unquote_plus, urlsplit
 
 import chardet
@@ -33,6 +33,7 @@ from .constants import (
     DATETIMETZ_FMT,
     DEFAULT_BUFFER_SIZE,
     FILEMOD_WRITE,
+    HASH_METHODS,
     LOCALHOST,
     PARAM_SQL_QUERY,
     TIME_FMT,
@@ -646,7 +647,7 @@ def get_connection_string_uri_mssql_pyodbc(server, database="master"):
     return f"mssql+pyodbc://?odbc_connect=driver=sql server;server={server};database={database}"  # noqa
 
 
-class BytesIteratorBuffer:
+class BytesIteratorBuffer(IOBase):
     def __init__(self, bytes_iter) -> None:
         self.bytes_iter = bytes_iter
 
@@ -685,12 +686,16 @@ class BytesIteratorBuffer:
 class ByteBufferWrapper:
     def __init__(self, buffer):
         self.buffer = buffer
-        self.bytes = 0
-        self.hash_md5 = hashlib.md5()
-        self.hash_sha256 = hashlib.sha256()
+
+        self.bytes = None
+        self.hashers = {}
 
     def __enter__(self):
         self.buffer.__enter__()
+        self.bytes = 0
+        for method in HASH_METHODS:
+            self.hashers[method] = getattr(hashlib, method)()
+
         return self
 
     def __exit__(self, *args):
@@ -700,7 +705,19 @@ class ByteBufferWrapper:
         chunk = self.buffer.read(n)
 
         self.bytes += len(chunk)
-        self.hash_md5.update(chunk)
-        self.hash_sha256.update(chunk)
+        for hasher in self.hashers.values():
+            hasher.update(chunk)
 
         return chunk
+
+
+def get_default_media_data_type(name: str) -> Tuple[str, Type]:
+    # defaults, only dependent on name (suffix)
+    if re.match(r"^.*\.json$", name):
+        return ("application/json", object)
+    elif re.match(r"^.*\.(pkl|pickle)$", name):
+        return ("application/x-pickle", object)
+    elif re.match(r"^.*\.(csv)$", name):
+        return ("text/csv", list)
+    # default: binary
+    return ("application/octet-stream", bytes)

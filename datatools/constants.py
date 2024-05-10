@@ -6,9 +6,9 @@ import appdirs
 PARAM_SQL_QUERY = "q"
 ROOT_METADATA_PATH = "$"  # root
 HASHED_DATA_PATH_PREFIX = "hash"
-ALLOWED_HASH_METHODS = ["md5", "sha256"]
+HASH_METHODS = ["md5", "sha256"]
 
-DEFAULT_HASH_METHOD = ALLOWED_HASH_METHODS[0]
+DEFAULT_HASH_METHOD = HASH_METHODS[0]
 
 GLOBAL_LOCATION = os.path.join(
     appdirs.user_data_dir(

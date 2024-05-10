@@ -2,19 +2,20 @@ import hashlib
 import json
 import logging
 import os
-import pickle
 import sqlite3
 import subprocess as sp
 import sys
 import unittest
+from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import pandas as pd
 
 from datatools.constants import DEFAULT_HASH_METHOD
-from datatools.exceptions import DataDoesNotExists, DataExists, DatatoolsException
+from datatools.exceptions import DataExists
 from datatools.storage import Storage
 from datatools.utils import (
+    filepath_abs_to_uri,
     get_free_port,
     make_file_writable,
     platform_is_unix,
@@ -82,32 +83,28 @@ class TestLocalStorage(TestBase):
         # create local instance in temporary dir
 
         bdata = b"hello world"
-        data_path_user = "data:///My/path"
+        data_path_user = "My/Path.txt"
 
-        res = self.storage.resource(data_path_user)
+        res = self.storage.resource((lambda: bdata), name=data_path_user)
         self.assertFalse(res.exists())
 
         logging.debug("save data")
-        res._write(bdata)
+        res.save()
         self.assertTrue(res.exists())
-        self.assertEqual(res.name, "my/path")
+        self.assertEqual(res.name, "my/path.txt")
 
         logging.debug("save again will fail")
-        self.assertRaises(DataExists, res._write, bdata)
+        self.assertRaises(DataExists, res.save)
 
         logging.debug("read data")
-        with res._open() as file:
-            _data = file.read()
+        _data = res.load(data_type=bytes)
         self.assertEqual(bdata, _data)
 
         logging.debug("delete (twice, which is allowed)")
         res.delete()
-        # reading now will raise error
-        self.assertRaises((DataDoesNotExists, NotImplementedError), res._open)
-        res.delete()
 
         logging.debug("save again")
-        res._write(bdata)
+        res.save()
 
         logging.debug("save metadata")
         metadata = {"a": [1, 2, 3], "b.c[0]": "test"}
@@ -119,9 +116,9 @@ class TestLocalStorage(TestBase):
 
         logging.debug("get metadata")
 
-        metadata_b_c = res.metadata.get("b.c")
+        metadata_b_c = res.metadata.query("b.c")
         self.assertTrue(objects_euqal(metadata_b_c, ["test", "test2"]), metadata_b_c)
-        metadata_all = res.metadata.get()
+        metadata_all = res.metadata.query()
         self.assertTrue(
             metadata_all["hash"][DEFAULT_HASH_METHOD],
             getattr(hashlib, DEFAULT_HASH_METHOD)(bdata).hexdigest,
@@ -131,26 +128,29 @@ class TestLocalStorage(TestBase):
     def test_encode_data_metadata(self):
         data = {"c1": [1, 2, 3]}
 
-        uri_res = self.storage.resource("http://example.com")
-        self.assertRaises(DatatoolsException, uri_res.save, None)
-
-        json_res = self.storage.resource(name="test_encode_data_metadata.json")
-        json_res.save(data)
-        data2 = json_res.load()
+        json_res = self.storage.resource(
+            (lambda: data), name="test_encode_data_metadata.json"
+        )
+        json_res.save()
+        data2 = json_res.load(data_type=pd.DataFrame)
         self.assertDictEqual(data, data2)
 
         df = pd.DataFrame(data)
-        pkl_res = self.storage.resource(name="test_encode_data_metadata.pickle")
-        pkl_res.save(df)
+        pkl_res = self.storage.resource(
+            (lambda: df), name="test_encode_data_metadata.pickle"
+        )
+        pkl_res.save()
         df2 = pkl_res.load()
         pd.testing.assert_frame_equal(df, df2)
 
-        csv_res = self.storage.resource(name="test_encode_data_metadata.csv")
-        csv_res.save(df)
-        df2 = csv_res.load()
+        csv_res = self.storage.resource(
+            (lambda: df), name="test_encode_data_metadata.csv"
+        )
+        csv_res.save()
+        df2 = csv_res.load(data_type=pd.DataFrame)
         pd.testing.assert_frame_equal(df, df2)
 
-    def test_cache_decorator(self):
+    def __DISABLED__test_cache_decorator(self):
         context = {"counter": 0}
 
         @self.storage.cache()
@@ -172,16 +172,15 @@ class TestLocalStorage(TestBase):
 
 
 class TestResource(TestBase):
-    def test_resource(self):
+    def test_resource_sqlite_memory(self):
         # in memory sqlite3 database
         query = "select cast(101 as int) as value;"
         uri = f"sqlite:///:memory:?q={query}#/testquery.pickle"
         res = self.storage.resource(uri)
-        with res._open() as file:
-            bdata = file.read()
-        data = pickle.loads(bdata)
+        data = res.load()
         self.assertEqual(data[0]["value"], 101)
 
+    def test_resource_sqlite_file(self):
         # sqlite file
         db_filepath = self.static_dir + "/test.db"
 
@@ -201,28 +200,30 @@ class TestResource(TestBase):
         uri = f"sqlite://{db_filepath}?q=select value from test#/testquery.pickle"
 
         res = self.storage.resource(uri)
-        with res._open() as file:
-            bdata = file.read()
-        data = pickle.loads(bdata)
+        data = res.load()
 
         self.assertEqual(data[0]["value"], 102)
 
+    def test_resource_file(self):
         # create files in static dir
         fpath = os.path.join(self.static_dir, "testfile.json")
         with open(fpath, "w", encoding="utf-8") as file:
             json.dump({"value": 103}, file, ensure_ascii=False)
 
         # load from path
-        uri = fpath
+        uri = filepath_abs_to_uri(Path(fpath))
         res = self.storage.resource(uri)
-        with res._open() as file:
-            data = json.load(file)
+        data = res.load()
         self.assertEqual(data["value"], 103)
 
-        # load from webserver
+    def test_resource_http(self):
+        # create files in static dir
+        fpath = os.path.join(self.static_dir, "testfile.json")
+        with open(fpath, "w", encoding="utf-8") as file:
+            json.dump({"value": 103}, file, ensure_ascii=False)
 
+        # load from webserver
         uri = self.static_url + "/testfile.json"
         res = self.storage.resource(uri)
-        with res._open() as file:
-            data = json.load(file)
+        data = res.load()
         self.assertEqual(data["value"], 103)

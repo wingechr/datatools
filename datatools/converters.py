@@ -1,11 +1,13 @@
 import abc
-import re
-from io import BytesIO, RawIOBase
+import json
+import pickle
+from io import BytesIO, IOBase
 from typing import Any, Dict, Tuple, Type
 
-from datatools.classes import RegistryAbstractBase
-from datatools.generators import AbstractDataGenerator
-from datatools.utils import BytesIteratorBuffer
+import pandas as pd
+
+from .classes import RegistryAbstractBase
+from .utils import json_serialize
 
 
 class AbstractConverter(RegistryAbstractBase):
@@ -24,11 +26,11 @@ class AbstractConverter(RegistryAbstractBase):
         return subclass()
 
     @abc.abstractmethod
-    def encode(self, data: Any, **kwargs) -> Tuple[RawIOBase, Dict[str, Any]]:
+    def encode(self, data: Any, **kwargs) -> Tuple[IOBase, Dict[str, Any]]:
         ...
 
     @abc.abstractmethod
-    def decode(self, bytes_buffer: RawIOBase, **kwargs) -> Any:
+    def decode(self, bytes_buffer: IOBase, **kwargs) -> Any:
         ...
 
 
@@ -43,57 +45,97 @@ class StringConverter(AbstractConverter):
 
     def encode(
         self, data: Any, encoding=None, **kwargs
-    ) -> Tuple[RawIOBase, Dict[str, Any]]:
+    ) -> Tuple[IOBase, Dict[str, Any]]:
         encoding = encoding or self.default_encoding
         metadata = {"encoding": encoding}
         bdata = data.encode(encoding=encoding)
         buffer = BytesIO(bdata)
         return buffer, metadata
 
-    def decode(self, bytes_buffer: RawIOBase, encoding=None, **kwargs) -> Any:
-        encoding = encoding or self.default_encoding
+    def decode(self, bytes_buffer: IOBase, encoding=None, **kwargs) -> Any:
+        encoding = encoding if encoding is not None else self.default_encoding
         bdata = bytes_buffer.read()
         sdata = bdata.decode(encoding=encoding)
         return sdata
 
 
-class HttpDataGenerator(AbstractDataGenerator):
-    @classmethod
-    def _is_class_for(cls, data_source: Any) -> bool:
-        return isinstance(data_source, str) and re.match(r"^https?://", data_source)
+class JsonConverter(StringConverter):
+    decode_kwargs = ["encoding"]
+    encode_kwargs = ["encoding", "indent"]
+    default_encoding = "utf-8"
+    default_indent = 2
 
-    def create_name(self) -> str:
-        raise NotImplementedError()
-
-    def get_media_data_type(self, name: str) -> Tuple[str, Type]:
-        # this can be all kinds of things.
-        # SHOULD be determined from suffix, but that will not always work
-        return super().get_media_data_type(name=name)
-
-    def create_data_metadata(self, **kwargs) -> Tuple[Any, Dict[str, Any]]:
-        import requests
-
-        res = requests.get(self._data_source, stream=True)
-        res.raise_for_status()
-        print(res.headers)
-        # max_bytes = int(res.headers["Content-Length"])
-        chunk_size = 1024
-        bytes_iter = res.iter_content(chunk_size=chunk_size)
-        data = BytesIteratorBuffer(bytes_iter=bytes_iter)
-
-        metadata = dict({"media_type": res.headers["Content-Type"]})
-        return data, metadata
-
-
-class ByteConverter(AbstractConverter):
     @classmethod
     def _is_class_for(cls, media_type: str, data_type: Type) -> bool:
-        return issubclass(data_type, (bytes, BytesIO, BytesIteratorBuffer))
+        return media_type in ("application/json", "text/json")
 
-    def encode(self, data: bytes, **kwargs) -> Tuple[RawIOBase, Dict[str, Any]]:
+    def encode(
+        self, data: Any, encoding=None, indent=None, **kwargs
+    ) -> Tuple[IOBase, Dict[str, Any]]:
+        encoding = encoding if encoding is not None else self.default_encoding
+        indent = indent if indent is not None else self.default_indent
+
+        metadata = {"encoding": encoding, "indent": indent}
+        sdata = json.dumps(
+            data,
+            indent=indent,
+            ensure_ascii=False,
+            sort_keys=False,
+            default=json_serialize,
+        )
+        bdata = sdata.encode()
+        buffer = BytesIO(bdata)
+        return buffer, metadata
+
+    def decode(self, bytes_buffer: IOBase, encoding=None, **kwargs) -> Any:
+        encoding = encoding or self.default_encoding
+        bdata = bytes_buffer.read()
+        sdata = bdata.decode(encoding=encoding)
+        data = json.loads(sdata)
+        return data
+
+
+class PickleConverter(AbstractConverter):
+    @classmethod
+    def _is_class_for(cls, media_type: str, data_type: Type) -> bool:
+        return media_type == "application/x-pickle"
+
+    def encode(self, data: object, **kwargs) -> Tuple[IOBase, Dict[str, Any]]:
+        return BytesIO(pickle.dumps(data)), {}
+
+    def decode(self, bytes_buffer: IOBase, **kwargs) -> bytes:
+        return pickle.load(bytes_buffer)
+
+
+class BytesPassthroughConverter(AbstractConverter):
+    @classmethod
+    def _is_class_for(cls, media_type: str, data_type: Type) -> bool:
+        return issubclass(data_type, (bytes, IOBase))
+
+    def encode(self, data: Any, **kwargs) -> Tuple[IOBase, Dict[str, Any]]:
         if isinstance(data, bytes):
             data = BytesIO(data)
         return data, {}
 
-    def decode(self, bytes_buffer: RawIOBase, **kwargs) -> bytes:
+    def decode(self, bytes_buffer: IOBase, **kwargs) -> Any:
         return bytes_buffer.read()
+
+
+class TestPandasCsvConverter(AbstractConverter):
+    @classmethod
+    def _is_class_for(cls, media_type: str, data_type: Type) -> bool:
+        return issubclass(data_type, pd.DataFrame) and media_type == "text/csv"
+
+    def encode(
+        self, data: pd.DataFrame, encoding=None, **kwargs
+    ) -> Tuple[IOBase, Dict[str, Any]]:
+        metadata = {}
+        # TODO: settings
+        buf = BytesIO()  # TODO: bufferes reader/writer?
+        # TODO: index?
+        data.to_csv(buf, index=False)
+        buf.seek(0)
+        return buf, metadata
+
+    def decode(self, bytes_buffer: IOBase, encoding=None, **kwargs) -> Any:
+        return pd.read_csv(bytes_buffer)
