@@ -16,7 +16,7 @@ import time
 from contextlib import ExitStack as _ExitStack
 from io import BufferedReader, IOBase
 from pathlib import Path
-from typing import Callable, Iterable, Tuple, Type, Union
+from typing import Any, Callable, Iterable, Tuple, Type, Union
 from urllib.parse import quote, unquote, unquote_plus, urlsplit
 
 import chardet
@@ -762,7 +762,12 @@ def get_function_info(obj: Callable) -> dict:
             if value is inspect.Parameter.empty:
                 value = None
 
-        # param.kind  # inspect.Parameter.POSITIONAL_OR_KEYWORD | POSITIONAL_ONLY | KEYWORD_ONLY
+        # param.kind  # inspect.Parameter.POSITIONAL_OR_KEYWORD
+        # | POSITIONAL_ONLY | KEYWORD_ONLY
         kwargs[param.name] = value
 
     return {"name": name, "kwargs": kwargs, "doc": doc, "file": file}
+
+
+def is_callable(obj: Any) -> bool:
+    return isinstance(obj, Callable)

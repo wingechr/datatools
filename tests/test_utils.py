@@ -23,6 +23,7 @@ from datatools.utils import (
     get_sql_uri,
     get_suffix,
     get_user_w_host,
+    is_callable,
     is_file_readonly,
     is_uri,
     json_serialize,
@@ -277,6 +278,48 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(os.path.realpath(info_partial["file"]), this_file)
         self.assertEqual(os.path.realpath(info_closure["file"]), this_file)
         self.assertEqual(os.path.realpath(info_lambda["file"]), this_file)
+
+    def test_is_callable(self):
+
+        # regular function
+        def f_fun(x):
+            return x
+
+        # lambda
+        f_lambda = lambda x: x  # noqa
+
+        # callable class
+        class F:
+            def __call__(self, x):
+                return x
+
+        f_cls = F()
+
+        # partial
+
+        def _f_fun(y, x):
+            return x
+
+        f_partial = partial(_f_fun, "Y")
+
+        # closure
+
+        def _f_closure(y):
+            def f_closure(x):
+                return _f_fun(y, x)
+
+            return f_closure
+
+        f_closure = _f_closure("y")
+
+        f_builtin = int
+
+        for callable in [f_builtin, f_fun, f_lambda, f_cls, f_partial, f_closure]:
+            self.assertTrue(is_callable(callable), callable)
+            self.assertEqual(callable(999), 999, callable)
+
+        for not_callable in ["string", 10]:
+            self.assertFalse(is_callable(not_callable), not_callable)
 
 
 class TestSerializers(unittest.TestCase):
