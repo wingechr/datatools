@@ -8,7 +8,7 @@ if __name__ == "__main__":
             "appdirs",
             "click",
             "coloredlogs",
-            "jsonpath-ng>=1.5",
+            "jsonpath-ng>=1.5",  # jsonpath_ng
             "requests",
             "tzlocal",
             "unidecode",
@@ -18,10 +18,9 @@ if __name__ == "__main__":
             "numpy",
             "pandas",
             "chardet",
-            "frictionless<5,>=4.40",  # frictionless no longer works with python3.7
+            "frictionless~=4.40",  # frictionless 5 changes validation
             "jsonschema",
             "genson",
-            "fsspec",  # sometimes missing
         ],
         install_recommends=[  # this does not do anything, just for information
             "geopandas",

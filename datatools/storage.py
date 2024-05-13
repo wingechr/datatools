@@ -2,6 +2,8 @@ import abc
 import json
 import logging
 import os
+import shutil
+import tempfile
 from io import BytesIO, IOBase
 from typing import Any, Dict, Iterable, Type
 
@@ -78,6 +80,12 @@ class AbstractStorage(abc.ABC):
             Iterable: _description_
         """
         ...
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return
 
 
 class Metadata:
@@ -361,7 +369,9 @@ class FileStorage(AbstractStorage):
     def find_resources(self, *args, **kwargs):
         for rt, _ds, filenames in os.walk * (self.__location):
             for filename in filenames:
-                filepath = os.path.join(rt, filename)
+                # filepath = os.path.join(rt, filename)
+                # TODO
+                pass
 
 
 class Storage(FileStorage):
@@ -387,3 +397,16 @@ class StorageEnv(Storage):
     def __init__(self, env_location):
         location = os.environ[env_location]
         super().__init__(location=location)
+
+
+class StorageTemp(Storage):
+    """"""
+
+    def __init__(self):
+        location = tempfile.mkdtemp()
+        super().__init__(location=location)
+
+    def __exit__(self, *args):
+        # cleanup
+        super().__exit__(*args)
+        shutil.rmtree(self.__location)

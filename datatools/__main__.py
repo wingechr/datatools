@@ -6,14 +6,14 @@ import sys
 
 import click
 
-from . import __version__
-from .constants import GLOBAL_LOCATION, LOCAL_LOCATION
-from .exceptions import DatatoolsException
-from .storage import Metadata, Resource, Storage
-from .utils import as_uri, json_serialize, parse_cli_metadata
+from datatools import __version__
+from datatools.constants import GLOBAL_LOCATION, LOCAL_LOCATION
+from datatools.exceptions import DatatoolsException
+from datatools.storage import Metadata, Resource, Storage
+from datatools.utils import as_uri, json_serialize, parse_cli_metadata
 
 
-@click.group()
+@click.group(name="datatools")
 @click.pass_context
 @click.version_option(__version__)
 @click.option(
@@ -105,9 +105,33 @@ def resource_meta_update(metadata: Metadata, metadata_key_vals):
     metadata.update(new_metadata)
 
 
+def _recursive_help(cmd=main, parent=None, path=None) -> str:
+    path = path or []
+    ctx = click.core.Context(cmd, info_name=cmd.name, parent=parent)
+
+    result = ""
+
+    if path:  # not root
+        path_s = " ".join(path)
+        result += "\n\n## " + path_s + "\n"
+
+    result += cmd.get_help(ctx) + "\n"
+
+    commands = getattr(cmd, "commands", {})
+    for name, group_or_command in commands.items():
+        result += _recursive_help(group_or_command, ctx, (path or ()) + (name,))
+
+    return result
+
+
+@main.command("help-all")
+def help_all():
+    print(_recursive_help())
+
+
 if __name__ == "__main__":
     try:
-        main(prog_name="datatools")
+        main()
     except DatatoolsException as exc:
         logging.error(f"{exc.__class__.__name__}: {exc}")
         sys.exit(1)

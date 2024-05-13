@@ -1,4 +1,5 @@
-site_name: Datatools
+site_name: "" # use title from README
+repo_url: https://github.com/wingechr/datatools
 
 # Configuration
 theme:
@@ -24,15 +25,19 @@ markdown_extensions:
   #- def_list
   #- md_in_html
   #- pymdownx.details
-  #- pymdownx.superfences
+  - pymdownx.superfences # code highlight
+  - pymdownx.snippets # include README
 
 plugins:
-  - mkdocs-jupyter:
-      execute: true
+  #- mkdocs-jupyter:
+  #    execute: true
   - mkdocstrings:
       handlers:
         python:
           options:
             show_source: false
+            show_root_heading: true
+            show_root_full_path: true
+            docstring_style: numpy
   - search:
       lang: en
