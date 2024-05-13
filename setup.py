@@ -18,9 +18,10 @@ if __name__ == "__main__":
             "numpy",
             "pandas",
             "chardet",
-            "frictionless<5",  # frictionless no longer works with python3.7
+            "frictionless<5,>=4.40",  # frictionless no longer works with python3.7
             "jsonschema",
             "genson",
+            "fsspec",  # sometimes missing
         ],
         install_recommends=[  # this does not do anything, just for information
             "geopandas",

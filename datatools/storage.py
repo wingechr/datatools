@@ -3,17 +3,17 @@ import json
 import logging
 import os
 from io import BytesIO, IOBase
-from typing import Any, Dict, Type
+from typing import Any, Dict, Iterable, Type
 
 import jsonpath_ng
 
 # TODO: must be loaded for classes to be registeres
 # there should be a better wayto do that
-from . import converters, generators  # noqa
+from . import generators, loaders  # noqa
 from .constants import GLOBAL_LOCATION, MEDIA_TYPE_METADATA_PATH, ROOT_METADATA_PATH
-from .converters import AbstractConverter
 from .exceptions import DataDoesNotExists, DataExists
 from .generators import AbstractDataGenerator
+from .loaders import AbstractConverter
 from .utils import (
     ByteBufferWrapper,
     get_now_str,
@@ -23,46 +23,86 @@ from .utils import (
     make_file_writable,
 )
 
+METADATA_JSON_SUFFIX = ".metadata.json"
+TEMPFILE_SUFFIX = ".tmp"
+
 
 class AbstractStorage(abc.ABC):
     def resource(self, data_source, name: str = None) -> "Resource":
+        """_summary_
+
+        Args:
+            data_source (_type_): _description_
+            name (str, optional): _description_. Defaults to None.
+
+        Returns:
+            Resource: _description_
+        """
         return Resource(storage=self, data_source=data_source, name=name)
 
     def _validate_name(self, name: str) -> str:
-        return get_resource_path_name(name)
+        name_new = get_resource_path_name(name)
+        if (
+            not name_new
+            or name_new.endswith(METADATA_JSON_SUFFIX)
+            or name_new.endswith(TEMPFILE_SUFFIX)
+        ):
+            raise ValueError(f"Invalid name: {name_new}")
+        return name_new
 
     @abc.abstractmethod
-    def _resource_delete(self, resource_name: str) -> None:
-        ...
+    def _resource_delete(self, resource_name: str) -> None: ...
 
     @abc.abstractmethod
-    def _resource_exists(self, resource_name: str) -> None:
-        ...
+    def _resource_exists(self, resource_name: str) -> None: ...
 
     @abc.abstractmethod
-    def _metadata_update(self, resource_name: str, metadata: Dict[str, Any]) -> None:
-        ...
+    def _metadata_update(
+        self, resource_name: str, metadata: Dict[str, Any]
+    ) -> None: ...
 
     @abc.abstractmethod
-    def _metadata_query(self, resource_name: str, key: str) -> Any:
-        ...
+    def _metadata_query(self, resource_name: str, key: str) -> Any: ...
 
     @abc.abstractmethod
-    def _bytes_write(self, resource_name: str, byte_buffer: IOBase) -> None:
-        ...
+    def _bytes_write(self, resource_name: str, byte_buffer: IOBase) -> None: ...
 
     @abc.abstractmethod
-    def _bytes_open(self, resource_name: str) -> IOBase:
+    def _bytes_open(self, resource_name: str) -> IOBase: ...
+
+    @abc.abstractmethod
+    def find_resources(self, *args, **kwargs) -> Iterable:
+        """_summary_
+
+        Returns:
+            Iterable: _description_
+        """
         ...
 
 
 class Metadata:
     def update(self, metadata: Dict[str, Any]) -> None:
+        """_summary_
+
+        Args:
+            metadata (Dict[str, Any]): _description_
+
+        Returns:
+            _type_: _description_
+        """
         return self.__storage._metadata_update(
             resource_name=self.__resource_name, metadata=metadata
         )
 
     def query(self, key: str = None) -> Any:
+        """_summary_
+
+        Args:
+            key (str, optional): _description_. Defaults to None.
+
+        Returns:
+            Any: _description_
+        """
         return self.__storage._metadata_query(
             resource_name=self.__resource_name, key=key
         )
@@ -73,6 +113,8 @@ class Metadata:
 
 
 class Resource:
+    """_summary_"""
+
     def __init__(
         self, storage: "AbstractStorage", data_source: Any, name: str = None
     ) -> None:
@@ -90,6 +132,9 @@ class Resource:
         self.__storage = storage
         self.__name = name
         self.__metadata = Metadata(storage=storage, resource_name=name)
+
+    def __str__(self):
+        return self.__Name
 
     @property
     def metadata(self) -> "Metadata":
@@ -232,7 +277,7 @@ class FileStorage(AbstractStorage):
         return os.path.join(self.__location, resource_name)
 
     def _get_filepath_metadata(self, resource_name: str):
-        return self._get_filepath(resource_name=resource_name) + ".metadata.json"
+        return self._get_filepath(resource_name=resource_name) + METADATA_JSON_SUFFIX
 
     def _resource_delete(self, resource_name: str) -> None:
         filepath = self._get_filepath(resource_name=resource_name)
@@ -294,7 +339,7 @@ class FileStorage(AbstractStorage):
 
     def _bytes_write(self, resource_name: str, byte_buffer: IOBase) -> None:
         filepath = self._get_filepath(resource_name=resource_name)
-        filepath_temp = filepath + ".tmp"
+        filepath_temp = filepath + TEMPFILE_SUFFIX
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         logging.debug(f"Writing {filepath}")
 
@@ -313,8 +358,19 @@ class FileStorage(AbstractStorage):
         logging.debug(f"Reading {filepath}")
         return open(filepath, "rb")
 
+    def find_resources(self, *args, **kwargs):
+        for rt, _ds, filenames in os.walk * (self.__location):
+            for filename in filenames:
+                filepath = os.path.join(rt, filename)
+
 
 class Storage(FileStorage):
+    """_summary_
+
+    Args:
+        FileStorage (_type_): _description_
+    """
+
     pass
 
 

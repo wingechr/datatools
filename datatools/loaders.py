@@ -26,12 +26,10 @@ class AbstractConverter(RegistryAbstractBase):
         return subclass()
 
     @abc.abstractmethod
-    def encode(self, data: Any, **kwargs) -> Tuple[IOBase, Dict[str, Any]]:
-        ...
+    def encode(self, data: Any, **kwargs) -> Tuple[IOBase, Dict[str, Any]]: ...
 
     @abc.abstractmethod
-    def decode(self, bytes_buffer: IOBase, **kwargs) -> Any:
-        ...
+    def decode(self, bytes_buffer: IOBase, **kwargs) -> Any: ...
 
 
 class StringConverter(AbstractConverter):

@@ -15,6 +15,7 @@ from .utils import (
     BytesIteratorBuffer,
     get_default_media_data_type_by_name,
     get_default_suffix,
+    get_function_info,
     get_sql_table_schema,
     json_serialize,
     normalize_sql_query,
@@ -42,15 +43,13 @@ class AbstractDataGenerator(RegistryAbstractBase):
         self._data_source = data_source
 
     @abc.abstractmethod
-    def create_name(self) -> str:
-        ...
+    def create_name(self) -> str: ...
 
     def get_media_data_type(self, name: str) -> Tuple[str, Type]:
         return get_default_media_data_type_by_name(name=name)
 
     @abc.abstractmethod
-    def create_data_metadata(self, **kwargs) -> Tuple[Any, Dict[str, Any]]:
-        ...
+    def create_data_metadata(self, **kwargs) -> Tuple[Any, Dict[str, Any]]: ...
 
 
 class FunctionDataGenerator(AbstractDataGenerator):
@@ -59,17 +58,17 @@ class FunctionDataGenerator(AbstractDataGenerator):
 
     @classmethod
     def _is_class_for(cls, data_source: Any) -> bool:
-        return isinstance(data_source, tuple) and isinstance(data_source[0], Callable)
+        return isinstance(data_source, Callable)
 
     def create_name(self) -> str:
         # create hash of job
-        function, function_kwargs = self._data_source
-        function_name = function.__name__
+        func = self._data_source
+        func_info = get_function_info(func)
+        function_name = func_info["name"]
+
         job_descriptor_obj = {
             "function": function_name,
-            # "args": [], # we don't use positional arguments
-            "kwargs": function_kwargs,
-            # "description": function.__doc__,  # todo: maybe cleanup into plain text
+            "kwargs": func_info["kwargs"],
         }
         job_descriptor_bytes = json.dumps(
             job_descriptor_obj,
@@ -87,16 +86,10 @@ class FunctionDataGenerator(AbstractDataGenerator):
         return "application/x-pickle", object
 
     def create_data_metadata(self, **kwargs) -> Tuple[Any, Dict[str, Any]]:
-        function, function_kwargs = self._data_source
-        data = function(**function_kwargs)
-        metadata = {
-            "method": {
-                "function": function.__name__,
-                # "args": [], # we don't use positional arguments
-                "kwargs": function_kwargs,
-                "description": function.__doc__,  # todo: maybe cleanup into plain text
-            }
-        }
+        func = self._data_source
+        data = func()
+        func_info = get_function_info(func)
+        metadata = {"method": func_info}
         return data, metadata
 
 

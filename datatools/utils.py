@@ -1,6 +1,7 @@
 import atexit
 import csv
 import datetime
+import functools
 import hashlib
 import inspect
 import io
@@ -15,7 +16,7 @@ import time
 from contextlib import ExitStack as _ExitStack
 from io import BufferedReader, IOBase
 from pathlib import Path
-from typing import Iterable, Tuple, Type, Union
+from typing import Callable, Iterable, Tuple, Type, Union
 from urllib.parse import quote, unquote, unquote_plus, urlsplit
 
 import chardet
@@ -666,7 +667,6 @@ class BytesIteratorBuffer(IOBase):
             except StopIteration:
                 break
             self.buffer += chunk
-            logging.info(f"read chunk {len(chunk)}")
             self.bytes += len(chunk)
 
         # how many do we return
@@ -729,3 +729,40 @@ def get_default_suffix(media_type: str) -> str:
         "application/x-pickle": ".pickle",
         "text/csv": ".csv",
     }.get(media_type)
+
+
+def get_function_info(obj: Callable) -> dict:
+    if isinstance(obj, functools.partial):
+        func = obj.func
+        bound_args = obj.args
+        bound_kwargs = obj.keywords
+    else:
+        func = obj
+        bound_args = ()
+        bound_kwargs = {}
+
+        for cell in func.__closure__ or []:
+            if not hasattr(cell, "__name__"):
+                continue  # how can we get the name?
+            bound_kwargs[cell.__name__] = cell.cell_contents
+
+    name = func.__name__
+    doc = inspect.cleandoc(inspect.getdoc(func) or "")
+    file = inspect.getfile(func)
+    # mod = inspect.getmodule(func) # TODO: get version (or version of parent module?)
+
+    kwargs = {}
+    for i, param in enumerate(inspect.signature(func).parameters.values()):
+        if i < len(bound_args):
+            value = bound_args[i]
+        elif param.name in bound_kwargs:
+            value = bound_kwargs[param.name]
+        else:
+            value = param.default
+            if value is inspect.Parameter.empty:
+                value = None
+
+        # param.kind  # inspect.Parameter.POSITIONAL_OR_KEYWORD | POSITIONAL_ONLY | KEYWORD_ONLY
+        kwargs[param.name] = value
+
+    return {"name": name, "kwargs": kwargs, "doc": doc, "file": file}

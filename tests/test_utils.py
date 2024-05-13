@@ -2,6 +2,7 @@
 import os
 import re
 import unittest
+from functools import partial
 from io import BytesIO
 from pathlib import PurePosixPath, PureWindowsPath
 from tempfile import TemporaryDirectory
@@ -15,6 +16,7 @@ from datatools.utils import (
     df_to_values,
     filepath_abs_to_uri,
     get_df_table_schema,
+    get_function_info,
     get_hostname,
     get_now_str,
     get_resource_path_name,
@@ -225,6 +227,56 @@ class TestUtils(unittest.TestCase):
             ),
             [{"f": 1.5, "i": 1.0, "s": "a"}, {"f": None, "i": None, "s": "b"}],
         )
+
+    def test_get_function_info(self):
+        def myfunc(a, b, c=1, d=None):
+            "myfunc docstring"
+            return a + b + c + (d or 0)
+
+        myfunc_partial = partial(myfunc, 5, 10, d=20)
+
+        def make_myfunc_closure(a):
+            b = 10
+
+            def myfunc_closure(c, d):
+                "myfunc docstring 2"
+                return myfunc(a=a, b=b, c=c, d=d)
+
+            return myfunc_closure
+
+        _myfunc_closure = make_myfunc_closure(a=5)
+
+        f_lambda = lambda a, b, c, d: a + b + c + d  # noqa
+
+        info = get_function_info(myfunc)
+        info_partial = get_function_info(myfunc_partial)
+        info_closure = get_function_info(_myfunc_closure)
+        info_lambda = get_function_info(f_lambda)
+
+        self.assertEqual(info["name"], "myfunc")
+        self.assertEqual(info_partial["name"], "myfunc")  # name or original function
+        self.assertEqual(info_closure["name"], "myfunc_closure")
+        self.assertEqual(info_lambda["name"], "<lambda>")
+
+        self.assertEqual(info["doc"], "myfunc docstring")
+        self.assertEqual(
+            info_partial["doc"], "myfunc docstring"
+        )  # name or original function
+        self.assertEqual(info_closure["doc"], "myfunc docstring 2")
+        self.assertEqual(info_lambda["doc"], "")
+
+        self.assertDictEqual(info["kwargs"], {"a": None, "b": None, "c": 1, "d": None})
+        self.assertDictEqual(info_partial["kwargs"], {"a": 5, "b": 10, "c": 1, "d": 20})
+        self.assertDictEqual(info_closure["kwargs"], {"c": None, "d": None})
+        self.assertDictEqual(
+            info_lambda["kwargs"], {"a": None, "b": None, "c": None, "d": None}
+        )
+
+        this_file = os.path.realpath(__file__)
+        self.assertEqual(os.path.realpath(info["file"]), this_file)
+        self.assertEqual(os.path.realpath(info_partial["file"]), this_file)
+        self.assertEqual(os.path.realpath(info_closure["file"]), this_file)
+        self.assertEqual(os.path.realpath(info_lambda["file"]), this_file)
 
 
 class TestSerializers(unittest.TestCase):

@@ -85,7 +85,7 @@ class TestLocalStorage(TestBase):
         bdata = b"hello world"
         data_path_user = "My/Path.txt"
 
-        res = self.storage.resource(((lambda: bdata, {})), name=data_path_user)
+        res = self.storage.resource((lambda: bdata), name=data_path_user)
         self.assertFalse(res.exists())
 
         logging.debug("save data")
@@ -126,10 +126,12 @@ class TestLocalStorage(TestBase):
         self.assertTrue(metadata_all["size"], len(bdata))
 
     def test_encode_data_metadata(self):
+        # TODO: test closure,function,partial
+
         data = {"c1": [1, 2, 3]}
 
         json_res = self.storage.resource(
-            ((lambda: data), {}), name="test_encode_data_metadata.json"
+            (lambda: data), name="test_encode_data_metadata.json"
         )
         json_res.save()
         data2 = json_res.load(data_type=pd.DataFrame)
@@ -137,14 +139,14 @@ class TestLocalStorage(TestBase):
 
         df = pd.DataFrame(data)
         pkl_res = self.storage.resource(
-            ((lambda: df), {}), name="test_encode_data_metadata.pickle"
+            (lambda: df), name="test_encode_data_metadata.pickle"
         )
         pkl_res.save()
         df2 = pkl_res.load()
         pd.testing.assert_frame_equal(df, df2)
 
         csv_res = self.storage.resource(
-            ((lambda: df), {}), name="test_encode_data_metadata.csv"
+            (lambda: df), name="test_encode_data_metadata.csv"
         )
         csv_res.save()
         df2 = csv_res.load(data_type=pd.DataFrame)

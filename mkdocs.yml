@@ -1,4 +1,4 @@
-site_name: DataDisAggregation
+site_name: Datatools
 
 # Configuration
 theme:
@@ -27,12 +27,12 @@ markdown_extensions:
   #- pymdownx.superfences
 
 plugins:
-  #- mkdocs-jupyter:
-  #    execute: false
+  - mkdocs-jupyter:
+      execute: true
   - mkdocstrings:
       handlers:
-          python:
-            options:
-              show_source: false
+        python:
+          options:
+            show_source: false
   - search:
       lang: en

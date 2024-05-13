@@ -52,13 +52,6 @@ def main(ctx, loglevel, location, global_location):
     ctx.obj = Storage(location=location)
 
 
-@main.command("check")
-@click.pass_obj
-@click.option("--fix", "-f", is_flag=True)
-def check(storage: Storage, fix):
-    storage.check(fix=fix)
-
-
 @main.command("search")
 @click.pass_obj
 @click.argument("patterns", nargs=-1)
@@ -104,7 +97,7 @@ def resource_meta_query(metadata: Metadata, key=None):
     print(result_str)
 
 
-@resource_meta.command("update")
+@resource_meta.command("update", help="Multiple key=value pairs")
 @click.pass_obj
 @click.argument("metadata_key_vals", nargs=-1)
 def resource_meta_update(metadata: Metadata, metadata_key_vals):
