@@ -52,12 +52,18 @@ def main(ctx, loglevel, location, global_location):
     ctx.obj = Storage(location=location)
 
 
+@main.command("info")
+@click.pass_obj
+def info(storage: Storage):
+    print(str(storage))  # location
+
+
 @main.command("search")
 @click.pass_obj
 @click.argument("patterns", nargs=-1)
 def search(storage: Storage, patterns):
     for res in storage.find_resources(*patterns):
-        print(res)
+        print(res.local_uri)
 
 
 @main.group("res")
@@ -86,6 +92,14 @@ def resource_download_save(resource: Resource):
 def resource_meta(ctx):
     resource = ctx.obj
     ctx.obj = resource.metadata
+
+
+@resource.command("info")
+@click.pass_context
+def resource_info(ctx):
+    resource = ctx.obj
+    print(f"Name: {resource.name}")
+    print(f"Exists: {resource.exists()}")
 
 
 @resource_meta.command("query")

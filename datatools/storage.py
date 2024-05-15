@@ -2,6 +2,7 @@ import abc
 import json
 import logging
 import os
+import re
 import shutil
 import tempfile
 from io import BytesIO, IOBase
@@ -12,7 +13,12 @@ import jsonpath_ng
 # TODO: must be loaded for classes to be registeres
 # there should be a better wayto do that
 from . import generators, loaders  # noqa
-from .constants import GLOBAL_LOCATION, MEDIA_TYPE_METADATA_PATH, ROOT_METADATA_PATH
+from .constants import (
+    GLOBAL_LOCATION,
+    MEDIA_TYPE_METADATA_PATH,
+    ROOT_METADATA_PATH,
+    STORAGE_SCHEME,
+)
 from .exceptions import DataDoesNotExists, DataExists
 from .generators import AbstractDataGenerator
 from .loaders import AbstractConverter
@@ -141,8 +147,12 @@ class Resource:
         self.__name = name
         self.__metadata = Metadata(storage=storage, resource_name=name)
 
-    def __str__(self):
-        return self.__Name
+    def __str__(self) -> str:
+        return self.local_uri
+
+    @property
+    def local_uri(self) -> str:
+        return f"{STORAGE_SCHEME}://{self.__name}"
 
     @property
     def metadata(self) -> "Metadata":
@@ -279,10 +289,18 @@ class TestMemoryStorage(AbstractStorage):
 
 class FileStorage(AbstractStorage):
     def __init__(self, location: str = None):
-        self.__location = location or "."
+        self.__location = os.path.realpath(location or ".")
+
+    def __str__(self):
+        return os.path.abspath(self.__location)
 
     def _get_filepath(self, resource_name: str):
-        return os.path.join(self.__location, resource_name)
+        relpath = resource_name
+        if not relpath.startswith("/"):
+            relpath = "/" + relpath
+        filepath = os.path.realpath(self.__location + relpath)
+        logging.debug(f"Translate {resource_name} => {filepath}")
+        return filepath
 
     def _get_filepath_metadata(self, resource_name: str):
         return self._get_filepath(resource_name=resource_name) + METADATA_JSON_SUFFIX
@@ -366,12 +384,28 @@ class FileStorage(AbstractStorage):
         logging.debug(f"Reading {filepath}")
         return open(filepath, "rb")
 
-    def find_resources(self, *args, **kwargs):
-        for rt, _ds, filenames in os.walk * (self.__location):
+    def find_resources(self, *patterns, **kwargs) -> Iterable[Resource]:
+        for rt, _ds, filenames in os.walk(self.__location):
             for filename in filenames:
-                # filepath = os.path.join(rt, filename)
-                # TODO
-                pass
+                # find only metadata
+                if not filename.endswith(METADATA_JSON_SUFFIX):
+                    continue
+                suffix_len = len(METADATA_JSON_SUFFIX)
+                filename = filename[:-suffix_len]
+                filepath = os.path.join(rt, filename)
+                filepath_rel = os.path.relpath(filepath, self.__location)
+                name = filepath_rel.replace("\\", "/")
+                if not all(re.match(f".*{pat}", name) for pat in patterns):
+                    continue
+
+                # exists = os.path.isfile(filepath)
+                if self._validate_name(name) != name:
+                    logging.warning(f"invalid name: {name}")
+
+                if not os.path.isfile(filepath):
+                    logging.info(f"only metadata: {name}")
+
+                yield self.resource(name=name)
 
 
 class Storage(FileStorage):
