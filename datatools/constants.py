@@ -33,3 +33,4 @@ LOCALHOST = "localhost"
 
 
 STORAGE_SCHEME = "data"
+RESOURCE_URI_PREFIX = f"{STORAGE_SCHEME}:///"

@@ -15,6 +15,7 @@ from datatools.constants import DEFAULT_HASH_METHOD
 from datatools.exceptions import DataExists
 from datatools.storage import StorageTemp
 from datatools.utils import (
+    as_uri,
     filepath_abs_to_uri,
     get_free_port,
     get_sqlite_query_uri,
@@ -196,3 +197,11 @@ class TestLocalStorage(TestBase):
         res = self.storage.resource(uri)
         data = res.load()
         self.assertEqual(data["value"], 103)
+
+    def test_disallow_filepath_in_storage(self):
+        """When using file storage, a file:// source must not
+        be inside the storage location
+        """
+        storage_uri = as_uri(self.storage._location)
+        file_uri = storage_uri + "test"
+        self.assertRaises(Exception, self.storage.resource, file_uri)

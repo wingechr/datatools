@@ -10,7 +10,7 @@ from urllib.parse import parse_qs, unquote, urlencode, urlsplit, urlunsplit
 import sqlalchemy as sa
 
 from .classes import RegistryAbstractBase
-from .constants import PARAM_SQL_QUERY, STORAGE_SCHEME
+from .constants import PARAM_SQL_QUERY, RESOURCE_URI_PREFIX
 from .utils import (
     BytesIteratorBuffer,
     get_default_media_data_type_by_name,
@@ -66,7 +66,7 @@ class ResourceGenerator(AbstractDataGenerator):
         _description_
     """
 
-    _name_prefix = STORAGE_SCHEME + ":///"
+    _name_prefix = RESOURCE_URI_PREFIX
 
     @classmethod
     def _is_class_for(cls, source: Any) -> bool:

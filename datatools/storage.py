@@ -15,14 +15,15 @@ from . import generators, loaders  # noqa
 from .constants import (
     GLOBAL_LOCATION,
     MEDIA_TYPE_METADATA_PATH,
+    RESOURCE_URI_PREFIX,
     ROOT_METADATA_PATH,
-    STORAGE_SCHEME,
 )
-from .exceptions import DataDoesNotExists, DataExists
+from .exceptions import DataDoesNotExists, DataExists, DatatoolsException
 from .generators import AbstractDataGenerator
 from .loaders import AbstractConverter
 from .utils import (
     ByteBufferWrapper,
+    as_uri,
     get_now_str,
     get_resource_path_name,
     get_user_w_host,
@@ -36,22 +37,10 @@ TEMPFILE_SUFFIX = ".tmp"
 
 
 class AbstractStorage(abc.ABC):
-    def resource(self, source: Any, name: Union[str, Callable] = None) -> "Resource":
-        """Create resource descriptor.
-
-        Parameters
-        ----------
-        source : Any
-            _description_
-        name : Union[str, Callable], optional
-            _description_, by default None
-
-        Returns
-        -------
-        Resource
-            _description_
-        """
-        return Resource(storage=self, source=source, name=name)
+    @abc.abstractmethod
+    def resource(
+        self, source: Any, name: Union[str, Callable] = None
+    ) -> "Resource": ...
 
     @abc.abstractmethod
     def _resource_delete(self, resource_name: str) -> None: ...
@@ -150,7 +139,7 @@ class Resource:
 
     @property
     def uri(self) -> str:
-        return f"{STORAGE_SCHEME}:///{self.name}"
+        return f"{RESOURCE_URI_PREFIX}{self.name}"
 
     @property
     def metadata(self) -> "Metadata":
@@ -288,6 +277,7 @@ class Storage(AbstractStorage):
 
     def __init__(self, location: str = None):
         self.__location = os.path.abspath(os.path.realpath(location or "."))
+        self.__uri = as_uri(self._location)
 
         # when loading metadata from filesystem: cache it
         # so we can query multiple times
@@ -297,8 +287,41 @@ class Storage(AbstractStorage):
     def _location(self):
         return self.__location
 
+    @property
+    def _uri(self):
+        return self.__uri
+
     def __str__(self):
         return self._location
+
+    def resource(self, source: Any, name: Union[str, Callable] = None) -> "Resource":
+        """Create resource descriptor.
+
+        Parameters
+        ----------
+        source : Any
+            _description_
+        name : Union[str, Callable], optional
+            _description_, by default None
+
+        Returns
+        -------
+        Resource
+            _description_
+        """
+        self._validate_source(source)
+        return Resource(storage=self, source=source, name=name)
+
+    def _validate_source(self, source) -> None:
+        # A file:// source must not be inside the storage location
+        if isinstance(source, str):
+            if source.startswith(self._uri):
+                # for suggested uri: replace prefix
+                suggested_uri = source.replace(self._uri, RESOURCE_URI_PREFIX)
+                print(suggested_uri)
+                raise DatatoolsException(
+                    f"Source already in storge, maybe you want to use {suggested_uri}"
+                )
 
     def _get_filepath(self, resource_name: str):
         relpath = resource_name
@@ -410,16 +433,16 @@ class Storage(AbstractStorage):
                 if not all(re.match(f".*{pat}", name) for pat in patterns):
                     continue
 
-                uri = STORAGE_SCHEME + ":///" + name
+                uri = RESOURCE_URI_PREFIX + name
 
                 yield self.resource(uri)
 
     def _validate_name(self, name: str) -> str:
         name_new = get_resource_path_name(name)
         if (
-            not name_new
-            or name_new.endswith(METADATA_JSON_SUFFIX)
-            or name_new.endswith(TEMPFILE_SUFFIX)
+            not name_new  # must no be empty
+            or name_new.endswith(METADATA_JSON_SUFFIX)  # no metadata
+            or name_new.endswith(TEMPFILE_SUFFIX)  # no temporary
         ):
             raise ValueError(f"Invalid name: {name_new}")
         return name_new
