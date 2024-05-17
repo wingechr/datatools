@@ -106,6 +106,7 @@ class TestLocalStorage(TestBase):
         logging.debug("get metadata")
 
         metadata_b_c = res.metadata.query("b.c")
+
         self.assertTrue(objects_euqal(metadata_b_c, ["test", "test2"]), metadata_b_c)
         metadata_all = res.metadata.query()
         self.assertTrue(

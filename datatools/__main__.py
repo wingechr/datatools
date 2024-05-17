@@ -3,7 +3,7 @@
 import json
 import logging
 import sys
-from typing import List, Tuple
+from typing import Any, List, Tuple
 
 import click
 
@@ -12,6 +12,13 @@ from datatools.constants import DEFAULT_LOCAL_LOCATION, GLOBAL_LOCATION
 from datatools.exceptions import DatatoolsException
 from datatools.storage import Metadata, Resource, Storage
 from datatools.utils import as_uri, json_serialize, parse_cli_metadata
+
+
+def print_output(obj: Any):
+    if not isinstance(obj, str):
+        obj = json.dumps(obj, indent=2, ensure_ascii=True, default=json_serialize)
+    # TODO: encode for stdout encoding?
+    print(obj)
 
 
 @click.group(name="datatools")
@@ -59,8 +66,7 @@ def main(
 @click.pass_obj
 def info(storage: Storage) -> None:
     info = {"Location": str(storage)}
-    for k, v in info.items():
-        print(f"{k}: {v}")
+    print_output(info)
 
 
 @main.command("search")
@@ -68,7 +74,7 @@ def info(storage: Storage) -> None:
 @click.argument("patterns", nargs=-1)
 def search(storage: Storage, patterns: List[str]) -> None:
     for res in storage.find_resources(*patterns):
-        print(res)
+        print_output(res.uri)
 
 
 @main.group("res")
@@ -89,14 +95,7 @@ def resource_download_save(resource: Resource) -> None:
         logging.info("Already saved")
     else:
         resource.save()
-    print(resource)
-
-
-@resource.group("meta")
-@click.pass_context
-def resource_meta(ctx: click.Context) -> None:
-    resource = ctx.obj
-    ctx.obj = resource.metadata
+    print_output(resource)
 
 
 @resource.command("info")
@@ -107,8 +106,14 @@ def resource_info(ctx: click.Context) -> None:
         "Name": resource.name,
         "Exists": resource.exists(),
     }
-    for k, v in info.items():
-        print(f"{k}: {v}")
+    print_output(info)
+
+
+@resource.group("meta")
+@click.pass_context
+def resource_meta(ctx: click.Context) -> None:
+    resource = ctx.obj
+    ctx.obj = resource.metadata
 
 
 @resource_meta.command("query")
@@ -117,7 +122,7 @@ def resource_info(ctx: click.Context) -> None:
 def resource_meta_query(metadata: Metadata, key: str = None) -> None:
     result = metadata.query(key)
     result_str = json.dumps(result, indent=2, ensure_ascii=True, default=json_serialize)
-    print(result_str)
+    print_output(result_str)
 
 
 @resource_meta.command("update", help="Multiple key=value pairs")
@@ -149,7 +154,7 @@ def _recursive_help(cmd=main, parent=None, path: Tuple[str] = None) -> str:
 
 @main.command("help-all")
 def help_all() -> None:
-    print(_recursive_help())
+    print_output(_recursive_help())
 
 
 if __name__ == "__main__":

@@ -296,32 +296,27 @@ class Storage(AbstractStorage):
 
     def _read_metadata(self, filepath_meta):
         if not os.path.isfile(filepath_meta):
+            logging.debug(f"no metadata file: {filepath_meta}")
             return {}
         with open(filepath_meta, "r", encoding="utf-8") as file:
             return json.load(file)
 
     def _metadata_update(self, resource_name: str, metadata: Dict[str, Any]) -> None:
         filepath_meta = self._get_filepath_metadata(resource_name=resource_name)
-        metadata_all = self._read_metadata(filepath_meta)
-        if resource_name not in metadata_all:
-            metadata_all[resource_name] = {}
+        metadata_res = self._read_metadata(filepath_meta)
 
-        metadata_res = metadata_all[resource_name]
         for key, val in metadata.items():
             key_pattern = jsonpath_ng.parse(key)
             key_pattern.update_or_create(metadata_res, val)
 
-        sdata = json.dumps(metadata_all, ensure_ascii=False, indent=2)
+        sdata = json.dumps(metadata_res, ensure_ascii=False, indent=2)
         os.makedirs(os.path.dirname(filepath_meta), exist_ok=True)
         with open(filepath_meta, "w", encoding="utf-8") as file:
             file.write(sdata)
 
     def _metadata_query(self, resource_name: str, key: str = None) -> Any:
         filepath_meta = self._get_filepath_metadata(resource_name=resource_name)
-        metadata_all = self._read_metadata(filepath_meta)
-        if resource_name not in metadata_all:
-            metadata_all[resource_name] = {}
-        metadata_res = metadata_all[resource_name]
+        metadata_res = self._read_metadata(filepath_meta)
 
         key = key or ROOT_METADATA_PATH
         key_pattern = jsonpath_ng.parse(key)
@@ -371,17 +366,14 @@ class Storage(AbstractStorage):
                 filepath = os.path.join(rt, filename)
                 filepath_rel = os.path.relpath(filepath, self._location)
                 name = filepath_rel.replace("\\", "/")
+
+                # currently, we only match pattern agains name
                 if not all(re.match(f".*{pat}", name) for pat in patterns):
                     continue
 
-                # exists = os.path.isfile(filepath)
-                if self._validate_name(name) != name:
-                    logging.warning(f"invalid name: {name}")
+                uri = STORAGE_SCHEME + ":///" + name
 
-                if not os.path.isfile(filepath):
-                    logging.info(f"only metadata: {name}")
-
-                yield self.resource(name=name)
+                yield self.resource(uri)
 
     def _validate_name(self, name: str) -> str:
         name_new = get_resource_path_name(name)
