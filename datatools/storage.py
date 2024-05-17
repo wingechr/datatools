@@ -7,8 +7,6 @@ import tempfile
 from io import IOBase
 from typing import Any, Callable, Dict, Iterable, Type, Union
 
-import jsonpath_ng
-
 # TODO: must be loaded for classes to be registeres
 # there should be a better wayto do that
 from . import generators, loaders  # noqa
@@ -29,6 +27,8 @@ from .utils import (
     get_resource_path_name,
     get_user_w_host,
     json_dumps,
+    jsonpath_get,
+    jsonpath_update,
     make_file_readonly,
     rmtree_readonly,
 )
@@ -215,7 +215,6 @@ class Resource:
         new_metadata.update(metadata_encode)
         new_metadata.update(metadata_save)
 
-        print(new_metadata)
         self.metadata.update(new_metadata)
 
     def load(self, data_type: Type = None) -> Any:
@@ -357,8 +356,7 @@ class Storage(AbstractStorage):
         _metadata = self._read_metadata(filepath_meta)
 
         for key, val in metadata.items():
-            key_pattern = jsonpath_ng.parse(key)
-            key_pattern.update_or_create(_metadata, val)
+            jsonpath_update(_metadata, key, val)
 
         sdata = json_dumps(_metadata, ensure_ascii=False, indent=2)
         os.makedirs(os.path.dirname(filepath_meta), exist_ok=True)
@@ -377,8 +375,7 @@ class Storage(AbstractStorage):
         metadata = read_metadata(filepath_meta)
 
         key = key or ROOT_METADATA_PATH
-        key_pattern = jsonpath_ng.parse(key)
-        match = key_pattern.find(metadata)
+        match = jsonpath_get(metadata, key)
         result = [x.value for x in match]
 
         # TODO: we always get a list (multiple matches),

@@ -25,6 +25,7 @@ from typing import Any, Callable, Iterable, List, Tuple, Type, Union
 from urllib.parse import quote, unquote, unquote_plus, urlsplit
 
 import chardet
+import jsonpath_ng
 import numpy as np
 import pandas as pd
 import requests
@@ -916,3 +917,14 @@ def json_dumps(*args, default=json_serialize, **kwargs):
         # the ECMA-262 specification. If true, this will override allow_nan.
         ignore_nan=True,
     )
+
+
+def jsonpath_update(data: dict, key: str, val: Any) -> None:
+    key_pattern = jsonpath_ng.parse(key)
+    key_pattern.update_or_create(data, val)
+
+
+def jsonpath_get(data: dict, key) -> Any:
+    key_pattern = jsonpath_ng.parse(key)
+    match = key_pattern.find(data)
+    return match

@@ -17,7 +17,6 @@ from .utils import (
     get_function_info,
     get_sql_table_schema,
     json_dumps,
-    json_serialize,
     normalize_sql_query,
     remove_auth_from_uri_or_path,
     sa_create_engine,
@@ -106,10 +105,7 @@ class FunctionDataGenerator(AbstractDataGenerator):
             "kwargs": func_info["kwargs"],
         }
         job_descriptor_bytes = json_dumps(
-            job_descriptor_obj,
-            sort_keys=True,
-            ensure_ascii=False,
-            default=json_serialize,
+            job_descriptor_obj, sort_keys=True, ensure_ascii=False
         ).encode()
         job_descriptor_hash = hashlib.md5(job_descriptor_bytes).hexdigest()
         media_type, _data_type = self.get_media_data_type(name=None)

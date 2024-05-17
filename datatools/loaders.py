@@ -7,7 +7,7 @@ from typing import Any, Dict, Tuple, Type
 import pandas as pd
 
 from .classes import RegistryAbstractBase
-from .utils import json_dumps, json_serialize
+from .utils import json_dumps
 
 
 class AbstractConverter(RegistryAbstractBase):
@@ -76,13 +76,7 @@ class JsonConverter(StringConverter):
         indent = indent if indent is not None else self.default_indent
 
         metadata = {"encoding": encoding, "indent": indent}
-        sdata = json_dumps(
-            data,
-            indent=indent,
-            ensure_ascii=False,
-            sort_keys=False,
-            default=json_serialize,
-        )
+        sdata = json_dumps(data, indent=indent, ensure_ascii=False, sort_keys=False)
         bdata = sdata.encode()
         buffer = BytesIO(bdata)
         return buffer, metadata
