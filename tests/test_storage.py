@@ -18,6 +18,7 @@ from datatools.utils import (
     get_free_port,
     get_sqlite_query_uri,
     json_dumps,
+    platform_is_unix,
     wait_for_server,
 )
 
@@ -154,6 +155,8 @@ class TestLocalStorage(TestBase):
     def test_resource_sqlite_file(self):
         # sqlite file
         db_filepath = self.get_filepath("test.db")
+        if platform_is_unix():
+            db_filepath = "/" + db_filepath
 
         con = sqlite3.connect(db_filepath)
         cur = con.cursor()
