@@ -28,6 +28,7 @@ from .utils import (
     get_now_str,
     get_resource_path_name,
     get_user_w_host,
+    json_dumps,
     make_file_readonly,
     rmtree_readonly,
 )
@@ -214,6 +215,7 @@ class Resource:
         new_metadata.update(metadata_encode)
         new_metadata.update(metadata_save)
 
+        print(new_metadata)
         self.metadata.update(new_metadata)
 
     def load(self, data_type: Type = None) -> Any:
@@ -358,7 +360,7 @@ class Storage(AbstractStorage):
             key_pattern = jsonpath_ng.parse(key)
             key_pattern.update_or_create(_metadata, val)
 
-        sdata = json.dumps(_metadata, ensure_ascii=False, indent=2)
+        sdata = json_dumps(_metadata, ensure_ascii=False, indent=2)
         os.makedirs(os.path.dirname(filepath_meta), exist_ok=True)
 
         logging.debug("Writing %s", filepath_meta)

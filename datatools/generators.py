@@ -1,6 +1,5 @@
 import abc
 import hashlib
-import json
 import logging
 import os
 import re
@@ -17,6 +16,7 @@ from .utils import (
     get_default_suffix,
     get_function_info,
     get_sql_table_schema,
+    json_dumps,
     json_serialize,
     normalize_sql_query,
     remove_auth_from_uri_or_path,
@@ -105,7 +105,7 @@ class FunctionDataGenerator(AbstractDataGenerator):
             "function": function_name,
             "kwargs": func_info["kwargs"],
         }
-        job_descriptor_bytes = json.dumps(
+        job_descriptor_bytes = json_dumps(
             job_descriptor_obj,
             sort_keys=True,
             ensure_ascii=False,

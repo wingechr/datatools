@@ -1,4 +1,5 @@
 import atexit
+import base64
 import csv
 import datetime
 import functools
@@ -27,6 +28,7 @@ import chardet
 import numpy as np
 import pandas as pd
 import requests
+import simplejson
 import sqlalchemy as sa
 import sqlparse
 import tzlocal
@@ -409,6 +411,9 @@ def json_serialize(x):
         return int(x)
     elif np.issubdtype(type(x), np.floating):
         return float(x)
+    elif x == inspect._empty or pd.isna(x):
+        # various NULL types
+        return None
     elif isinstance(x, pd.Series):
         # classname
         x = x.astype("object")
@@ -417,6 +422,9 @@ def json_serialize(x):
     elif inspect.isclass(x):
         # classname
         return x.__name__
+    elif np.issubdtype(type(x), bytes):
+        # bytes to str:
+        return base64.b64encode(x).decode("utf-8")
     else:
         raise NotImplementedError(f"{x.__class__}: {x}")
 
@@ -555,7 +563,7 @@ class JsonSerializer(ByteSerializer):
     suffix = ".json"
 
     def dumps(self, data: object, **kwargs) -> bytes:
-        return json.dumps(data, default=json_serialize, **kwargs).encode()
+        return json_dumps(data, **kwargs).encode()
 
     def loads(self, data: bytes, **kwargs) -> object:
         return json.loads(data, **kwargs)
@@ -808,9 +816,18 @@ def get_function_info(obj: Callable) -> dict:
             value = bound_args[i]
         else:  # default value
             value = param.default
-            if value is inspect.Parameter.empty:
-                value = None
+
         kwargs[param.name] = value
+
+    # only return json serializable values, otherwise
+    # a string of the data class
+    def _serialize(x):
+        try:
+            return json.loads(json_dumps(x))
+        except Exception:
+            return f"{type(x)}"
+
+    kwargs = {k: _serialize(v) for k, v in kwargs.items()}
 
     func_name = func.__name__
     doc = inspect.cleandoc(inspect.getdoc(func) or "")
@@ -886,4 +903,16 @@ def get_sqlite_query_uri(
     cs = get_sqlite_connection_string(location=location)
     return get_sql_uri(
         connection_string_uri=cs, sql_query=sql_query, fragment_name=fragment_name
+    )
+
+
+def json_dumps(*args, default=json_serialize, **kwargs):
+    return simplejson.dumps(
+        *args,
+        **kwargs,
+        default=default,
+        # simplejson: If ignore_nan is true (default: False), then out of range float
+        # values (nan, inf, -inf) will be serialized as null in compliance with
+        # the ECMA-262 specification. If true, this will override allow_nan.
+        ignore_nan=True,
     )

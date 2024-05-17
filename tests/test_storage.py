@@ -1,6 +1,4 @@
 import hashlib
-import json
-import logging
 import os
 import sqlite3
 import subprocess as sp
@@ -19,6 +17,7 @@ from datatools.utils import (
     filepath_abs_to_uri,
     get_free_port,
     get_sqlite_query_uri,
+    json_dumps,
     wait_for_server,
 )
 
@@ -78,33 +77,33 @@ class TestLocalStorage(TestBase):
         res = self.storage.resource((lambda: bdata), name=data_path_user)
         self.assertFalse(res.exists())
 
-        logging.debug("save data")
+        # save data
         res.save()
         self.assertTrue(res.exists())
         self.assertEqual(res.name, "my/path.txt")
 
-        logging.debug("save again will fail")
+        # save again will fail
         self.assertRaises(DataExists, res.save)
 
-        logging.debug("read data")
+        # read data
         _data = res.load(data_type=bytes)
         self.assertEqual(bdata, _data)
 
-        logging.debug("delete (twice, which is allowed)")
+        # delete (twice, which is allowed
         res.delete()
 
-        logging.debug("save again")
+        # save again
         res.save()
 
-        logging.debug("save metadata")
+        # save metadata
         metadata = {"a": [1, 2, 3], "b.c[0]": "test"}
         res.metadata.update(metadata)
 
-        logging.debug("update metadata")
+        # update metadata
         metadata = {"b.c[1]": "test2"}
         res.metadata.update(metadata)
 
-        logging.debug("get metadata")
+        # get metadata
         metadata_b_c = res.metadata.query("b.c")
 
         self.assertTrue(objects_euqal(metadata_b_c, ["test", "test2"]), metadata_b_c)
@@ -178,7 +177,7 @@ class TestLocalStorage(TestBase):
         # create files in static dir
         fpath = self.get_filepath("testfile.json")
         with open(fpath, "w", encoding="utf-8") as file:
-            json.dump({"value": 103}, file, ensure_ascii=False)
+            file.write(json_dumps({"value": 103}, ensure_ascii=False))
 
         # load from path
         uri = filepath_abs_to_uri(Path(fpath))
@@ -190,7 +189,7 @@ class TestLocalStorage(TestBase):
         # create files in static dir
         fpath = self.get_filepath("testfile.json")
         with open(fpath, "w", encoding="utf-8") as file:
-            json.dump({"value": 103}, file, ensure_ascii=False)
+            file.write(json_dumps({"value": 103}, ensure_ascii=False))
 
         # load from webserver
         uri = self.get_url("testfile.json")

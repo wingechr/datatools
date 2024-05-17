@@ -15,14 +15,14 @@ import pandas as pd
 import requests
 import sqlalchemy as sa
 
-from .constants import PARAM_SQL_QUERY
-from .schema import infer_schema_from_objects
-from .utils import (
+from datatools.constants import PARAM_SQL_QUERY
+from datatools.schema import infer_schema_from_objects
+from datatools.utils import (
     get_byte_serializer,
     get_df_table_schema,
     get_resource_path_name,
     get_sql_table_schema,
-    json_serialize,
+    json_dumps,
     normalize_sql_query,
     parse_content_type,
     remove_auth_from_uri_or_path,
@@ -250,9 +250,7 @@ class FileLoaderJson(FileLoaderOpen_):
         if not isinstance(data, (list, dict)):
             raise TypeError(type(data).__name__)
 
-        stringdata = json.dumps(
-            data, indent=JSON_INDENT, ensure_ascii=False, default=json_serialize
-        )
+        stringdata = json_dumps(data, indent=JSON_INDENT, ensure_ascii=False)
         bytedata = stringdata.encode(JSON_ENCODING)
 
         metadata = {}

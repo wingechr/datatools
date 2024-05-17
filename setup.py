@@ -21,6 +21,7 @@ if __name__ == "__main__":
             "frictionless~=4.40",  # frictionless 5 changes validation
             "jsonschema",
             "genson",
+            "simplejson",
         ],
         install_recommends=[  # this does not do anything, just for information
             "geopandas",

@@ -1,7 +1,6 @@
-import json
 import logging
 
-from datatools.utils import json_serialize
+from datatools.utils import json_dumps
 
 logging.basicConfig(
     format="[%(asctime)s %(levelname)7s] %(message)s",
@@ -11,6 +10,6 @@ logging.basicConfig(
 
 
 def objects_euqal(left, right):
-    left = json.dumps(left, sort_keys=True, default=json_serialize)
-    right = json.dumps(right, sort_keys=True, default=json_serialize)
+    left = json_dumps(left, sort_keys=True)
+    right = json_dumps(right, sort_keys=True)
     return left == right

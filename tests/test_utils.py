@@ -1,4 +1,5 @@
 # import logging
+import inspect
 import os
 import re
 import unittest
@@ -28,6 +29,7 @@ from datatools.utils import (
     is_callable,
     is_file_readonly,
     is_uri,
+    json_dumps,
     json_serialize,
     make_file_readonly,
     make_file_writable,
@@ -175,6 +177,10 @@ class TestUtils(unittest.TestCase):
     def test_json_serialize(self):
         res = json_serialize(object)
         self.assertEqual(res, "object")
+
+        # test various null types
+        for x in [None, inspect._empty, np.nan, pd.NA]:
+            self.assertEqual(json_dumps(x), "null")
 
     def test_get_df_table_schema(self):
         df = pd.DataFrame(

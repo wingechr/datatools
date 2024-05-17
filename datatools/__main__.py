@@ -1,6 +1,5 @@
 # coding: utf-8
 
-import json
 import logging
 import sys
 from typing import Any, List, Tuple
@@ -11,12 +10,12 @@ from datatools import __version__
 from datatools.constants import DEFAULT_LOCAL_LOCATION, GLOBAL_LOCATION
 from datatools.exceptions import DatatoolsException
 from datatools.storage import Metadata, Resource, Storage
-from datatools.utils import as_uri, json_serialize, parse_cli_metadata
+from datatools.utils import as_uri, json_dumps, parse_cli_metadata
 
 
 def print_output(obj: Any):
     if not isinstance(obj, str):
-        obj = json.dumps(obj, indent=2, ensure_ascii=False, default=json_serialize)
+        obj = json_dumps(obj, indent=2, ensure_ascii=False)
     # TODO: encoding = sys.stdout.encoding ?
     print(obj)
 
