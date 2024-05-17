@@ -112,13 +112,13 @@ def wait_for_server(url, timeout_s=30) -> None:
     while True:
         try:
             requests.head(url)
-            logging.debug(f"Server is online: {url}")
+            logging.debug("Server is online: %s", url)
             return True
         except requests.exceptions.ConnectionError:
             pass
 
         time_waited = time.time() - time_start
-        logging.debug(f"checking server ({time_waited}): {url}")
+        logging.debug("checking server (%s): %s", time_waited, url)
         if timeout_s is not None and time_waited >= timeout_s:
             break
         time.sleep(wait_s)
@@ -391,7 +391,7 @@ def parse_content_type(ctype: str) -> dict:
             value = value.strip()
             result[key] = value
         except Exception:
-            logging.warning(f"cannot parse {key_value}")
+            logging.warning("cannot parse %s", key_value)
 
     return result
 
@@ -427,14 +427,14 @@ def as_byte_iterator(data: Union[bytes, Iterable, BufferedReader]) -> Iterable[b
     elif isinstance(data, BufferedReader):
         while True:
             chunk = data.read(DEFAULT_BUFFER_SIZE)
-            logging.debug(f"read {len(chunk)} bytes")
+            logging.debug("read %s bytes", len(chunk))
             if not chunk:
                 break
             yield chunk
         try:
             data.close()
         except Exception as exc:
-            logging.warning(f"could not close BufferedReader: {exc}")
+            logging.warning("could not close BufferedReader: %s", exc)
     elif isinstance(data, Iterable):
         yield from data
     else:
@@ -444,7 +444,7 @@ def as_byte_iterator(data: Union[bytes, Iterable, BufferedReader]) -> Iterable[b
 def detect_encoding(sample_data: bytes) -> str:
     result = chardet.detect(sample_data)
     if result["confidence"] < 1:
-        logging.warning(f"Chardet encoding detection < 100%: {result}")
+        logging.warning("Chardet encoding detection < 100%: %s", result)
     return result["encoding"]
 
 
@@ -498,7 +498,7 @@ def get_df_table_schema(df: pd.DataFrame):
 def delete_file(filepath: str) -> str:
     if not os.path.exists(filepath):
         return
-    logging.debug(f"DELETING {filepath}")
+    logging.debug("deleting %s", filepath)
     make_file_writable(file_path=filepath)
     os.remove(filepath)
 

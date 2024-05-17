@@ -26,7 +26,7 @@ def infer_schema_from_objects(data: list):
         try:
             builder.add_object(item)
         except genson.schema.node.SchemaGenerationError as exc:
-            logging.warning(f"{exc}: ({type(item)})")
+            logging.warning("%s: %s", exc, type(item))
     item_schema = builder.to_schema()
     schema = {"type": "array", "items": item_schema}
     return schema
@@ -616,7 +616,7 @@ class SchemaDialectSqlalchemy(SchemaDialect):
                 const_cols = [self._get_column(c) for c in constraint.columns]
                 constraints.append(ConstraintForeignKey(columns=const_cols))
             else:
-                logging.error(f"Not implemented: {type(constraint)}")
+                logging.error("Not implemented: %s", type(constraint))
 
         schema = TableSchema(
             columns=columns,

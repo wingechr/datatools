@@ -37,6 +37,7 @@ class AbstractDataGenerator(RegistryAbstractBase):
     @classmethod
     def get_instance(cls, source: Any) -> "AbstractDataGenerator":
         subclass = cls._get_class(source=source)
+        logging.debug("Using class %s for %s", subclass, source)
         return subclass(source=source)
 
     def __init__(self, source: Any) -> None:
@@ -210,16 +211,16 @@ class SqlpDataGenerator(AbstractDataGenerator):
         query_str = urlencode(query_dict, doseq=True)
 
         connection_string = urlunsplit([url.scheme, url.netloc, path, query_str, None])
-        logging.debug(f"Connect: {connection_string}")
+        logging.debug("Connect: %s", connection_string)
         eng = sa_create_engine(connection_string)
         with eng.connect() as con:
             with con:
-                logging.debug(f"Exceute: {sql_query}")
+                logging.debug("Exceute: %s", sql_query)
                 res = con.execute(sa.text(sql_query))
                 data_schema = get_sql_table_schema(res.cursor)
-                logging.debug(f"Schema: {data_schema}")
+                logging.debug("Schema: %s", data_schema)
                 data = [rec._asdict() for rec in res.fetchall()]
-                logging.debug(f"Rows: {len(data)}")
+                logging.debug("Rows: %s", len(data))
         # make sure everything is closed
         eng.dispose()
 

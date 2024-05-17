@@ -432,7 +432,7 @@ class UriLoaderFile(UriLoader):
         metadata = {}
         metadata["source.path"] = remove_auth_from_uri_or_path(uri)
         file_path = uri_to_filepath_abs(uri)
-        logging.debug(f"OPEN: {file_path}")
+        logging.debug("open: %s", file_path)
         data = open(file_path, "rb")
 
         return data, metadata
@@ -466,7 +466,7 @@ class UriLoaderHttp(UriLoader):
         # TODO: is self.query encoded properly automatically?
 
         url = urlunsplit([url.scheme, netloc, url.path, url.query, None])
-        logging.debug(f"OPEN: {url}")
+        logging.debug("open: %s", url)
         res = requests.get(url, stream=True, headers=headers)
 
         res.raise_for_status()
@@ -504,16 +504,16 @@ class UriLoaderSql(UriLoader):
         query_str = urlencode(query_dict, doseq=True)
 
         connection_string = urlunsplit([url.scheme, url.netloc, path, query_str, None])
-        logging.debug(f"Connect: {connection_string}")
+        logging.debug("Connect: %s", connection_string)
         eng = sa_create_engine(connection_string)
         with eng.connect() as con:
             with con:
-                logging.debug(f"Exceute: {sql_query}")
+                logging.debug("Exceute: %s", sql_query)
                 res = con.execute(sa.text(sql_query))
                 data_schema = get_sql_table_schema(res.cursor)
-                logging.debug(f"Schema: {data_schema}")
+                logging.debug("Schema: %s", data_schema)
                 data = [rec._asdict() for rec in res.fetchall()]
-                logging.debug(f"Rows: {len(data)}")
+                logging.debug("Rows: %s", len(data))
         # make sure everything is closed
         eng.dispose()
 

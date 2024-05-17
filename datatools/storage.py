@@ -24,11 +24,11 @@ from .loaders import AbstractConverter
 from .utils import (
     ByteBufferWrapper,
     as_uri,
+    delete_file,
     get_now_str,
     get_resource_path_name,
     get_user_w_host,
     make_file_readonly,
-    make_file_writable,
     rmtree_readonly,
 )
 
@@ -318,7 +318,6 @@ class Storage(AbstractStorage):
             if source.startswith(self._uri):
                 # for suggested uri: replace prefix
                 suggested_uri = source.replace(self._uri, RESOURCE_URI_PREFIX)
-                print(suggested_uri)
                 raise DatatoolsException(
                     f"Source already in storge, maybe you want to use {suggested_uri}"
                 )
@@ -336,11 +335,8 @@ class Storage(AbstractStorage):
     def _resource_delete(self, resource_name: str) -> None:
         filepath = self._get_filepath(resource_name=resource_name)
         filepath_meta = self._get_filepath_metadata(resource_name=resource_name)
-        logging.debug(f"Deleting {filepath}")
-        make_file_writable(filepath)
-        os.remove(filepath)
-        if os.path.isfile(filepath_meta):
-            os.remove(filepath_meta)
+        delete_file(filepath)
+        delete_file(filepath_meta)
 
     def _resource_exists(self, resource_name: str) -> bool:
         filepath = self._get_filepath(resource_name=resource_name)
@@ -348,9 +344,9 @@ class Storage(AbstractStorage):
 
     def _read_metadata(self, filepath_meta):
         if not os.path.isfile(filepath_meta):
-            logging.debug(f"no metadata file: {filepath_meta}")
+            logging.debug("no metadata file: %s", filepath_meta)
             return {}
-        logging.debug(f"Reading {filepath_meta}")
+        logging.debug("Reading %s", filepath_meta)
         with open(filepath_meta, "r", encoding="utf-8") as file:
             return json.load(file)
 
@@ -365,7 +361,7 @@ class Storage(AbstractStorage):
         sdata = json.dumps(_metadata, ensure_ascii=False, indent=2)
         os.makedirs(os.path.dirname(filepath_meta), exist_ok=True)
 
-        logging.debug(f"Writing {filepath_meta}")
+        logging.debug("Writing %s", filepath_meta)
         with open(filepath_meta, "w", encoding="utf-8") as file:
             file.write(sdata)
 
@@ -398,23 +394,22 @@ class Storage(AbstractStorage):
         filepath = self._get_filepath(resource_name=resource_name)
         filepath_temp = filepath + TEMPFILE_SUFFIX
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        logging.debug(f"Writing {filepath}")
 
         assert not os.path.exists(filepath_temp)  # should not exist
-        logging.debug(f"Writing {filepath_temp}")
+        logging.debug("Writing %s", filepath_temp)
         with open(filepath_temp, "wb") as file:
             # TODO: chunked
             file.write(byte_buffer.read())
 
         assert not os.path.exists(filepath)  # should not exist
-        logging.debug(f"Renaming {filepath_temp} => {filepath}")
+        logging.debug("Renaming %s => %s", filepath_temp, filepath)
         os.rename(filepath_temp, filepath)
 
         make_file_readonly(filepath)
 
     def _bytes_open(self, resource_name: str) -> IOBase:
         filepath = self._get_filepath(resource_name=resource_name)
-        logging.debug(f"Reading {filepath}")
+        logging.debug("Reading %s", filepath)
         return open(filepath, "rb")
 
     def find_resources(self, *patterns, **kwargs) -> Iterable[Resource]:

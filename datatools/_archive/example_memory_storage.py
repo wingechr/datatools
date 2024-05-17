@@ -9,7 +9,7 @@ class TestMemoryStorage:
         self.__metadata = {}
 
     def _resource_delete(self, resource_name: str) -> None:
-        logging.debug(f"Deleting {resource_name}")
+        logging.debug("Deleting %s", resource_name)
         del self.__data[resource_name]
         del self.__metadata[resource_name]
 
@@ -30,11 +30,11 @@ class TestMemoryStorage:
         return metadata_res.get(key)
 
     def _bytes_write(self, resource_name: str, byte_buffer: IOBase) -> None:
-        logging.debug(f"Writing {resource_name}")
+        logging.debug("Writing %s", resource_name)
         bdata = byte_buffer.read()
         self.__data[resource_name] = bdata
 
     def _bytes_open(self, resource_name: str) -> IOBase:
-        logging.debug(f"Reading {resource_name}")
+        logging.debug("Reading %s", resource_name)
         bdata = self.__data[resource_name]
         return BytesIO(bdata)
