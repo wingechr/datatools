@@ -121,7 +121,7 @@ class Resource:
         self,
         storage: "AbstractStorage",
         source: Any,
-        name: Union[str | Callable] = None,
+        name: Union[str, Callable] = None,
     ) -> None:
         self.__storage = storage
         self.__data_generator = AbstractDataGenerator.get_instance(source=source)
