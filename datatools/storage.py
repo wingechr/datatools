@@ -150,7 +150,7 @@ class Resource:
 
     @property
     def uri(self) -> str:
-        return f"{STORAGE_SCHEME}://{self.name}"
+        return f"{STORAGE_SCHEME}:///{self.name}"
 
     @property
     def metadata(self) -> "Metadata":

@@ -66,7 +66,7 @@ class ResourceGenerator(AbstractDataGenerator):
         _description_
     """
 
-    _name_prefix = STORAGE_SCHEME + "://"
+    _name_prefix = STORAGE_SCHEME + ":///"
 
     @classmethod
     def _is_class_for(cls, source: Any) -> bool:
@@ -78,7 +78,8 @@ class ResourceGenerator(AbstractDataGenerator):
         return self._source[len_prefix:]
 
     def get_media_data_type(self, name: str) -> Tuple[str, Type]:
-        raise NotImplementedError()
+        # should be determined by resource metadata
+        return None, None
 
     def create_data_metadata(self, **kwargs) -> Tuple[Any, Dict[str, Any]]:
         # TODO: if original source was a string: maybe we can get it from there?

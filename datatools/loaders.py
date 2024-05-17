@@ -17,7 +17,7 @@ class AbstractConverter(RegistryAbstractBase):
     decode_kwargs = []
 
     @classmethod
-    def _is_class_for(cls, media_type: str, data_type: Type) -> bool:
+    def _is_class_for(cls, media_type: str, data_type: Type = None) -> bool:
         return False
 
     @classmethod
@@ -38,8 +38,10 @@ class StringConverter(AbstractConverter):
     default_encoding = "utf-8"
 
     @classmethod
-    def _is_class_for(cls, media_type: str, data_type: Type) -> bool:
-        return issubclass(data_type, str) and media_type.startswith("text/")
+    def _is_class_for(cls, media_type: str, data_type: Type = None) -> bool:
+        return (not data_type or issubclass(data_type, str)) and media_type.startswith(
+            "text/"
+        )
 
     def encode(
         self, data: Any, encoding=None, **kwargs
@@ -64,7 +66,7 @@ class JsonConverter(StringConverter):
     default_indent = 2
 
     @classmethod
-    def _is_class_for(cls, media_type: str, data_type: Type) -> bool:
+    def _is_class_for(cls, media_type: str, data_type: Type = None) -> bool:
         return media_type in ("application/json", "text/json")
 
     def encode(
@@ -95,7 +97,7 @@ class JsonConverter(StringConverter):
 
 class PickleConverter(AbstractConverter):
     @classmethod
-    def _is_class_for(cls, media_type: str, data_type: Type) -> bool:
+    def _is_class_for(cls, media_type: str, data_type: Type = None) -> bool:
         return media_type == "application/x-pickle"
 
     def encode(self, data: object, **kwargs) -> Tuple[IOBase, Dict[str, Any]]:
@@ -107,8 +109,8 @@ class PickleConverter(AbstractConverter):
 
 class BytesPassthroughConverter(AbstractConverter):
     @classmethod
-    def _is_class_for(cls, media_type: str, data_type: Type) -> bool:
-        return issubclass(data_type, (bytes, IOBase))
+    def _is_class_for(cls, media_type: str, data_type: Type = None) -> bool:
+        return data_type and issubclass(data_type, (bytes, IOBase))
 
     def encode(self, data: Any, **kwargs) -> Tuple[IOBase, Dict[str, Any]]:
         if isinstance(data, bytes):
@@ -121,8 +123,10 @@ class BytesPassthroughConverter(AbstractConverter):
 
 class TestPandasCsvConverter(AbstractConverter):
     @classmethod
-    def _is_class_for(cls, media_type: str, data_type: Type) -> bool:
-        return issubclass(data_type, pd.DataFrame) and media_type == "text/csv"
+    def _is_class_for(cls, media_type: str, data_type: Type = None) -> bool:
+        return (
+            not data_type or issubclass(data_type, pd.DataFrame)
+        ) and media_type == "text/csv"
 
     def encode(
         self, data: pd.DataFrame, encoding=None, **kwargs
