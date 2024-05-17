@@ -798,6 +798,20 @@ def get_function_info(obj: Callable) -> dict:
                 continue
             bound_kwargs[pname] = value
 
+    # get bound parameters
+    kwargs = bound_kwargs
+    for i, param in enumerate(inspect.signature(func).parameters.values()):
+        # TODO: use param.kind  # inspect.Parameter.POSITIONAL_OR_KEYWORD | POSITIONAL_ONLY | KEYWORD_ONLY # noqa
+        if param.name in kwargs:
+            continue
+        elif i < len(bound_args):  # map args => named kwargs
+            value = bound_args[i]
+        else:  # default value
+            value = param.default
+            if value is inspect.Parameter.empty:
+                value = None
+        kwargs[param.name] = value
+
     func_name = func.__name__
     doc = inspect.cleandoc(inspect.getdoc(func) or "")
     file = inspect.getfile(func)
@@ -823,22 +837,11 @@ def get_function_info(obj: Callable) -> dict:
     # find git repository
     for path in Path(file).parents:
         if (path / ".git").exists():
-            git_info = get_git_info(str(path))
+            try:
+                git_info = get_git_info(str(path))
+            except Exception:
+                pass
             break
-
-    # get bound parameters
-    kwargs = bound_kwargs
-    for i, param in enumerate(inspect.signature(func).parameters.values()):
-        # TODO: use param.kind  # inspect.Parameter.POSITIONAL_OR_KEYWORD | POSITIONAL_ONLY | KEYWORD_ONLY # noqa
-        if param.name in kwargs:
-            continue
-        elif i < len(bound_args):  # map args => named kwargs
-            value = bound_args[i]
-        else:  # default value
-            value = param.default
-            if value is inspect.Parameter.empty:
-                value = None
-        kwargs[param.name] = value
 
     result = {
         "name": func_name,
