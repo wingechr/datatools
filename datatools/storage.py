@@ -259,10 +259,39 @@ class Resource:
         return self._storage._bytes_open(self.name)
 
 
+class MetadataMemCache:
+    def __init__(self):
+        self._data = {}
+        self._last_updated = {}
+
+    def cache(self, func_get):
+        def func(filepath):
+            if os.path.exists(filepath):
+                timestamp = os.path.getmtime(filepath)
+                if self._last_updated.get(filepath) == timestamp:
+                    # use cache
+                    return self._data[filepath]
+            # use original function and store in cache
+            data = func_get(filepath)
+
+            if os.path.exists(filepath):
+                timestamp = os.path.getmtime(filepath)
+                self._last_updated[filepath] = timestamp
+                self._data[filepath] = data
+
+            return data
+
+        return func
+
+
 class Storage(AbstractStorage):
 
     def __init__(self, location: str = None):
         self.__location = os.path.abspath(os.path.realpath(location or "."))
+
+        # when loading metadata from filesystem: cache it
+        # so we can query multiple times
+        self.__metadata_memcache = MetadataMemCache()
 
     @property
     def _location(self):
@@ -298,29 +327,37 @@ class Storage(AbstractStorage):
         if not os.path.isfile(filepath_meta):
             logging.debug(f"no metadata file: {filepath_meta}")
             return {}
+        logging.debug(f"Reading {filepath_meta}")
         with open(filepath_meta, "r", encoding="utf-8") as file:
             return json.load(file)
 
     def _metadata_update(self, resource_name: str, metadata: Dict[str, Any]) -> None:
         filepath_meta = self._get_filepath_metadata(resource_name=resource_name)
-        metadata_res = self._read_metadata(filepath_meta)
+        _metadata = self._read_metadata(filepath_meta)
 
         for key, val in metadata.items():
             key_pattern = jsonpath_ng.parse(key)
-            key_pattern.update_or_create(metadata_res, val)
+            key_pattern.update_or_create(_metadata, val)
 
-        sdata = json.dumps(metadata_res, ensure_ascii=False, indent=2)
+        sdata = json.dumps(_metadata, ensure_ascii=False, indent=2)
         os.makedirs(os.path.dirname(filepath_meta), exist_ok=True)
+
+        logging.debug(f"Writing {filepath_meta}")
         with open(filepath_meta, "w", encoding="utf-8") as file:
             file.write(sdata)
 
     def _metadata_query(self, resource_name: str, key: str = None) -> Any:
+
         filepath_meta = self._get_filepath_metadata(resource_name=resource_name)
-        metadata_res = self._read_metadata(filepath_meta)
+
+        read_metadata = self._read_metadata
+        read_metadata = self.__metadata_memcache.cache(read_metadata)
+
+        metadata = read_metadata(filepath_meta)
 
         key = key or ROOT_METADATA_PATH
         key_pattern = jsonpath_ng.parse(key)
-        match = key_pattern.find(metadata_res)
+        match = key_pattern.find(metadata)
         result = [x.value for x in match]
 
         # TODO: we always get a list (multiple matches),
@@ -341,11 +378,13 @@ class Storage(AbstractStorage):
         logging.debug(f"Writing {filepath}")
 
         assert not os.path.exists(filepath_temp)  # should not exist
+        logging.debug(f"Writing {filepath_temp}")
         with open(filepath_temp, "wb") as file:
             # TODO: chunked
             file.write(byte_buffer.read())
 
         assert not os.path.exists(filepath)  # should not exist
+        logging.debug(f"Renaming {filepath_temp} => {filepath}")
         os.rename(filepath_temp, filepath)
 
         make_file_readonly(filepath)
