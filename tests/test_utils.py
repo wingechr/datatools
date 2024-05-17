@@ -357,8 +357,7 @@ class TestUtils(unittest.TestCase):
 
         # git
         git_info = info2["git"]
-        # TODO: remove hard coded value
-        self.assertEqual(git_info["origin"], "git@github.com:wingechr/datatools.git")
+        self.assertTrue(git_info["origin"])
 
     def test_is_callable(self):
 
