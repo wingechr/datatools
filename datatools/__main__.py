@@ -16,8 +16,8 @@ from datatools.utils import as_uri, json_serialize, parse_cli_metadata
 
 def print_output(obj: Any):
     if not isinstance(obj, str):
-        obj = json.dumps(obj, indent=2, ensure_ascii=True, default=json_serialize)
-    # TODO: encode for stdout encoding?
+        obj = json.dumps(obj, indent=2, ensure_ascii=False, default=json_serialize)
+    # TODO: encoding = sys.stdout.encoding ?
     print(obj)
 
 
@@ -121,8 +121,7 @@ def resource_meta(ctx: click.Context) -> None:
 @click.argument("key", required=False)
 def resource_meta_query(metadata: Metadata, key: str = None) -> None:
     result = metadata.query(key)
-    result_str = json.dumps(result, indent=2, ensure_ascii=True, default=json_serialize)
-    print_output(result_str)
+    print_output(result)
 
 
 @resource_meta.command("update", help="Multiple key=value pairs")
