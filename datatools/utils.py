@@ -3,6 +3,7 @@ import csv
 import datetime
 import functools
 import hashlib
+import importlib
 import inspect
 import io
 import json
@@ -13,6 +14,7 @@ import re
 import shutil
 import socket
 import stat
+import subprocess
 import sys
 import time
 from contextlib import ExitStack as _ExitStack
@@ -735,6 +737,44 @@ def get_default_suffix(media_type: str) -> str:
     }.get(media_type)
 
 
+def get_git_info(repo_path: str) -> dict:
+    """get git branch,commit and is clean status
+    from a local git repository, given as a path"""
+
+    def run_git_command(command, cwd):
+        result = subprocess.run(
+            command, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+        if result.returncode != 0:
+            logging.warning(result.stderr.strip())
+            return None
+        return result.stdout.strip()
+
+    # Get the current branch name
+    branch = run_git_command(["git", "rev-parse", "--abbrev-ref", "HEAD"], repo_path)
+
+    # Get the latest commit hash
+    commit = run_git_command(["git", "rev-parse", "HEAD"], repo_path)
+
+    # Get the origin remote URL
+    origin_url = run_git_command(
+        ["git", "config", "--get", "remote.origin.url"], repo_path
+    )
+
+    # Check if the repository is clean
+    status = run_git_command(["git", "status", "--porcelain"], repo_path)
+    is_clean = None if status is None else len(status) == 0
+    if not is_clean:
+        logging.warning("git repo is not clean")
+
+    return {
+        "branch": branch,
+        "commit": commit,
+        "is_clean": is_clean,
+        "origin": origin_url,
+    }
+
+
 def get_function_info(obj: Callable) -> dict:
     if isinstance(obj, functools.partial):
         func = obj.func
@@ -745,32 +785,70 @@ def get_function_info(obj: Callable) -> dict:
         bound_args = ()
         bound_kwargs = {}
 
-        for cell in func.__closure__ or []:
-            if not hasattr(cell, "__name__"):
-                continue  # how can we get the name?
-            bound_kwargs[cell.__name__] = cell.cell_contents
+    # get closure/context
+    if func.__closure__:
+        for pname, cell in zip(func.__code__.co_freevars, func.__closure__):
+            # ignore callables
+            # in decorated function, the base function is one of these parameters
+            # and there is no way of separating it from function arguments that
+            # are also functions.
+            # But we want serializable data only anyways, so drop all
+            value = cell.cell_contents
+            if isinstance(value, Callable):
+                continue
+            bound_kwargs[pname] = value
 
-    name = func.__name__
+    func_name = func.__name__
     doc = inspect.cleandoc(inspect.getdoc(func) or "")
     file = inspect.getfile(func)
-    # mod = inspect.getmodule(func) # TODO: get version (or version of parent module?)
 
-    kwargs = {}
+    # get module version (or parent module version)
+    version = None
+    try:
+        mod_path = inspect.getmodule(func).__name__.split(".")
+        while mod_path and not version:
+            mod_name = ".".join(mod_path)
+            mod = importlib.import_module(mod_name)
+            try:
+                version = getattr(mod, "__version__")
+                version = f"{mod_name} {version}"
+            except AttributeError:
+                pass
+            mod_path = mod_path[:-1]
+    except Exception:
+        pass
+
+    # get git info
+    git_info = None
+    # find git repository
+    for path in Path(file).parents:
+        if (path / ".git").exists():
+            git_info = get_git_info(str(path))
+            break
+
+    # get bound parameters
+    kwargs = bound_kwargs
     for i, param in enumerate(inspect.signature(func).parameters.values()):
-        if i < len(bound_args):
+        # TODO: use param.kind  # inspect.Parameter.POSITIONAL_OR_KEYWORD | POSITIONAL_ONLY | KEYWORD_ONLY # noqa
+        if param.name in kwargs:
+            continue
+        elif i < len(bound_args):  # map args => named kwargs
             value = bound_args[i]
-        elif param.name in bound_kwargs:
-            value = bound_kwargs[param.name]
-        else:
+        else:  # default value
             value = param.default
             if value is inspect.Parameter.empty:
                 value = None
-
-        # param.kind  # inspect.Parameter.POSITIONAL_OR_KEYWORD
-        # | POSITIONAL_ONLY | KEYWORD_ONLY
         kwargs[param.name] = value
 
-    return {"name": name, "kwargs": kwargs, "doc": doc, "file": file}
+    result = {
+        "name": func_name,
+        "kwargs": kwargs,
+        "doc": doc,
+        "file": file,
+        "version": version,
+        "git": git_info,
+    }
+    return result
 
 
 def rmtree_readonly(path: str) -> None:

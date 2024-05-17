@@ -10,6 +10,7 @@ from tempfile import TemporaryDirectory
 import numpy as np
 import pandas as pd
 
+import datatools
 from datatools.utils import (
     CsvSerializer,
     as_byte_iterator,
@@ -236,54 +237,122 @@ class TestUtils(unittest.TestCase):
         )
 
     def test_get_function_info(self):
-        def myfunc(a, b, c=1, d=None):
+        """get information from different types of callables.
+        callables can be
+        - functions
+        - partials
+        - decorated functions (with closure)
+        - lambda expression
+
+        """
+        b = 100
+
+        # regular function
+        def myfunc(a, c=1, d=None):
             "myfunc docstring"
+            # b is from outer context
             return a + b + c + (d or 0)
 
-        myfunc_partial = partial(myfunc, 5, 10, d=20)
+        # function with partially bound args
+        myfunc_partial = partial(myfunc, 5, d=20)
 
-        def make_myfunc_closure(a):
-            b = 10
+        # decorated function (with closure)
+        def make_myfunc_closure(b=None):
+            a = 10
 
-            def myfunc_closure(c, d):
-                "myfunc docstring 2"
-                return myfunc(a=a, b=b, c=c, d=d)
+            def decorator(myfunc):
 
-            return myfunc_closure
+                def myfunc_closure(c, d):
+                    return myfunc(a=a, b=b, c=c, d=d)
 
-        _myfunc_closure = make_myfunc_closure(a=5)
+                myfunc_closure.__name__ = myfunc.__name__
+                myfunc_closure.__doc__ = myfunc.__doc__
 
+                return myfunc_closure
+
+            return decorator
+
+        _myfunc_closure = make_myfunc_closure(5)(myfunc)
+
+        # lambda expression
         f_lambda = lambda a, b, c, d: a + b + c + d  # noqa
+        f_lambda.__name__ = myfunc.__name__
+        f_lambda.__doc__ = myfunc.__doc__
 
         info = get_function_info(myfunc)
         info_partial = get_function_info(myfunc_partial)
         info_closure = get_function_info(_myfunc_closure)
         info_lambda = get_function_info(f_lambda)
 
+        # check generated names
         self.assertEqual(info["name"], "myfunc")
-        self.assertEqual(info_partial["name"], "myfunc")  # name or original function
-        self.assertEqual(info_closure["name"], "myfunc_closure")
-        self.assertEqual(info_lambda["name"], "<lambda>")
+        # partial: name of original function
+        self.assertEqual(info_partial["name"], "myfunc")
+        # decorator: inner name (from inside decorator)
+        # but: in this example, we set myfunc_closure.__name__ = myfunc.__name__
+        self.assertEqual(info_closure["name"], "myfunc")
+        self.assertEqual(info_lambda["name"], "myfunc")  # manually set
 
+        # get docstrings
         self.assertEqual(info["doc"], "myfunc docstring")
-        self.assertEqual(
-            info_partial["doc"], "myfunc docstring"
-        )  # name or original function
-        self.assertEqual(info_closure["doc"], "myfunc docstring 2")
-        self.assertEqual(info_lambda["doc"], "")
+        self.assertEqual(info_partial["doc"], "myfunc docstring")
+        # decorator: from inside decorator
+        # but: in this example, we set myfunc_closure.__doc__ = myfunc.__doc__
+        self.assertEqual(info_closure["doc"], "myfunc docstring")
+        self.assertEqual(info_lambda["doc"], "myfunc docstring")  # manually set
 
-        self.assertDictEqual(info["kwargs"], {"a": None, "b": None, "c": 1, "d": None})
-        self.assertDictEqual(info_partial["kwargs"], {"a": 5, "b": 10, "c": 1, "d": 20})
-        self.assertDictEqual(info_closure["kwargs"], {"c": None, "d": None})
-        self.assertDictEqual(
-            info_lambda["kwargs"], {"a": None, "b": None, "c": None, "d": None}
-        )
-
+        # get file in which function is defined
         this_file = os.path.realpath(__file__)
         self.assertEqual(os.path.realpath(info["file"]), this_file)
         self.assertEqual(os.path.realpath(info_partial["file"]), this_file)
         self.assertEqual(os.path.realpath(info_closure["file"]), this_file)
         self.assertEqual(os.path.realpath(info_lambda["file"]), this_file)
+
+        # if possible: get bound values
+        # normal function: only get default values
+        self.assertDictEqual(
+            info["kwargs"],
+            {
+                "a": None,
+                "b": 100,  # from outer context
+                "c": 1,  # default value
+                "d": None,
+            },
+        )
+        # partial: get all bound
+        self.assertDictEqual(
+            info_partial["kwargs"],
+            {
+                "a": 5,  # from partial
+                "b": 100,  # from outer context
+                "c": 1,  # default value
+                "d": 20,  # from partial
+            },
+        )
+        # decorator/closure:
+        self.assertDictEqual(
+            info_closure["kwargs"],
+            {
+                "a": 10,  # from within decorator
+                "b": 5,  # from decorator call
+                "c": None,
+                "d": None,
+            },
+        )
+        # lmabda: nothing bound
+        self.assertDictEqual(
+            info_lambda["kwargs"], {"a": None, "b": None, "c": None, "d": None}
+        )
+
+        info2 = get_function_info(is_uri)
+
+        # version
+        self.assertEqual(info2["version"], f"datatools {datatools.__version__}")
+
+        # git
+        git_info = info2["git"]
+        # TODO: remove hard coded value
+        self.assertEqual(git_info["origin"], "git@github.com:wingechr/datatools.git")
 
     def test_is_callable(self):
 
