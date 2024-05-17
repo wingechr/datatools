@@ -570,7 +570,9 @@ class PickleSerializer(ByteSerializer):
         return pickle.loads(data, **kwargs)
 
 
-def get_sql_uri(connection_string_uri: str, sql_query: str) -> str:
+def get_sql_uri(
+    connection_string_uri: str, sql_query: str, fragment_name: str = None
+) -> str:
     sql_query = normalize_sql_query(sql_query)
 
     if "?" in connection_string_uri:
@@ -578,7 +580,8 @@ def get_sql_uri(connection_string_uri: str, sql_query: str) -> str:
     else:
         connection_string_uri += "?"
     uri = connection_string_uri + PARAM_SQL_QUERY + "=" + quote(sql_query)
-
+    if fragment_name:
+        uri = f"{uri}#{fragment_name}"
     return uri
 
 
@@ -783,3 +786,23 @@ def rmtree_readonly(path: str) -> None:
 
 def is_callable(obj: Any) -> bool:
     return isinstance(obj, Callable)
+
+
+def get_sqlite_connection_string(location=None) -> str:
+    if location is None or location == ":memory:":
+        result = "sqlite:///:memory:"
+    else:
+        result = as_uri(location)
+        # replace scheme and host
+        result = re.sub("^file://[^/]*/", "sqlite:///", result)
+
+    return result
+
+
+def get_sqlite_query_uri(
+    location: str = None, sql_query: str = None, fragment_name: str = None
+) -> str:
+    cs = get_sqlite_connection_string(location=location)
+    return get_sql_uri(
+        connection_string_uri=cs, sql_query=sql_query, fragment_name=fragment_name
+    )

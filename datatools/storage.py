@@ -200,7 +200,7 @@ class Resource:
         )
 
         # get extra kwargs from metadata
-        encode_kwargs = {k: self._metadata.query(k) for k in converter.encode_kwargs}
+        encode_kwargs = {k: self.metadata.query(k) for k in converter.encode_kwargs}
         bytes_buffer, metadata_encode = converter.encode(data, **encode_kwargs)
 
         bytes_buffer_wrapper = ByteBufferWrapper(bytes_buffer)

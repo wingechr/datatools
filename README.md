@@ -11,17 +11,18 @@ pip install wingechr-datatools
 ```python
 from datatools import StorageTemp as Storage
 
-st = Storage()
-
 
 def make_data():
     return {"a": 1}
 
 
-res = st.resource(make_data)
+with Storage() as st:
 
-data = res.load()
-print(data)
+    res = st.resource(make_data)
+
+    data = res.load()
+
+    assert data["a"] == 1
 
 ```
 

@@ -13,75 +13,58 @@ import pandas as pd
 
 from datatools.constants import DEFAULT_HASH_METHOD
 from datatools.exceptions import DataExists
-from datatools.storage import Storage
+from datatools.storage import StorageTemp
 from datatools.utils import (
     filepath_abs_to_uri,
     get_free_port,
-    make_file_writable,
-    platform_is_unix,
+    get_sqlite_query_uri,
     wait_for_server,
 )
 
 from . import objects_euqal
 
 
-class MyTemporaryDirectory(TemporaryDirectory):
-    """"""
-
-    def __init__(self, *args, **kwargs):
-        self.tempdir = TemporaryDirectory(*args, **kwargs)
-
-    def __enter__(self):
-        return self.tempdir.__enter__()
-
-    def __exit__(self, *args):
-        # make files writable so cleanup can delete them
-        path = self.tempdir.name
-        for rt, _ds, fs in os.walk(path):
-            for f in fs:
-                filepath = f"{rt}/{f}"
-                make_file_writable(filepath)
-                logging.debug(f"FILE: {filepath}")
-        # delete dir
-        self.tempdir.__exit__(*args)
-        logging.debug(f"DELETING {path}: {not os.path.exists(path)}")
-
-
 class TestBase(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         # set up static file server
-        cls.tmpdir_server = TemporaryDirectory()
-        cls.tmpdir_data = cls.tmpdir_server.__enter__()  # exit_stack.enter_context()
+        cls.__tmpdir_data = TemporaryDirectory()
+        cls._tmpdir_data = cls.__tmpdir_data.__enter__()  # exit_stack.enter_context()
         port = get_free_port()
-        cls.static_url = f"http://localhost:{port}"
-        cls.http_proc = sp.Popen(
+        cls._static_url = f"http://localhost:{port}"
+        cls._http_proc = sp.Popen(
             [
                 sys.executable,
                 "-m",
                 "http.server",
                 str(port),
                 "--directory",
-                cls.tmpdir_data,
+                cls._tmpdir_data,
             ],
             stdout=sp.DEVNULL,  # do not show server startup message
             stderr=sp.DEVNULL,  # do not show server request logging
         )
-        wait_for_server(cls.static_url)
+        wait_for_server(cls._static_url)
+
+    @classmethod
+    def get_filepath(cls, name) -> str:
+        return os.path.realpath(cls.__tmpdir_data.name + "/" + name)
+
+    @classmethod
+    def get_url(cls, name) -> str:
+        return cls._static_url + "/" + name
 
     def setUp(self) -> None:
-        self.tmpdir_storage = MyTemporaryDirectory()
-        path_tempdir1 = self.tmpdir_storage.__enter__()  # exit_stack.enter_context()
-        self.storage = Storage(location=path_tempdir1)
+        self.storage = StorageTemp().__enter__()
 
     @classmethod
     def tearDownClass(cls) -> None:
-        cls.http_proc.terminate()  # or kill
-        cls.http_proc.wait()
-        cls.tmpdir_server.__exit__(None, None, None)
+        cls._http_proc.terminate()  # or kill
+        cls._http_proc.wait()
+        cls.__tmpdir_data.__exit__(None, None, None)
 
     def tearDown(self) -> None:
-        self.tmpdir_storage.__exit__(None, None, None)
+        self.storage.__exit__(None, None, None)
 
 
 class TestLocalStorage(TestBase):
@@ -158,37 +141,19 @@ class TestLocalStorage(TestBase):
         df2 = csv_res.load(data_type=pd.DataFrame)
         pd.testing.assert_frame_equal(df, df2)
 
-    def __DISABLED__test_cache_decorator(self):
-        context = {"counter": 0}
-
-        @self.storage.cache()
-        def test_fun_sum(a, b):
-            logging.debug("running test_fun_sum")
-            context["counter"] += 1
-            return a + b
-
-        self.assertEqual(context["counter"], 0)
-        self.assertEqual(test_fun_sum(1, 1), 2)
-        # counted up, because first try
-        self.assertEqual(context["counter"], 1)
-        self.assertEqual(test_fun_sum(1, 1), 2)
-        # not counted up, because cache
-        self.assertEqual(context["counter"], 1)
-        self.assertEqual(test_fun_sum(1, 2), 3)
-        # counted up, because new signature
-        self.assertEqual(context["counter"], 2)
-
     def test_resource_sqlite_memory(self):
         # in memory sqlite3 database
         query = "select cast(101 as int) as value;"
-        uri = f"sqlite:///:memory:?q={query}#/testquery.pickle"
+        uri = get_sqlite_query_uri(
+            location=None, sql_query=query, fragment_name="/testquery.json"
+        )
         res = self.storage.resource(uri)
         data = res.load()
         self.assertEqual(data[0]["value"], 101)
 
     def test_resource_sqlite_file(self):
         # sqlite file
-        db_filepath = self.tmpdir_data + "/test.db"
+        db_filepath = self.get_filepath("test.db")
 
         con = sqlite3.connect(db_filepath)
         cur = con.cursor()
@@ -198,12 +163,10 @@ class TestLocalStorage(TestBase):
         con.commit()
         con.close()
 
-        # file should be created by sqlalchemy
-        # only for sqlite:
-        # in need an additional slash in linux for abs path
-        if platform_is_unix:
-            db_filepath = "/" + db_filepath
-        uri = f"sqlite://{db_filepath}?q=select value from test#/testquery.pickle"
+        query = "select value from test"
+        uri = get_sqlite_query_uri(
+            location=db_filepath, sql_query=query, fragment_name="/testquery.pickle"
+        )
 
         res = self.storage.resource(uri)
         data = res.load()
@@ -212,7 +175,7 @@ class TestLocalStorage(TestBase):
 
     def test_resource_file(self):
         # create files in static dir
-        fpath = os.path.join(self.tmpdir_data, "testfile.json")
+        fpath = self.get_filepath("testfile.json")
         with open(fpath, "w", encoding="utf-8") as file:
             json.dump({"value": 103}, file, ensure_ascii=False)
 
@@ -224,12 +187,12 @@ class TestLocalStorage(TestBase):
 
     def test_resource_http(self):
         # create files in static dir
-        fpath = os.path.join(self.tmpdir_data, "testfile.json")
+        fpath = self.get_filepath("testfile.json")
         with open(fpath, "w", encoding="utf-8") as file:
             json.dump({"value": 103}, file, ensure_ascii=False)
 
         # load from webserver
-        uri = self.static_url + "/testfile.json"
+        uri = self.get_url("testfile.json")
         res = self.storage.resource(uri)
         data = res.load()
         self.assertEqual(data["value"], 103)

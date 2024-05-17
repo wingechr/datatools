@@ -21,6 +21,7 @@ from datatools.utils import (
     get_now_str,
     get_resource_path_name,
     get_sql_uri,
+    get_sqlite_query_uri,
     get_suffix,
     get_user_w_host,
     is_callable,
@@ -200,14 +201,19 @@ class TestUtils(unittest.TestCase):
         )
 
     def test_get_sql_uri(self):
+        sql_query = "select a, b from t"
         self.assertEqual(
             get_sql_uri(
                 connection_string_uri="mssql+pyodbc://"
                 "?odbc_connect=driver=sql server;server=myserver",
-                sql_query="select a, b from t",
+                sql_query=sql_query,
             ),
             "mssql+pyodbc://?odbc_connect=driver=sql server;server=myserver&q="
             "SELECT%20a%2C%20b%20FROM%20t",
+        )
+        self.assertEqual(
+            get_sqlite_query_uri(location=None, sql_query=sql_query),  # :memory:,
+            "sqlite:///:memory:?q=SELECT%20a%2C%20b%20FROM%20t",
         )
 
     def test_get_suffix(self):
