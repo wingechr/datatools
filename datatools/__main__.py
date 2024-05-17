@@ -3,11 +3,12 @@
 import json
 import logging
 import sys
+from typing import List, Tuple
 
 import click
 
 from datatools import __version__
-from datatools.constants import GLOBAL_LOCATION, LOCAL_LOCATION
+from datatools.constants import DEFAULT_LOCAL_LOCATION, GLOBAL_LOCATION
 from datatools.exceptions import DatatoolsException
 from datatools.storage import Metadata, Resource, Storage
 from datatools.utils import as_uri, json_serialize, parse_cli_metadata
@@ -24,8 +25,10 @@ from datatools.utils import as_uri, json_serialize, parse_cli_metadata
     show_default=True,
 )
 @click.option("--location", "-d")
-@click.option("--global-location", "-g", is_flag=True)
-def main(ctx, loglevel, location, global_location):
+@click.option("--use-global-location", "-g", is_flag=True)
+def main(
+    ctx: click.Context, loglevel: str, location: str, use_global_location: bool
+) -> None:
     """Script entry point."""
     # setup default logging
     loglevel = getattr(logging, loglevel.upper())
@@ -43,34 +46,36 @@ def main(ctx, loglevel, location, global_location):
     except ModuleNotFoundError:
         pass
 
-    if location and global_location:
+    if location and use_global_location:
         raise DatatoolsException("location and global-location are mutually exclusive")
-    if global_location:
+    if use_global_location:
         location = GLOBAL_LOCATION
     if not location:
-        location = LOCAL_LOCATION
+        location = DEFAULT_LOCAL_LOCATION
     ctx.obj = Storage(location=location)
 
 
 @main.command("info")
 @click.pass_obj
-def info(storage: Storage):
-    print(str(storage))  # location
+def info(storage: Storage) -> None:
+    info = {"Location": str(storage)}
+    for k, v in info.items():
+        print(f"{k}: {v}")
 
 
 @main.command("search")
 @click.pass_obj
 @click.argument("patterns", nargs=-1)
-def search(storage: Storage, patterns):
+def search(storage: Storage, patterns: List[str]) -> None:
     for res in storage.find_resources(*patterns):
-        print(res.local_uri)
+        print(res)
 
 
 @main.group("res")
 @click.pass_context
 @click.argument("path")
 @click.option("--name", "-n")
-def resource(ctx, path, name=None):
+def resource(ctx: click.Context, path: str, name=None) -> None:
     storage = ctx.obj
     source_uri = as_uri(path)
     resource = storage.resource(source_uri, name=name)
@@ -79,33 +84,37 @@ def resource(ctx, path, name=None):
 
 @resource.command("save")
 @click.pass_obj
-def resource_download_save(resource: Resource):
+def resource_download_save(resource: Resource) -> None:
     if resource.exists():
         logging.info("Already saved")
     else:
         resource.save()
-    print(resource.name)
+    print(resource)
 
 
 @resource.group("meta")
 @click.pass_context
-def resource_meta(ctx):
+def resource_meta(ctx: click.Context) -> None:
     resource = ctx.obj
     ctx.obj = resource.metadata
 
 
 @resource.command("info")
 @click.pass_context
-def resource_info(ctx):
+def resource_info(ctx: click.Context) -> None:
     resource = ctx.obj
-    print(f"Name: {resource.name}")
-    print(f"Exists: {resource.exists()}")
+    info = {
+        "Name": resource.name,
+        "Exists": resource.exists(),
+    }
+    for k, v in info.items():
+        print(f"{k}: {v}")
 
 
 @resource_meta.command("query")
 @click.pass_obj
 @click.argument("key", required=False)
-def resource_meta_query(metadata: Metadata, key=None):
+def resource_meta_query(metadata: Metadata, key: str = None) -> None:
     result = metadata.query(key)
     result_str = json.dumps(result, indent=2, ensure_ascii=True, default=json_serialize)
     print(result_str)
@@ -114,12 +123,12 @@ def resource_meta_query(metadata: Metadata, key=None):
 @resource_meta.command("update", help="Multiple key=value pairs")
 @click.pass_obj
 @click.argument("metadata_key_vals", nargs=-1)
-def resource_meta_update(metadata: Metadata, metadata_key_vals):
+def resource_meta_update(metadata: Metadata, metadata_key_vals: List[str]) -> None:
     new_metadata = parse_cli_metadata(metadata_key_vals)
     metadata.update(new_metadata)
 
 
-def _recursive_help(cmd=main, parent=None, path=None) -> str:
+def _recursive_help(cmd=main, parent=None, path: Tuple[str] = None) -> str:
     path = path or []
     ctx = click.core.Context(cmd, info_name=cmd.name, parent=parent)
 
@@ -139,7 +148,7 @@ def _recursive_help(cmd=main, parent=None, path=None) -> str:
 
 
 @main.command("help-all")
-def help_all():
+def help_all() -> None:
     print(_recursive_help())
 
 

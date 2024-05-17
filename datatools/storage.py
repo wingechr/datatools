@@ -3,10 +3,9 @@ import json
 import logging
 import os
 import re
-import shutil
 import tempfile
-from io import BytesIO, IOBase
-from typing import Any, Dict, Iterable, Type
+from io import IOBase
+from typing import Any, Callable, Dict, Iterable, Type, Union
 
 import jsonpath_ng
 
@@ -29,6 +28,7 @@ from .utils import (
     get_user_w_host,
     make_file_readonly,
     make_file_writable,
+    rmtree_readonly,
 )
 
 METADATA_JSON_SUFFIX = ".metadata.json"
@@ -36,33 +36,28 @@ TEMPFILE_SUFFIX = ".tmp"
 
 
 class AbstractStorage(abc.ABC):
-    def resource(self, data_source, name: str = None) -> "Resource":
-        """_summary_
+    def resource(self, source: Any, name: Union[str, Callable] = None) -> "Resource":
+        """Create resource descriptor.
 
-        Args:
-            data_source (_type_): _description_
-            name (str, optional): _description_. Defaults to None.
+        Parameters
+        ----------
+        source : Any
+            _description_
+        name : Union[str, Callable], optional
+            _description_, by default None
 
-        Returns:
-            Resource: _description_
+        Returns
+        -------
+        Resource
+            _description_
         """
-        return Resource(storage=self, data_source=data_source, name=name)
-
-    def _validate_name(self, name: str) -> str:
-        name_new = get_resource_path_name(name)
-        if (
-            not name_new
-            or name_new.endswith(METADATA_JSON_SUFFIX)
-            or name_new.endswith(TEMPFILE_SUFFIX)
-        ):
-            raise ValueError(f"Invalid name: {name_new}")
-        return name_new
+        return Resource(storage=self, source=source, name=name)
 
     @abc.abstractmethod
     def _resource_delete(self, resource_name: str) -> None: ...
 
     @abc.abstractmethod
-    def _resource_exists(self, resource_name: str) -> None: ...
+    def _resource_exists(self, resource_name: str) -> bool: ...
 
     @abc.abstractmethod
     def _metadata_update(
@@ -79,19 +74,16 @@ class AbstractStorage(abc.ABC):
     def _bytes_open(self, resource_name: str) -> IOBase: ...
 
     @abc.abstractmethod
-    def find_resources(self, *args, **kwargs) -> Iterable:
-        """_summary_
+    def find_resources(self, *args, **kwargs) -> Iterable["Resource"]: ...
 
-        Returns:
-            Iterable: _description_
-        """
-        ...
+    @abc.abstractmethod
+    def _validate_name(self, name: str) -> str: ...
 
-    def __enter__(self):
-        return self
+    @abc.abstractmethod
+    def __enter__(self) -> "AbstractStorage": ...
 
-    def __exit__(self, *args):
-        return
+    @abc.abstractmethod
+    def __exit__(self, *args) -> None: ...
 
 
 class Metadata:
@@ -104,8 +96,8 @@ class Metadata:
         Returns:
             _type_: _description_
         """
-        return self.__storage._metadata_update(
-            resource_name=self.__resource_name, metadata=metadata
+        self._storage._metadata_update(
+            resource_name=self._resource_name, metadata=metadata
         )
 
     def query(self, key: str = None) -> Any:
@@ -117,42 +109,48 @@ class Metadata:
         Returns:
             Any: _description_
         """
-        return self.__storage._metadata_query(
-            resource_name=self.__resource_name, key=key
-        )
+        return self._storage._metadata_query(resource_name=self._resource_name, key=key)
 
     def __init__(self, storage: "AbstractStorage", resource_name: str) -> None:
         self.__storage = storage
         self.__resource_name = resource_name
+
+    @property
+    def _storage(self) -> AbstractStorage:
+        return self.__storage
+
+    @property
+    def _resource_name(self) -> str:
+        return self.__resource_name
 
 
 class Resource:
     """_summary_"""
 
     def __init__(
-        self, storage: "AbstractStorage", data_source: Any, name: str = None
+        self,
+        storage: "AbstractStorage",
+        source: Any,
+        name: Union[str | Callable] = None,
     ) -> None:
-        self.__data_generator = AbstractDataGenerator.get_instance(
-            data_source=data_source
-        )
-
-        name = name or self.__data_generator.create_name()
-        name = storage._validate_name(name)
-
-        # media_type, data_type = self.__data_generator.get_media_data_type(name=name)
-        # self.__media_type = media_type
-        # self.__data_type = data_type
-
         self.__storage = storage
-        self.__name = name
-        self.__metadata = Metadata(storage=storage, resource_name=name)
+        self.__data_generator = AbstractDataGenerator.get_instance(source=source)
+
+        # create first draft of name
+        _name = name if isinstance(name, str) else self._data_generator.create_name()
+        # if name is a function: use it to modify the draft
+        if isinstance(name, Callable):
+            _name = name(_name)
+        # finally: storage must approve
+        self.__name = storage._validate_name(_name)
+        self.__metadata = Metadata(storage=self._storage, resource_name=self.name)
 
     def __str__(self) -> str:
-        return self.local_uri
+        return self.uri
 
     @property
-    def local_uri(self) -> str:
-        return f"{STORAGE_SCHEME}://{self.__name}"
+    def uri(self) -> str:
+        return f"{STORAGE_SCHEME}://{self.name}"
 
     @property
     def metadata(self) -> "Metadata":
@@ -162,13 +160,21 @@ class Resource:
     def name(self) -> str:
         return self.__name
 
+    @property
+    def _storage(self) -> AbstractStorage:
+        return self.__storage
+
+    @property
+    def _data_generator(self) -> AbstractDataGenerator:
+        return self.__data_generator
+
     def exists(self) -> bool:
-        return self.__storage._resource_exists(resource_name=self.__name)
+        return self._storage._resource_exists(resource_name=self.name)
 
     def delete(self) -> None:
         if not self.exists():
             raise DataDoesNotExists(self)
-        return self.__storage._resource_delete(resource_name=self.__name)
+        self._storage._resource_delete(resource_name=self.name)
 
     def save(self, media_type: str = None) -> None:
         if self.exists():
@@ -176,10 +182,10 @@ class Resource:
 
         # get extra kwargs from metadata
         create_kwargs = {
-            k: self.__metadata.query(k) for k in self.__data_generator.create_kwargs
+            k: self.metadata.query(k) for k in self._data_generator.create_kwargs
         }
 
-        data, metadata_create = self.__data_generator.create_data_metadata(
+        data, metadata_create = self._data_generator.create_data_metadata(
             **create_kwargs
         )
 
@@ -188,20 +194,20 @@ class Resource:
         if not media_type:
             media_type = self.metadata.query(MEDIA_TYPE_METADATA_PATH)
         if not media_type:
-            media_type = self.__data_generator.get_media_data_type(name=self.__name)[0]
+            media_type = self._data_generator.get_media_data_type(name=self.name)[0]
         converter = AbstractConverter.get_instance(
             media_type=media_type, data_type=data_type
         )
 
         # get extra kwargs from metadata
-        encode_kwargs = {k: self.__metadata.query(k) for k in converter.encode_kwargs}
+        encode_kwargs = {k: self._metadata.query(k) for k in converter.encode_kwargs}
         bytes_buffer, metadata_encode = converter.encode(data, **encode_kwargs)
 
         bytes_buffer_wrapper = ByteBufferWrapper(bytes_buffer)
 
         with bytes_buffer_wrapper:
-            self.__storage._bytes_write(
-                resource_name=self.__name, byte_buffer=bytes_buffer_wrapper
+            self._storage._bytes_write(
+                resource_name=self.name, byte_buffer=bytes_buffer_wrapper
             )
 
         metadata_save = {
@@ -226,13 +232,13 @@ class Resource:
             self.save()
 
         # priority: function argument, data generator
-        _media_type, _data_type = self.__data_generator.get_media_data_type(
-            name=self.__name
+        _media_type, _data_type = self._data_generator.get_media_data_type(
+            name=self.name
         )
 
         if not data_type:
             data_type = _data_type
-        media_type = self.__metadata.query(MEDIA_TYPE_METADATA_PATH)
+        media_type = self.metadata.query(MEDIA_TYPE_METADATA_PATH)
         if not media_type:
             media_type = _media_type
 
@@ -241,65 +247,35 @@ class Resource:
         )
 
         # get extra kwargs from metadata
-        decode_kwargs = {k: self.__metadata.query(k) for k in converter.decode_kwargs}
+        decode_kwargs = {k: self.metadata.query(k) for k in converter.decode_kwargs}
 
         # load bytes and decode
-        with self.__storage._bytes_open(resource_name=self.__name) as bytes_buffer:
+        with self._storage._bytes_open(resource_name=self.name) as bytes_buffer:
             data = converter.decode(bytes_buffer, **decode_kwargs)
 
         return data
 
-
-class TestMemoryStorage(AbstractStorage):
-    def __init__(self):
-        self.__data = {}
-        self.__metadata = {}
-
-    def _resource_delete(self, resource_name: str) -> None:
-        logging.debug(f"Deleting {resource_name}")
-        del self.__data[resource_name]
-        del self.__metadata[resource_name]
-
-    def _resource_exists(self, resource_name: str) -> None:
-        return resource_name in self.__data
-
-    def _metadata_update(self, resource_name: str, metadata: Dict[str, Any]) -> None:
-        if resource_name not in self.__metadata:
-            self.__metadata[resource_name] = {}
-        metadata_res = self.__metadata[resource_name]
-        for key, val in metadata.items():
-            metadata_res[key] = val
-
-    def _metadata_query(self, resource_name: str, key: str) -> Any:
-        if resource_name not in self.__metadata:
-            self.__metadata[resource_name] = {}
-        metadata_res = self.__metadata[resource_name]
-        return metadata_res.get(key)
-
-    def _bytes_write(self, resource_name: str, byte_buffer: IOBase) -> None:
-        logging.debug(f"Writing {resource_name}")
-        bdata = byte_buffer.read()
-        self.__data[resource_name] = bdata
-
-    def _bytes_open(self, resource_name: str) -> IOBase:
-        logging.debug(f"Reading {resource_name}")
-        bdata = self.__data[resource_name]
-        return BytesIO(bdata)
+    def _open(self) -> IOBase:
+        return self._storage._bytes_open(self.name)
 
 
-class FileStorage(AbstractStorage):
+class Storage(AbstractStorage):
+
     def __init__(self, location: str = None):
-        self.__location = os.path.realpath(location or ".")
+        self.__location = os.path.abspath(os.path.realpath(location or "."))
+
+    @property
+    def _location(self):
+        return self.__location
 
     def __str__(self):
-        return os.path.abspath(self.__location)
+        return self._location
 
     def _get_filepath(self, resource_name: str):
         relpath = resource_name
         if not relpath.startswith("/"):
             relpath = "/" + relpath
-        filepath = os.path.realpath(self.__location + relpath)
-        logging.debug(f"Translate {resource_name} => {filepath}")
+        filepath = os.path.realpath(self._location + relpath)
         return filepath
 
     def _get_filepath_metadata(self, resource_name: str):
@@ -314,7 +290,7 @@ class FileStorage(AbstractStorage):
         if os.path.isfile(filepath_meta):
             os.remove(filepath_meta)
 
-    def _resource_exists(self, resource_name: str) -> None:
+    def _resource_exists(self, resource_name: str) -> bool:
         filepath = self._get_filepath(resource_name=resource_name)
         return os.path.isfile(filepath)
 
@@ -385,7 +361,7 @@ class FileStorage(AbstractStorage):
         return open(filepath, "rb")
 
     def find_resources(self, *patterns, **kwargs) -> Iterable[Resource]:
-        for rt, _ds, filenames in os.walk(self.__location):
+        for rt, _ds, filenames in os.walk(self._location):
             for filename in filenames:
                 # find only metadata
                 if not filename.endswith(METADATA_JSON_SUFFIX):
@@ -393,7 +369,7 @@ class FileStorage(AbstractStorage):
                 suffix_len = len(METADATA_JSON_SUFFIX)
                 filename = filename[:-suffix_len]
                 filepath = os.path.join(rt, filename)
-                filepath_rel = os.path.relpath(filepath, self.__location)
+                filepath_rel = os.path.relpath(filepath, self._location)
                 name = filepath_rel.replace("\\", "/")
                 if not all(re.match(f".*{pat}", name) for pat in patterns):
                     continue
@@ -407,15 +383,21 @@ class FileStorage(AbstractStorage):
 
                 yield self.resource(name=name)
 
+    def _validate_name(self, name: str) -> str:
+        name_new = get_resource_path_name(name)
+        if (
+            not name_new
+            or name_new.endswith(METADATA_JSON_SUFFIX)
+            or name_new.endswith(TEMPFILE_SUFFIX)
+        ):
+            raise ValueError(f"Invalid name: {name_new}")
+        return name_new
 
-class Storage(FileStorage):
-    """_summary_
+    def __enter__(self) -> AbstractStorage:
+        return self
 
-    Args:
-        FileStorage (_type_): _description_
-    """
-
-    pass
+    def __exit__(self, *args) -> None:
+        return
 
 
 class StorageGlobal(Storage):
@@ -443,4 +425,4 @@ class StorageTemp(Storage):
     def __exit__(self, *args):
         # cleanup
         super().__exit__(*args)
-        shutil.rmtree(self.__location)
+        rmtree_readonly(self._location)

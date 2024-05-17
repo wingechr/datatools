@@ -10,13 +10,15 @@ import logging
 import os
 import pickle
 import re
+import shutil
 import socket
+import stat
 import sys
 import time
 from contextlib import ExitStack as _ExitStack
 from io import BufferedReader, IOBase
 from pathlib import Path
-from typing import Any, Callable, Iterable, Tuple, Type, Union
+from typing import Any, Callable, Iterable, List, Tuple, Type, Union
 from urllib.parse import quote, unquote, unquote_plus, urlsplit
 
 import chardet
@@ -277,7 +279,6 @@ def as_uri(source: str) -> str:
         # uri must be absolute path
         filepath_abs = Path(source).absolute()
         uri = filepath_abs_to_uri(filepath_abs=filepath_abs)
-        logging.debug(f"Translate {source} => {uri}")
     else:
         uri = source
     return uri
@@ -359,7 +360,7 @@ def remove_port_from_url_netloc(url_netloc: str) -> str:
     return re.sub(":[0-9]+$", "", url_netloc)
 
 
-def parse_cli_metadata(metadata_key_vals):
+def parse_cli_metadata(metadata_key_vals: List[str]) -> dict:
     """cli: list of key=value"""
     metadata = {}
     for key_value in metadata_key_vals:
@@ -767,6 +768,17 @@ def get_function_info(obj: Callable) -> dict:
         kwargs[param.name] = value
 
     return {"name": name, "kwargs": kwargs, "doc": doc, "file": file}
+
+
+def rmtree_readonly(path: str) -> None:
+    """Delete recursively (inckl. readonly)"""
+
+    def delete_rw(action, name, exc):
+        """action if shutil rm fails"""
+        os.chmod(name, stat.S_IWRITE)
+        os.remove(name)
+
+    shutil.rmtree(path, onerror=delete_rw)
 
 
 def is_callable(obj: Any) -> bool:

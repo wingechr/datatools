@@ -26,6 +26,8 @@ from . import objects_euqal
 
 
 class MyTemporaryDirectory(TemporaryDirectory):
+    """"""
+
     def __init__(self, *args, **kwargs):
         self.tempdir = TemporaryDirectory(*args, **kwargs)
 
@@ -46,36 +48,40 @@ class MyTemporaryDirectory(TemporaryDirectory):
 
 
 class TestBase(unittest.TestCase):
-    def setUp(self) -> None:
-        self.tempdir1 = MyTemporaryDirectory()
-        path_tempdir1 = self.tempdir1.__enter__()  # exit_stack.enter_context()
-        self.storage = Storage(location=path_tempdir1)
-
+    @classmethod
+    def setUpClass(cls) -> None:
         # set up static file server
-        self.tempdir2 = TemporaryDirectory()
-        self.static_dir = self.tempdir2.__enter__()  # exit_stack.enter_context()
+        cls.tmpdir_server = TemporaryDirectory()
+        cls.tmpdir_data = cls.tmpdir_server.__enter__()  # exit_stack.enter_context()
         port = get_free_port()
-        self.static_url = f"http://localhost:{port}"
-        self.http_proc = sp.Popen(
+        cls.static_url = f"http://localhost:{port}"
+        cls.http_proc = sp.Popen(
             [
                 sys.executable,
                 "-m",
                 "http.server",
                 str(port),
                 "--directory",
-                self.static_dir,
+                cls.tmpdir_data,
             ],
             stdout=sp.DEVNULL,  # do not show server startup message
             stderr=sp.DEVNULL,  # do not show server request logging
         )
-        wait_for_server(self.static_url)
+        wait_for_server(cls.static_url)
+
+    def setUp(self) -> None:
+        self.tmpdir_storage = MyTemporaryDirectory()
+        path_tempdir1 = self.tmpdir_storage.__enter__()  # exit_stack.enter_context()
+        self.storage = Storage(location=path_tempdir1)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.http_proc.terminate()  # or kill
+        cls.http_proc.wait()
+        cls.tmpdir_server.__exit__(None, None, None)
 
     def tearDown(self) -> None:
-        self.http_proc.terminate()  # or kill
-        self.http_proc.wait()
-
-        self.tempdir1.__exit__(None, None, None)
-        self.tempdir2.__exit__(None, None, None)
+        self.tmpdir_storage.__exit__(None, None, None)
 
 
 class TestLocalStorage(TestBase):
@@ -172,8 +178,6 @@ class TestLocalStorage(TestBase):
         # counted up, because new signature
         self.assertEqual(context["counter"], 2)
 
-
-class TestResource(TestBase):
     def test_resource_sqlite_memory(self):
         # in memory sqlite3 database
         query = "select cast(101 as int) as value;"
@@ -184,7 +188,7 @@ class TestResource(TestBase):
 
     def test_resource_sqlite_file(self):
         # sqlite file
-        db_filepath = self.static_dir + "/test.db"
+        db_filepath = self.tmpdir_data + "/test.db"
 
         con = sqlite3.connect(db_filepath)
         cur = con.cursor()
@@ -208,7 +212,7 @@ class TestResource(TestBase):
 
     def test_resource_file(self):
         # create files in static dir
-        fpath = os.path.join(self.static_dir, "testfile.json")
+        fpath = os.path.join(self.tmpdir_data, "testfile.json")
         with open(fpath, "w", encoding="utf-8") as file:
             json.dump({"value": 103}, file, ensure_ascii=False)
 
@@ -220,7 +224,7 @@ class TestResource(TestBase):
 
     def test_resource_http(self):
         # create files in static dir
-        fpath = os.path.join(self.static_dir, "testfile.json")
+        fpath = os.path.join(self.tmpdir_data, "testfile.json")
         with open(fpath, "w", encoding="utf-8") as file:
             json.dump({"value": 103}, file, ensure_ascii=False)
 

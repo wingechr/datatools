@@ -10,7 +10,7 @@ from urllib.parse import parse_qs, unquote, urlencode, urlsplit, urlunsplit
 import sqlalchemy as sa
 
 from .classes import RegistryAbstractBase
-from .constants import PARAM_SQL_QUERY
+from .constants import PARAM_SQL_QUERY, STORAGE_SCHEME
 from .utils import (
     BytesIteratorBuffer,
     get_default_media_data_type_by_name,
@@ -31,16 +31,16 @@ class AbstractDataGenerator(RegistryAbstractBase):
     create_kwargs = []
 
     @classmethod
-    def _is_class_for(cls, data_source: Any) -> bool:
+    def _is_class_for(cls, source: Any) -> bool:
         return False
 
     @classmethod
-    def get_instance(cls, data_source: Any) -> "AbstractDataGenerator":
-        subclass = cls._get_class(data_source=data_source)
-        return subclass(data_source=data_source)
+    def get_instance(cls, source: Any) -> "AbstractDataGenerator":
+        subclass = cls._get_class(source=source)
+        return subclass(source=source)
 
-    def __init__(self, data_source: Any) -> None:
-        self._data_source = data_source
+    def __init__(self, source: Any) -> None:
+        self._source = source
 
     @abc.abstractmethod
     def create_name(self) -> str: ...
@@ -52,17 +52,50 @@ class AbstractDataGenerator(RegistryAbstractBase):
     def create_data_metadata(self, **kwargs) -> Tuple[Any, Dict[str, Any]]: ...
 
 
+class ResourceGenerator(AbstractDataGenerator):
+    """Already existing resource
+
+    Parameters
+    ----------
+    AbstractDataGenerator : _type_
+        _description_
+
+    Returns
+    -------
+    _type_
+        _description_
+    """
+
+    _name_prefix = STORAGE_SCHEME + "://"
+
+    @classmethod
+    def _is_class_for(cls, source: Any) -> bool:
+        return isinstance(source, str) and source.startswith(cls._name_prefix)
+
+    def create_name(self) -> str:
+        # remove scheme
+        len_prefix = len(self._name_prefix)
+        return self._source[len_prefix:]
+
+    def get_media_data_type(self, name: str) -> Tuple[str, Type]:
+        raise NotImplementedError()
+
+    def create_data_metadata(self, **kwargs) -> Tuple[Any, Dict[str, Any]]:
+        # TODO: if original source was a string: maybe we can get it from there?
+        raise NotImplementedError()
+
+
 class FunctionDataGenerator(AbstractDataGenerator):
     # TODO: what would be the default media type
     # for an arbitrary object? ==> pickle
 
     @classmethod
-    def _is_class_for(cls, data_source: Any) -> bool:
-        return isinstance(data_source, Callable)
+    def _is_class_for(cls, source: Any) -> bool:
+        return isinstance(source, Callable)
 
     def create_name(self) -> str:
         # create hash of job
-        func = self._data_source
+        func = self._source
         func_info = get_function_info(func)
         function_name = func_info["name"]
 
@@ -86,7 +119,7 @@ class FunctionDataGenerator(AbstractDataGenerator):
         return "application/x-pickle", object
 
     def create_data_metadata(self, **kwargs) -> Tuple[Any, Dict[str, Any]]:
-        func = self._data_source
+        func = self._source
         data = func()
         func_info = get_function_info(func)
         metadata = {"method": func_info}
@@ -95,11 +128,11 @@ class FunctionDataGenerator(AbstractDataGenerator):
 
 class HttpDataGenerator(AbstractDataGenerator):
     @classmethod
-    def _is_class_for(cls, data_source: Any) -> bool:
-        return isinstance(data_source, str) and re.match(r"^https?://", data_source)
+    def _is_class_for(cls, source: Any) -> bool:
+        return isinstance(source, str) and re.match(r"^https?://", source)
 
     def create_name(self) -> str:
-        return uri_to_data_path(self._data_source)
+        return uri_to_data_path(self._source)
 
     def get_media_data_type(self, name: str) -> Tuple[str, Type]:
         # this can be all kinds of things.
@@ -109,7 +142,7 @@ class HttpDataGenerator(AbstractDataGenerator):
     def create_data_metadata(self, **kwargs) -> Tuple[Any, Dict[str, Any]]:
         import requests
 
-        res = requests.get(self._data_source, stream=True)
+        res = requests.get(self._source, stream=True)
         res.raise_for_status()
         # max_bytes = int(res.headers["Content-Length"])
         chunk_size = 1024
@@ -122,12 +155,12 @@ class HttpDataGenerator(AbstractDataGenerator):
 
 class FileDataGenerator(AbstractDataGenerator):
     @classmethod
-    def _is_class_for(cls, data_source: Any) -> bool:
-        return isinstance(data_source, str) and re.match(r"^file://", data_source)
+    def _is_class_for(cls, source: Any) -> bool:
+        return isinstance(source, str) and re.match(r"^file://", source)
 
     def create_name(self) -> str:
         # only use filename
-        return os.path.basename(self._data_source)
+        return os.path.basename(self._source)
 
     def get_media_data_type(self, name: str) -> Tuple[str, Type]:
         # this can be all kinds of things.
@@ -135,7 +168,7 @@ class FileDataGenerator(AbstractDataGenerator):
         return get_default_media_data_type_by_name(name=name)
 
     def create_data_metadata(self, **kwargs) -> Tuple[Any, Dict[str, Any]]:
-        file_path = uri_to_filepath_abs(self._data_source)
+        file_path = uri_to_filepath_abs(self._source)
         data = open(file_path, "rb")
         metadata = {}
         return data, metadata
@@ -143,13 +176,11 @@ class FileDataGenerator(AbstractDataGenerator):
 
 class SqlpDataGenerator(AbstractDataGenerator):
     @classmethod
-    def _is_class_for(cls, data_source: Any) -> bool:
-        return isinstance(data_source, str) and re.match(
-            r"^[^/]*sql[^/]*://", data_source
-        )
+    def _is_class_for(cls, source: Any) -> bool:
+        return isinstance(source, str) and re.match(r"^[^/]*sql[^/]*://", source)
 
     def create_name(self) -> str:
-        return uri_to_data_path(self._data_source)
+        return uri_to_data_path(self._source)
 
     def get_media_data_type(self, name: str) -> Tuple[str, Type]:
         # get default media type from name (suffix)
@@ -158,7 +189,7 @@ class SqlpDataGenerator(AbstractDataGenerator):
         return (media_type, list)
 
     def create_data_metadata(self, **kwargs) -> Tuple[Any, Dict[str, Any]]:
-        uri = self._data_source
+        uri = self._source
         metadata = {}
         metadata["source.path"] = remove_auth_from_uri_or_path(uri)
         url = urlsplit(uri)

@@ -17,7 +17,7 @@ GLOBAL_LOCATION = os.path.join(
     ),
     "data",
 )
-LOCAL_LOCATION = "__data__"
+DEFAULT_LOCAL_LOCATION = "__data__"
 
 # default is 1024 * 8
 # wsgi often uses 1024 * 16
