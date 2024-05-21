@@ -401,6 +401,19 @@ class TestUtils(unittest.TestCase):
         for not_callable in ["string", 10]:
             self.assertFalse(is_callable(not_callable), not_callable)
 
+    def test_get_function_info_should_not_change_function(self):
+        def example_fun(a, b, c=1):
+            return a + b + c
+
+        example_partial = partial(example_fun, 4, b=2)
+
+        args1, kwargs1 = example_partial.args, example_partial.keywords
+        get_function_info(example_partial)
+        args2, kwargs2 = example_partial.args, example_partial.keywords
+        # args and kwargs have not changed
+        self.assertEqual(args1, args2)
+        self.assertEqual(kwargs1, kwargs2)
+
 
 class TestSerializers(unittest.TestCase):
     def test_CsvSerializer(self):

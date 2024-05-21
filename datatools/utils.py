@@ -788,7 +788,8 @@ def get_function_info(obj: Callable) -> dict:
     if isinstance(obj, functools.partial):
         func = obj.func
         bound_args = obj.args
-        bound_kwargs = obj.keywords
+        # copy: do not change the original bound arguments
+        bound_kwargs = obj.keywords.copy()
     else:
         func = obj
         bound_args = ()
