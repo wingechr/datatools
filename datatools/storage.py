@@ -175,7 +175,7 @@ class Resource:
             k: self.metadata.query(k) for k in self._data_generator.create_kwargs
         }
 
-        data, metadata_create = self._data_generator.create_data_metadata(
+        data, metadata_generator = self._data_generator.create_data_metadata(
             **create_kwargs
         )
 
@@ -211,9 +211,11 @@ class Resource:
         }
 
         new_metadata = {}  # older python cant do dict1 | dict2
-        new_metadata.update(metadata_create)
-        new_metadata.update(metadata_encode)
+
+        # priority: metadata_save < metadata_encode < metadata_generator
         new_metadata.update(metadata_save)
+        new_metadata.update(metadata_encode)
+        new_metadata.update(metadata_generator)
 
         self.metadata.update(new_metadata)
 

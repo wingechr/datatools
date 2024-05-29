@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, unquote, urlencode, urlsplit, urlunsplit
 import sqlalchemy as sa
 
 from .classes import RegistryAbstractBase
-from .constants import PARAM_SQL_QUERY, RESOURCE_URI_PREFIX
+from .constants import MEDIA_TYPE_METADATA_PATH, PARAM_SQL_QUERY, RESOURCE_URI_PREFIX
 from .utils import (
     BytesIteratorBuffer,
     get_default_media_data_type_by_name,
@@ -147,7 +147,7 @@ class HttpDataGenerator(AbstractDataGenerator):
         bytes_iter = res.iter_content(chunk_size=chunk_size)
         data = BytesIteratorBuffer(bytes_iter=bytes_iter)
 
-        metadata = dict({"media_type": res.headers["Content-Type"]})
+        metadata = dict({MEDIA_TYPE_METADATA_PATH: res.headers["Content-Type"]})
         return data, metadata
 
 
