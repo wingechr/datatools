@@ -145,7 +145,12 @@ class TestUtils(unittest.TestCase):
                 'SELECT x, "y" FROM [z];',
             )
         ]:
-            self.assertEqual(normalize_sql_query(q), eq)
+            # some versions of sqlparse insert spaces when removing comments
+            # so we have to compare normalized
+            q = normalize_sql_query(q)
+            q = re.sub(r"\s+", " ", q)
+            eq = re.sub(r"\s+", " ", eq)
+            self.assertEqual(q, eq)
 
     def test_as_byte_iterator(self):
         data = b"hello world"
