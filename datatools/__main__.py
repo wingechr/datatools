@@ -94,7 +94,7 @@ def resource_download_save(resource: Resource) -> None:
         logging.info("Already saved")
     else:
         resource.save()
-    print_output(resource)
+    print_output(resource.metadata.query())
 
 
 @resource.command("info")
