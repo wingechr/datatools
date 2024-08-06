@@ -1,4 +1,4 @@
-__version__ = "0.10.8b"
+__version__ = "0.11.0"
 __all__ = [
     "exceptions",
     "constants",
@@ -7,8 +7,11 @@ __all__ = [
     "Storage",
     "StorageGlobal",
     "StorageEnv",
+    "StorageTemp",
+    "Resource",
+    "Metadata",
 ]
 
 
 from . import constants, exceptions, storage, utils
-from .storage import Storage, StorageEnv, StorageGlobal
+from .storage import Metadata, Resource, Storage, StorageEnv, StorageGlobal, StorageTemp

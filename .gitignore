@@ -1,5 +1,6 @@
 *.pyc
 .env*
+.venv*
 *.code-workspace
 node_modules
 .parcel-cache
@@ -11,3 +12,4 @@ build
 .test
 .vscode
 site
+__pycache__

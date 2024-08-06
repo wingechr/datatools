@@ -1,366 +1,381 @@
-import functools
-import hashlib
+import abc
 import json
 import logging
 import os
 import re
-from io import BufferedReader
-from tempfile import NamedTemporaryFile
-from typing import Callable, Iterable, Union
+import tempfile
+from io import IOBase
+from typing import Any, Callable, Dict, Iterable, Type, Union
 
-import jsonpath_ng
-
+# TODO: must be loaded for classes to be registeres
+# there should be a better wayto do that
+from . import generators, loaders  # noqa
 from .constants import (
-    DEFAULT_HASH_METHOD,
     GLOBAL_LOCATION,
-    LOCAL_LOCATION,
+    MEDIA_TYPE_METADATA_PATH,
+    RESOURCE_URI_PREFIX,
     ROOT_METADATA_PATH,
 )
-from .exceptions import DataExists, DatatoolsException, InvalidPath
-from .loader import FileLoader, UriLoader
-from .schema import validate
+from .exceptions import DataDoesNotExists, DataExists, DatatoolsException
+from .generators import AbstractDataGenerator
+from .loaders import AbstractConverter
 from .utils import (
-    ByteSerializer,
-    PickleSerializer,
-    as_byte_iterator,
+    ByteBufferWrapper,
     as_uri,
     delete_file,
     get_now_str,
     get_resource_path_name,
-    get_suffix,
     get_user_w_host,
-    is_file_readonly,
-    json_serialize,
+    json_dumps,
+    jsonpath_get,
+    jsonpath_update,
     make_file_readonly,
-    uri_to_data_path,
+    rmtree_readonly,
 )
 
-
-class Storage:
-    """Storage class for data and metadata"""
-
-    def __init__(self, location=None):
-        self.__location = os.path.abspath(location or LOCAL_LOCATION)
-
-    @property
-    def location(self):
-        return self.__location
-
-    def __str__(self):
-        return f"Storage({self.location})"
-
-    def resource(self, source_uri: str = None, name: str = None) -> "Resource":
-        """
-        Args:
-            source_uri (str, optional): source URI, if it is an external resource.
-                If no name is provided, name will be generated from source_uri
-            name (str, optional): resource name
-
-        Returns:
-            Resource instance
-        """
-        if source_uri:
-            return UriResource(storage=self, source_uri=source_uri, name=name)
-        else:
-            return Resource(storage=self, name=name)
-
-    def cache(
-        self,
-        get_name: Callable = None,
-        serializer: ByteSerializer = None,
-    ) -> "Cache":
-        """
-        Args:
-            get_name (Callable, optional): TODO
-            serializer (ByteSerializer, optional): TODO
-        Returns:
-            Callable function decorator
-        """
-        return Cache(storage=self, get_name=get_name, serializer=serializer)
-
-    def check(self, fix=False):
-        """check for problems in storage"""
-        for res in self.find_resources():
-            if not is_file_readonly(res.filepath):
-                if fix:
-                    make_file_readonly(res.filepath)
-                    logging.info(f"FIXED: File not readonly: {res.filepath}")
-                else:
-                    logging.warning(f"File not readonly: {res.filepath}")
-
-    @classmethod
-    def is_metadata_path(cls, path: str):
-        return ".metadata." in path
-
-    @classmethod
-    def is_temp_path(cls, path: str):
-        return "+" in path
-
-    def find_resources(self, *path_patterns) -> Iterable["Resource"]:
-        """Find resources by name
-        Args:
-
-            path_patterns (str): name patterns
-
-        Yields:
-            Resource
-        """
-        path_patterns = [re.compile(".*" + p.lower()) for p in path_patterns]
-        for rt, _ds, fs in os.walk(self.location):
-            rt_rl = os.path.relpath(rt, self.location).replace("\\", "/")
-            for filename in fs:
-                path = f"{rt_rl}/{filename}"
-                if self.is_metadata_path(path):
-                    continue
-                if self.is_temp_path(path):
-                    continue
-                if all(p.match(path) for p in path_patterns):
-                    yield self.resource("data://" + path)
+METADATA_JSON_SUFFIX = ".metadata.json"
+TEMPFILE_SUFFIX = ".tmp"
 
 
-class Resource:
-    """Store data and metadata"""
+class AbstractStorage(abc.ABC):
+    @abc.abstractmethod
+    def resource(
+        self, source: Any, name: Union[str, Callable] = None
+    ) -> "Resource": ...
 
-    def __init__(self, storage: "Storage", name: str):
-        self.__storage = storage
-        self.__name = get_resource_path_name(name)
-        if self.__storage.is_metadata_path(self.__name):
-            raise InvalidPath(self.__name)
-        if self.__storage.is_temp_path(self.__name):
-            raise InvalidPath(self.__name)
-        self.__filepath = os.path.abspath(self.__storage.location + "/" + self.__name)
+    @abc.abstractmethod
+    def _resource_delete(self, resource_name: str) -> None: ...
 
-    def __str__(self):
-        return self.name
+    @abc.abstractmethod
+    def _resource_exists(self, resource_name: str) -> bool: ...
 
-    def __repr__(self):
-        return f"Resource('{self.name}')"
+    @abc.abstractmethod
+    def _metadata_update(
+        self, resource_name: str, metadata: Dict[str, Any]
+    ) -> None: ...
 
-    @property
-    def name(self) -> str:
-        """unique, normalized dataset name"""
-        return self.__name
+    @abc.abstractmethod
+    def _metadata_query(self, resource_name: str, key: str) -> Any: ...
 
-    @property
-    def filepath(self) -> str:
-        """filepath of data in storage"""
-        return self.__filepath
+    @abc.abstractmethod
+    def _bytes_write(self, resource_name: str, byte_buffer: IOBase) -> None: ...
 
-    @property
-    def metadata(self) -> "Metadata":
-        """meta data for this resource
+    @abc.abstractmethod
+    def _bytes_open(self, resource_name: str) -> IOBase: ...
 
-        returns:
-            Metadata
-        """
-        return Metadata(resource=self)
+    @abc.abstractmethod
+    def find_resources(self, *args, **kwargs) -> Iterable["Resource"]: ...
 
-    @property
-    def is_writable(self) -> bool:
-        """can user write customdata to resource?"""
-        return True
+    @abc.abstractmethod
+    def _validate_name(self, name: str) -> str: ...
 
-    def exists(self) -> bool:
-        """Check if resource ecists in storage.
+    @abc.abstractmethod
+    def __enter__(self) -> "AbstractStorage": ...
 
-        returns:
-            bool
-        """
-        return os.path.exists(self.filepath)
-
-    def delete(self, delete_metadata: bool = False) -> None:
-        """Delete resource from storage.
-
-        Args:
-            delete_metadata (bool, optional): Also delete metadata.
-        """
-        delete_file(self.filepath)
-
-        if delete_metadata:
-            self.metadata.delete()
-
-    def _write(self, data: Union[BufferedReader, bytes, Iterable]) -> None:
-        """Write binary data into storage"""
-        if self.exists():
-            raise DataExists(self)
-
-        # write data into temporary file
-        tmp_dir = os.path.dirname(self.filepath)
-        tmp_prefix = os.path.basename(self.filepath) + "+"
-
-        hash_method = DEFAULT_HASH_METHOD
-        hasher = getattr(hashlib, hash_method)()
-        size = 0
-
-        os.makedirs(tmp_dir, exist_ok=True)
-        with NamedTemporaryFile(
-            "wb", dir=tmp_dir, prefix=tmp_prefix, delete=False
-        ) as file:
-            logging.debug(f"WRITING {file.name}")
-            for chunk in as_byte_iterator(data):
-                file.write(chunk)
-                size += len(chunk)
-                hasher.update(chunk)
-
-        # move to final location
-        try:
-            logging.debug(f"MOVE {file.name} => {self.filepath}")
-            os.rename(file.name, self.filepath)
-        except Exception:
-            delete_file(file.name)
-            raise
-        make_file_readonly(self.filepath)
-
-        # update metadata
-        metadata = {
-            f"hash.{hash_method}": hasher.hexdigest(),
-            "size": size,
-            "source.user": get_user_w_host(),
-            "source.datetime": get_now_str(),
-            "source.name": self.name,
-        }
-        self.metadata.update(metadata)
-
-    def _open(self) -> BufferedReader:
-        """Open resource as binary BufferedReader"""
-        if not self.exists():
-            self.download()
-        logging.debug(f"READING {self.filepath}")
-        file = open(self.filepath, "rb")
-        return file
-
-    def load(self, validate_schema=False, **kwargs):
-        """Load data using loading functions determined by the resource's mediatype"""
-        if not self.exists():
-            self.download()
-        data = FileLoader.load(filepath=self.filepath, **kwargs)
-        if validate_schema:
-            schema = self.metadata.get("schema")
-            validate(data, schema)
-        return data
-
-    def save(self, data, **kwargs):
-        """Save data using functions determined by the resource's mediatype"""
-
-        if self.exists():
-            raise DataExists(self)
-        if not self.is_writable:
-            raise DatatoolsException("Cannot write to resource")
-
-        suffix = get_suffix(self.name)
-        handler = FileLoader.get_handler(data, suffix=suffix)
-        byte_data, metadata = handler.encode_data_metadata(data, suffix=suffix)
-        self._write(data=byte_data)
-        self.metadata.update(metadata)
-
-    def download(self, **kwargs):
-        raise DatatoolsException("Not a remote resource")
-
-
-class UriResource(Resource):
-    """Resource that can be automatically loaded from external uri"""
-
-    def __init__(self, storage: "Storage", source_uri: str, name: str = None):
-        """
-        Args:
-            source_uri (str): URI of location.
-                If not an URI: assume it's a local file path.
-            name (str, optional): if not specified: name will be generated from uri
-        """
-        self.__source_uri = as_uri(source_uri)
-        name = name or uri_to_data_path(source_uri)
-        super().__init__(storage=storage, name=name)
-
-    @property
-    def source_uri(self):
-        """URI of data source"""
-        return self.__source_uri
-
-    @property
-    def is_writable(self) -> bool:
-        """can user write customdata to resource?"""
-        # cannot overwrite remote source
-        return False
-
-    def download(self, exist_ok: bool = False) -> None:
-        """save from source"""
-
-        if self.exists():
-            if exist_ok:
-                logging.info("Resource already downloaded.")
-                return
-            raise DataExists(self)
-
-        suffix = get_suffix(self.name)
-        handler = UriLoader.get_handler(self.source_uri)
-        byte_data, metadata = handler.open_data_metadata(self.source_uri, suffix=suffix)
-        super()._write(data=byte_data)
-        self.metadata.update(metadata)
+    @abc.abstractmethod
+    def __exit__(self, *args) -> None: ...
 
 
 class Metadata:
-    """Metadata object associated with resource"""
-
-    def __init__(self, resource: "Resource"):
-        self.__resource = resource
-        self.__filepath = self.__resource.filepath + ".metadata.json"
-
-    def __read(self) -> dict:
-        if not os.path.exists(self.__filepath):
-            metadata = {}
-        else:
-            logging.debug(f"READING {self.__filepath}")
-            with open(self.__filepath, "rb") as file:
-                metadata = json.load(file)
-        return metadata
-
-    def update(self, metadata: dict) -> None:
-        """Update metadata.
+    def update(self, metadata: Dict[str, Any]) -> None:
+        """_summary_
 
         Args:
-            metadata (dict): key, value mapping, where keys are jsonpaths
-
-        """
-        # get existing metadata
-        _metadata = self.__read()
-
-        # update
-        for key, value in metadata.items():
-            metadata_path_pattern = self.__create_metadata_path_pattern(
-                metadata_path=key
-            )
-            logging.debug(f"update metadata: {key} => {value}")
-            metadata_path_pattern.update_or_create(_metadata, value)
-
-        # convert to bytes
-        metadata_bytes = json.dumps(
-            _metadata, indent=2, ensure_ascii=False, default=json_serialize
-        ).encode()
-
-        # save
-        os.makedirs(os.path.dirname(self.__filepath), exist_ok=True)
-        logging.debug(f"WRITING {self.__filepath}")
-        with open(self.__filepath, "wb") as file:
-            file.write(metadata_bytes)
-
-    def get(self, key: str = None, default: Union[str, Callable] = None) -> object:
-        """Get metadata value.
-
-        Args:
-            key (str, optional): metadata key (json path)
-            default (Union[str, Callable], optional): default value
-                or function to create default value fromresoutce instance
-
+            metadata (Dict[str, Any]): _description_
 
         Returns:
-            object
-
+            _type_: _description_
         """
-        metadata = self.__read()
+        self._storage._metadata_update(
+            resource_name=self._resource_name, metadata=metadata
+        )
+
+    def query(self, key: str = None) -> Any:
+        """_summary_
+
+        Args:
+            key (str, optional): _description_. Defaults to None.
+
+        Returns:
+            Any: _description_
+        """
+        return self._storage._metadata_query(resource_name=self._resource_name, key=key)
+
+    def __init__(self, storage: "AbstractStorage", resource_name: str) -> None:
+        self.__storage = storage
+        self.__resource_name = resource_name
+
+    @property
+    def _storage(self) -> AbstractStorage:
+        return self.__storage
+
+    @property
+    def _resource_name(self) -> str:
+        return self.__resource_name
+
+
+class Resource:
+    """_summary_"""
+
+    def __init__(
+        self,
+        storage: "AbstractStorage",
+        source: Any,
+        name: Union[str, Callable] = None,
+    ) -> None:
+        self.__storage = storage
+        self.__data_generator = AbstractDataGenerator.get_instance(source=source)
+
+        # create first draft of name
+        _name = name if isinstance(name, str) else self._data_generator.create_name()
+        # if name is a function: use it to modify the draft
+        if isinstance(name, Callable):
+            _name = name(_name)
+        # finally: storage must approve
+        self.__name = storage._validate_name(_name)
+        self.__metadata = Metadata(storage=self._storage, resource_name=self.name)
+
+    def __str__(self) -> str:
+        return self.uri
+
+    @property
+    def uri(self) -> str:
+        return f"{RESOURCE_URI_PREFIX}{self.name}"
+
+    @property
+    def metadata(self) -> "Metadata":
+        return self.__metadata
+
+    @property
+    def name(self) -> str:
+        return self.__name
+
+    @property
+    def _storage(self) -> AbstractStorage:
+        return self.__storage
+
+    @property
+    def _data_generator(self) -> AbstractDataGenerator:
+        return self.__data_generator
+
+    def exists(self) -> bool:
+        return self._storage._resource_exists(resource_name=self.name)
+
+    def delete(self) -> None:
+        if not self.exists():
+            raise DataDoesNotExists(self)
+        self._storage._resource_delete(resource_name=self.name)
+
+    def save(self, media_type: str = None) -> None:
+        if self.exists():
+            raise DataExists(self)
+
+        # get extra kwargs from metadata
+        create_kwargs = {
+            k: self.metadata.query(k) for k in self._data_generator.create_kwargs
+        }
+
+        data, metadata_create = self._data_generator.create_data_metadata(
+            **create_kwargs
+        )
+
+        data_type = type(data)  # type from actual data, not from resource
+        # priority: function argument, metadata, data generator
+        if not media_type:
+            media_type = self.metadata.query(MEDIA_TYPE_METADATA_PATH)
+        if not media_type:
+            media_type = self._data_generator.get_media_data_type(name=self.name)[0]
+        converter = AbstractConverter.get_instance(
+            media_type=media_type, data_type=data_type
+        )
+
+        # get extra kwargs from metadata
+        encode_kwargs = {k: self.metadata.query(k) for k in converter.encode_kwargs}
+        bytes_buffer, metadata_encode = converter.encode(data, **encode_kwargs)
+
+        bytes_buffer_wrapper = ByteBufferWrapper(bytes_buffer)
+
+        with bytes_buffer_wrapper:
+            self._storage._bytes_write(
+                resource_name=self.name, byte_buffer=bytes_buffer_wrapper
+            )
+
+        metadata_save = {
+            "created": {"datetime": get_now_str(), "user": get_user_w_host()},
+            "size": bytes_buffer_wrapper.bytes,
+            "hash": {
+                method: hasher.hexdigest()
+                for method, hasher in bytes_buffer_wrapper.hashers.items()
+            },
+            MEDIA_TYPE_METADATA_PATH: media_type,
+        }
+
+        new_metadata = {}  # older python cant do dict1 | dict2
+        new_metadata.update(metadata_create)
+        new_metadata.update(metadata_encode)
+        new_metadata.update(metadata_save)
+
+        self.metadata.update(new_metadata)
+
+    def load(self, data_type: Type = None) -> Any:
+        if not self.exists():
+            self.save()
+
+        # priority: function argument, data generator
+        _media_type, _data_type = self._data_generator.get_media_data_type(
+            name=self.name
+        )
+
+        if not data_type:
+            data_type = _data_type
+        media_type = self.metadata.query(MEDIA_TYPE_METADATA_PATH)
+        if not media_type:
+            media_type = _media_type
+
+        converter = AbstractConverter.get_instance(
+            media_type=media_type, data_type=data_type
+        )
+
+        # get extra kwargs from metadata
+        decode_kwargs = {k: self.metadata.query(k) for k in converter.decode_kwargs}
+
+        # load bytes and decode
+        with self._storage._bytes_open(resource_name=self.name) as bytes_buffer:
+            data = converter.decode(bytes_buffer, **decode_kwargs)
+
+        return data
+
+    def _open(self) -> IOBase:
+        return self._storage._bytes_open(self.name)
+
+
+class MetadataMemCache:
+    def __init__(self):
+        self._data = {}
+        self._last_updated = {}
+
+    def cache(self, func_get):
+        def func(filepath):
+            if os.path.exists(filepath):
+                timestamp = os.path.getmtime(filepath)
+                if self._last_updated.get(filepath) == timestamp:
+                    # use cache
+                    return self._data[filepath]
+            # use original function and store in cache
+            data = func_get(filepath)
+
+            if os.path.exists(filepath):
+                timestamp = os.path.getmtime(filepath)
+                self._last_updated[filepath] = timestamp
+                self._data[filepath] = data
+
+            return data
+
+        return func
+
+
+class Storage(AbstractStorage):
+
+    def __init__(self, location: str = None):
+        self.__location = os.path.abspath(os.path.realpath(location or "."))
+        self.__uri = as_uri(self._location)
+
+        # when loading metadata from filesystem: cache it
+        # so we can query multiple times
+        self.__metadata_memcache = MetadataMemCache()
+
+    @property
+    def _location(self):
+        return self.__location
+
+    @property
+    def _uri(self):
+        return self.__uri
+
+    def __str__(self):
+        return self._location
+
+    def resource(self, source: Any, name: Union[str, Callable] = None) -> "Resource":
+        """Create resource descriptor.
+
+        Parameters
+        ----------
+        source : Any
+            _description_
+        name : Union[str, Callable], optional
+            _description_, by default None
+
+        Returns
+        -------
+        Resource
+            _description_
+        """
+        self._validate_source(source)
+        return Resource(storage=self, source=source, name=name)
+
+    def _validate_source(self, source) -> None:
+        # A file:// source must not be inside the storage location
+        if isinstance(source, str):
+            if source.startswith(self._uri):
+                # for suggested uri: replace prefix
+                suggested_uri = source.replace(self._uri, RESOURCE_URI_PREFIX)
+                raise DatatoolsException(
+                    f"Source already in storge, maybe you want to use {suggested_uri}"
+                )
+
+    def _get_filepath(self, resource_name: str):
+        relpath = resource_name
+        if not relpath.startswith("/"):
+            relpath = "/" + relpath
+        filepath = os.path.realpath(self._location + relpath)
+        return filepath
+
+    def _get_filepath_metadata(self, resource_name: str):
+        return self._get_filepath(resource_name=resource_name) + METADATA_JSON_SUFFIX
+
+    def _resource_delete(self, resource_name: str) -> None:
+        filepath = self._get_filepath(resource_name=resource_name)
+        filepath_meta = self._get_filepath_metadata(resource_name=resource_name)
+        delete_file(filepath)
+        delete_file(filepath_meta)
+
+    def _resource_exists(self, resource_name: str) -> bool:
+        filepath = self._get_filepath(resource_name=resource_name)
+        return os.path.isfile(filepath)
+
+    def _read_metadata(self, filepath_meta):
+        if not os.path.isfile(filepath_meta):
+            logging.debug("no metadata file: %s", filepath_meta)
+            return {}
+        logging.debug("Reading %s", filepath_meta)
+        with open(filepath_meta, "r", encoding="utf-8") as file:
+            return json.load(file)
+
+    def _metadata_update(self, resource_name: str, metadata: Dict[str, Any]) -> None:
+        filepath_meta = self._get_filepath_metadata(resource_name=resource_name)
+        _metadata = self._read_metadata(filepath_meta)
+
+        for key, val in metadata.items():
+            jsonpath_update(_metadata, key, val)
+
+        sdata = json_dumps(_metadata, ensure_ascii=False, indent=2)
+        os.makedirs(os.path.dirname(filepath_meta), exist_ok=True)
+
+        logging.debug("Writing %s", filepath_meta)
+        with open(filepath_meta, "w", encoding="utf-8") as file:
+            file.write(sdata)
+
+    def _metadata_query(self, resource_name: str, key: str = None) -> Any:
+
+        filepath_meta = self._get_filepath_metadata(resource_name=resource_name)
+
+        read_metadata = self._read_metadata
+        read_metadata = self.__metadata_memcache.cache(read_metadata)
+
+        metadata = read_metadata(filepath_meta)
 
         key = key or ROOT_METADATA_PATH
-        metadata_path_pattern = self.__create_metadata_path_pattern(metadata_path=key)
-        match = metadata_path_pattern.find(metadata)
+        match = jsonpath_get(metadata, key)
         result = [x.value for x in match]
 
         # TODO: we always get a list (multiple matches),
@@ -372,90 +387,65 @@ class Metadata:
         else:
             logging.warning("multiple results in metadata found")
 
-        if not result and default:
-            if isinstance(default, Callable):
-                default = default(self.__resource)
-                # TODO: save?
-            result = default
-
         return result
 
-    def _delete(self):
-        delete_file(self.__filepath)
+    def _bytes_write(self, resource_name: str, byte_buffer: IOBase) -> None:
+        filepath = self._get_filepath(resource_name=resource_name)
+        filepath_temp = filepath + TEMPFILE_SUFFIX
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
 
-    def __create_metadata_path_pattern(self, metadata_path: str) -> str:
-        metadata_path_pattern = jsonpath_ng.parse(metadata_path)
-        return metadata_path_pattern
+        assert not os.path.exists(filepath_temp)  # should not exist
+        logging.debug("Writing %s", filepath_temp)
+        with open(filepath_temp, "wb") as file:
+            # TODO: chunked
+            file.write(byte_buffer.read())
 
+        assert not os.path.exists(filepath)  # should not exist
+        logging.debug("Renaming %s => %s", filepath_temp, filepath)
+        os.rename(filepath_temp, filepath)
 
-class Cache:
-    """Decorator"""
+        make_file_readonly(filepath)
 
-    default_serializer = PickleSerializer()
+    def _bytes_open(self, resource_name: str) -> IOBase:
+        filepath = self._get_filepath(resource_name=resource_name)
+        logging.debug("Reading %s", filepath)
+        return open(filepath, "rb")
 
-    def __init__(
-        self,
-        storage: Storage = None,
-        get_name: Callable = None,
-        serializer: ByteSerializer = None,
-    ):
-        self.__storage = storage or Storage()
-        self.__get_name = get_name or self.default_get_name
-        self.__serializer = serializer or self.default_serializer
+    def find_resources(self, *patterns, **kwargs) -> Iterable[Resource]:
+        for rt, _ds, filenames in os.walk(self._location):
+            for filename in filenames:
+                # find only metadata
+                if not filename.endswith(METADATA_JSON_SUFFIX):
+                    continue
+                suffix_len = len(METADATA_JSON_SUFFIX)
+                filename = filename[:-suffix_len]
+                filepath = os.path.join(rt, filename)
+                filepath_rel = os.path.relpath(filepath, self._location)
+                name = filepath_rel.replace("\\", "/")
 
-    def __call__(self, fun):
-        @functools.wraps(fun)
-        def _fun(*args, **kwargs):
-            # get data_path from function + arguments
-            name = self.__get_name(fun, args, kwargs)
-            res = self.__storage.resource(name=name)
+                # currently, we only match pattern agains name
+                if not all(re.match(f".*{pat}", name) for pat in patterns):
+                    continue
 
-            # try to get data from store
-            if not res.exists():
-                # actually call function and write data
-                data = fun(*args, **kwargs)
-                byte_data = self.__serializer.dumps(data)
-                res._write(data=byte_data)
+                uri = RESOURCE_URI_PREFIX + name
 
-                # add job description as metadata
-                job_description = self.get_job_description(fun, args, kwargs)
-                metadata = {"source.creation": job_description}
-                res.metadata.update(metadata)
+                yield self.resource(uri)
 
-            # load data from storage
-            with res._open() as file:
-                byte_data = file.read()
+    def _validate_name(self, name: str) -> str:
+        name_new = get_resource_path_name(name)
+        if (
+            not name_new  # must no be empty
+            or name_new.endswith(METADATA_JSON_SUFFIX)  # no metadata
+            or name_new.endswith(TEMPFILE_SUFFIX)  # no temporary
+        ):
+            raise ValueError(f"Invalid name: {name_new}")
+        return name_new
 
-            data = self.__serializer.loads(byte_data)
-            return data
+    def __enter__(self) -> AbstractStorage:
+        return self
 
-        return _fun
-
-    def get_hash(self, object):
-        bytes = json.dumps(
-            object, sort_keys=True, ensure_ascii=False, default=json_serialize
-        ).encode()
-        job_id = hashlib.md5(bytes).hexdigest()
-        return job_id
-
-    def get_job_description(self, fun, args, kwargs):
-        return {
-            "function": fun.__name__,
-            "args": args,
-            "kwargs": kwargs,
-            "description": fun.__doc__,  # todo: maybe cleanup into plain text
-        }
-
-    def default_get_name(self, fun, args, kwargs):
-        f_name = f"{fun.__name__}"
-        job_desc = self.get_job_description(fun, args, kwargs)
-        # we only hash part of it:
-        job_id = self.get_hash({"args": job_desc["args"], "kwargs": job_desc["kwargs"]})
-        # we can shorten the hash: 8 to 10 chars should be enough
-        job_id = job_id[:8]
-        suffix = self.__serializer.suffix
-        prefix = "cache/"
-        return f"{prefix}{f_name}_{job_id}{suffix}"
+    def __exit__(self, *args) -> None:
+        return
 
 
 class StorageGlobal(Storage):
@@ -471,3 +461,16 @@ class StorageEnv(Storage):
     def __init__(self, env_location):
         location = os.environ[env_location]
         super().__init__(location=location)
+
+
+class StorageTemp(Storage):
+    """"""
+
+    def __init__(self):
+        location = tempfile.mkdtemp()
+        super().__init__(location=location)
+
+    def __exit__(self, *args):
+        # cleanup
+        super().__exit__(*args)
+        rmtree_readonly(self._location)
