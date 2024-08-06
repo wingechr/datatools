@@ -1,10 +1,6 @@
 import atexit
-import base64
 import csv
 import datetime
-import functools
-import hashlib
-import importlib
 import inspect
 import io
 import json
@@ -12,24 +8,19 @@ import logging
 import os
 import pickle
 import re
-import shutil
 import socket
-import stat
-import subprocess
 import sys
 import time
 from contextlib import ExitStack as _ExitStack
-from io import BufferedReader, IOBase
+from io import BufferedReader
 from pathlib import Path
-from typing import Any, Callable, Iterable, List, Tuple, Type, Union
+from typing import Iterable, Union
 from urllib.parse import quote, unquote, unquote_plus, urlsplit
 
 import chardet
-import jsonpath_ng
 import numpy as np
 import pandas as pd
 import requests
-import simplejson
 import sqlalchemy as sa
 import sqlparse
 import tzlocal
@@ -41,7 +32,6 @@ from .constants import (
     DATETIMETZ_FMT,
     DEFAULT_BUFFER_SIZE,
     FILEMOD_WRITE,
-    HASH_METHODS,
     LOCALHOST,
     PARAM_SQL_QUERY,
     TIME_FMT,
@@ -115,13 +105,13 @@ def wait_for_server(url, timeout_s=30) -> None:
     while True:
         try:
             requests.head(url)
-            logging.debug("Server is online: %s", url)
+            logging.debug(f"Server is online: {url}")
             return True
         except requests.exceptions.ConnectionError:
             pass
 
         time_waited = time.time() - time_start
-        logging.debug("checking server (%s): %s", time_waited, url)
+        logging.debug(f"checking server ({time_waited}): {url}")
         if timeout_s is not None and time_waited >= timeout_s:
             break
         time.sleep(wait_s)
@@ -284,6 +274,7 @@ def as_uri(source: str) -> str:
         # uri must be absolute path
         filepath_abs = Path(source).absolute()
         uri = filepath_abs_to_uri(filepath_abs=filepath_abs)
+        logging.debug(f"Translate {source} => {uri}")
     else:
         uri = source
     return uri
@@ -365,7 +356,7 @@ def remove_port_from_url_netloc(url_netloc: str) -> str:
     return re.sub(":[0-9]+$", "", url_netloc)
 
 
-def parse_cli_metadata(metadata_key_vals: List[str]) -> dict:
+def parse_cli_metadata(metadata_key_vals):
     """cli: list of key=value"""
     metadata = {}
     for key_value in metadata_key_vals:
@@ -394,7 +385,7 @@ def parse_content_type(ctype: str) -> dict:
             value = value.strip()
             result[key] = value
         except Exception:
-            logging.warning("cannot parse %s", key_value)
+            logging.warning(f"cannot parse {key_value}")
 
     return result
 
@@ -408,24 +399,9 @@ def json_serialize(x):
         return x.strftime(TIME_FMT)
     elif isinstance(x, np.bool_):
         return bool(x)
-    elif np.issubdtype(type(x), np.integer):
-        return int(x)
-    elif np.issubdtype(type(x), np.floating):
-        return float(x)
-    elif x == inspect._empty or pd.isna(x):
-        # various NULL types
-        return None
-    elif isinstance(x, pd.Series):
-        # classname
-        x = x.astype("object")
-        x = x.where(pd.notnull(x), None)
-        return dict(x)
     elif inspect.isclass(x):
         # classname
         return x.__name__
-    elif np.issubdtype(type(x), bytes):
-        # bytes to str:
-        return base64.b64encode(x).decode("utf-8")
     else:
         raise NotImplementedError(f"{x.__class__}: {x}")
 
@@ -436,14 +412,14 @@ def as_byte_iterator(data: Union[bytes, Iterable, BufferedReader]) -> Iterable[b
     elif isinstance(data, BufferedReader):
         while True:
             chunk = data.read(DEFAULT_BUFFER_SIZE)
-            logging.debug("read %s bytes", len(chunk))
+            logging.debug(f"read {len(chunk)} bytes")
             if not chunk:
                 break
             yield chunk
         try:
             data.close()
         except Exception as exc:
-            logging.warning("could not close BufferedReader: %s", exc)
+            logging.warning(f"could not close BufferedReader: {exc}")
     elif isinstance(data, Iterable):
         yield from data
     else:
@@ -453,7 +429,7 @@ def as_byte_iterator(data: Union[bytes, Iterable, BufferedReader]) -> Iterable[b
 def detect_encoding(sample_data: bytes) -> str:
     result = chardet.detect(sample_data)
     if result["confidence"] < 1:
-        logging.warning("Chardet encoding detection < 100%: %s", result)
+        logging.warning(f"Chardet encoding detection < 100%: {result}")
     return result["encoding"]
 
 
@@ -507,7 +483,7 @@ def get_df_table_schema(df: pd.DataFrame):
 def delete_file(filepath: str) -> str:
     if not os.path.exists(filepath):
         return
-    logging.debug("deleting %s", filepath)
+    logging.debug(f"DELETING {filepath}")
     make_file_writable(file_path=filepath)
     os.remove(filepath)
 
@@ -564,7 +540,7 @@ class JsonSerializer(ByteSerializer):
     suffix = ".json"
 
     def dumps(self, data: object, **kwargs) -> bytes:
-        return json_dumps(data, **kwargs).encode()
+        return json.dumps(data, **kwargs).encode()
 
     def loads(self, data: bytes, **kwargs) -> object:
         return json.loads(data, **kwargs)
@@ -581,9 +557,7 @@ class PickleSerializer(ByteSerializer):
         return pickle.loads(data, **kwargs)
 
 
-def get_sql_uri(
-    connection_string_uri: str, sql_query: str, fragment_name: str = None
-) -> str:
+def get_sql_uri(connection_string_uri: str, sql_query: str) -> str:
     sql_query = normalize_sql_query(sql_query)
 
     if "?" in connection_string_uri:
@@ -591,8 +565,7 @@ def get_sql_uri(
     else:
         connection_string_uri += "?"
     uri = connection_string_uri + PARAM_SQL_QUERY + "=" + quote(sql_query)
-    if fragment_name:
-        uri = f"{uri}#{fragment_name}"
+
     return uri
 
 
@@ -657,274 +630,3 @@ def sa_create_engine(connection_string: str) -> sa.Engine:
         kwargs["use_setinputsizes"] = False
     engine = sa.create_engine(connection_string, echo=False, **kwargs)
     return engine
-
-
-def get_connection_string_uri_mssql_pyodbc(server, database="master"):
-    return f"mssql+pyodbc://?odbc_connect=driver=sql server;server={server};database={database}"  # noqa
-
-
-class BytesIteratorBuffer(IOBase):
-    def __init__(self, bytes_iter) -> None:
-        self.bytes_iter = bytes_iter
-
-        self.buffer = b""
-        self.bytes = 0
-
-    def read(self, n=None):
-        # read more data
-
-        while True:
-            if n is not None and n <= self.bytes:
-                # if bytesare specified and we have enough data
-                break
-            try:
-                chunk = next(self.bytes_iter)
-            except StopIteration:
-                break
-            self.buffer += chunk
-            self.bytes += len(chunk)
-
-        # how many do we return
-        n = self.bytes if n is None else min(n, self.bytes)
-        # split buffer
-        data = self.buffer[:n]
-        self.buffer = self.buffer[n:]
-        return data
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args):
-        pass
-
-
-class ByteBufferWrapper:
-    def __init__(self, buffer):
-        self.buffer = buffer
-
-        self.bytes = None
-        self.hashers = {}
-
-    def __enter__(self):
-        self.buffer.__enter__()
-        self.bytes = 0
-        for method in HASH_METHODS:
-            self.hashers[method] = getattr(hashlib, method)()
-
-        return self
-
-    def __exit__(self, *args):
-        self.buffer.__exit__(*args)
-
-    def read(self, n=None):
-        chunk = self.buffer.read(n)
-
-        self.bytes += len(chunk)
-        for hasher in self.hashers.values():
-            hasher.update(chunk)
-
-        return chunk
-
-
-def get_default_media_data_type_by_name(name: str) -> Tuple[str, Type]:
-    # defaults, only dependent on name (suffix)
-    if re.match(r"^.*\.json$", name):
-        return ("application/json", object)
-    elif re.match(r"^.*\.(pkl|pickle)$", name):
-        return ("application/x-pickle", object)
-    elif re.match(r"^.*\.(csv)$", name):
-        return ("text/csv", list)
-    # default: binary
-    return ("application/octet-stream", bytes)
-
-
-def get_default_suffix(media_type: str) -> str:
-    return {
-        "application/json": ".json",
-        "application/x-pickle": ".pickle",
-        "text/csv": ".csv",
-    }.get(media_type)
-
-
-def get_git_info(repo_path: str) -> dict:
-    """get git branch,commit and is clean status
-    from a local git repository, given as a path"""
-
-    def run_git_command(command, cwd):
-        result = subprocess.run(
-            command, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-        )
-        if result.returncode != 0:
-            logging.warning(result.stderr.strip())
-            return None
-        return result.stdout.strip()
-
-    # Get the current branch name
-    branch = run_git_command(["git", "rev-parse", "--abbrev-ref", "HEAD"], repo_path)
-
-    # Get the latest commit hash
-    commit = run_git_command(["git", "rev-parse", "HEAD"], repo_path)
-
-    # Get the origin remote URL
-    origin_url = run_git_command(
-        ["git", "config", "--get", "remote.origin.url"], repo_path
-    )
-
-    # Check if the repository is clean
-    status = run_git_command(["git", "status", "--porcelain"], repo_path)
-    is_clean = None if status is None else len(status) == 0
-    if not is_clean:
-        logging.warning("git repo is not clean")
-
-    return {
-        "branch": branch,
-        "commit": commit,
-        "is_clean": is_clean,
-        "origin": origin_url,
-    }
-
-
-def get_function_info(obj: Callable) -> dict:
-    if isinstance(obj, functools.partial):
-        func = obj.func
-        bound_args = obj.args
-        bound_kwargs = obj.keywords
-    else:
-        func = obj
-        bound_args = ()
-        bound_kwargs = {}
-
-    # get closure/context
-    if func.__closure__:
-        for pname, cell in zip(func.__code__.co_freevars, func.__closure__):
-            # ignore callables
-            # in decorated function, the base function is one of these parameters
-            # and there is no way of separating it from function arguments that
-            # are also functions.
-            # But we want serializable data only anyways, so drop all
-            value = cell.cell_contents
-            if isinstance(value, Callable):
-                continue
-            bound_kwargs[pname] = value
-
-    # get bound parameters
-    kwargs = bound_kwargs
-    for i, param in enumerate(inspect.signature(func).parameters.values()):
-        # TODO: use param.kind  # inspect.Parameter.POSITIONAL_OR_KEYWORD | POSITIONAL_ONLY | KEYWORD_ONLY # noqa
-        if param.name in kwargs:
-            continue
-        elif i < len(bound_args):  # map args => named kwargs
-            value = bound_args[i]
-        else:  # default value
-            value = param.default
-
-        kwargs[param.name] = value
-
-    # only return json serializable values, otherwise
-    # a string of the data class
-    def _serialize(x):
-        try:
-            return json.loads(json_dumps(x))
-        except Exception:
-            return f"{type(x)}"
-
-    kwargs = {k: _serialize(v) for k, v in kwargs.items()}
-
-    func_name = func.__name__
-    doc = inspect.cleandoc(inspect.getdoc(func) or "")
-    file = inspect.getfile(func)
-
-    # get module version (or parent module version)
-    version = None
-    try:
-        mod_path = inspect.getmodule(func).__name__.split(".")
-        while mod_path and not version:
-            mod_name = ".".join(mod_path)
-            mod = importlib.import_module(mod_name)
-            try:
-                version = getattr(mod, "__version__")
-                version = f"{mod_name} {version}"
-            except AttributeError:
-                pass
-            mod_path = mod_path[:-1]
-    except Exception:
-        pass
-
-    # get git info
-    git_info = None
-    # find git repository
-    for path in Path(file).parents:
-        if (path / ".git").exists():
-            try:
-                git_info = get_git_info(str(path))
-            except Exception:
-                pass
-            break
-
-    result = {
-        "name": func_name,
-        "kwargs": kwargs,
-        "doc": doc,
-        "file": file,
-        "version": version,
-        "git": git_info,
-    }
-    return result
-
-
-def rmtree_readonly(path: str) -> None:
-    """Delete recursively (inckl. readonly)"""
-
-    def delete_rw(action, name, exc):
-        """action if shutil rm fails"""
-        os.chmod(name, stat.S_IWRITE)
-        os.remove(name)
-
-    shutil.rmtree(path, onerror=delete_rw)
-
-
-def is_callable(obj: Any) -> bool:
-    return isinstance(obj, Callable)
-
-
-def get_sqlite_connection_string(location=None) -> str:
-    if location is None or location == ":memory:":
-        result = "sqlite:///:memory:"
-    else:
-        result = as_uri(location)
-        # replace scheme and host
-        result = re.sub("^file://[^/]*/", "sqlite:///", result)
-
-    return result
-
-
-def get_sqlite_query_uri(
-    location: str = None, sql_query: str = None, fragment_name: str = None
-) -> str:
-    cs = get_sqlite_connection_string(location=location)
-    return get_sql_uri(
-        connection_string_uri=cs, sql_query=sql_query, fragment_name=fragment_name
-    )
-
-
-def json_dumps(*args, default=json_serialize, **kwargs):
-    return simplejson.dumps(
-        *args,
-        **kwargs,
-        default=default,
-        # simplejson: If ignore_nan is true (default: False), then out of range float
-        # values (nan, inf, -inf) will be serialized as null in compliance with
-        # the ECMA-262 specification. If true, this will override allow_nan.
-        ignore_nan=True,
-    )
-
-
-def jsonpath_update(data: dict, key: str, val: Any) -> None:
-    key_pattern = jsonpath_ng.parse(key)
-    key_pattern.update_or_create(data, val)
-
-
-def jsonpath_get(data: dict, key) -> Any:
-    key_pattern = jsonpath_ng.parse(key)
-    match = key_pattern.find(data)
-    return match

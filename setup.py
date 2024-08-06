@@ -8,7 +8,7 @@ if __name__ == "__main__":
             "appdirs",
             "click",
             "coloredlogs",
-            "jsonpath-ng>=1.5",  # jsonpath_ng
+            "jsonpath-ng>=1.5",
             "requests",
             "tzlocal",
             "unidecode",
@@ -18,10 +18,10 @@ if __name__ == "__main__":
             "numpy",
             "pandas",
             "chardet",
-            "frictionless~=4.40",  # frictionless 5 changes validation
+            "frictionless<5",  # frictionless no longer works with python3.7
             "jsonschema",
+            "openpyxl",
             "genson",
-            "simplejson",
         ],
         install_recommends=[  # this does not do anything, just for information
             "geopandas",
@@ -41,7 +41,7 @@ if __name__ == "__main__":
         description=None,
         long_description=None,
         long_description_content_type="text/markdown",
-        version="0.11.0",
+        version="0.10.8b",
         author="Christian Winger",
         author_email="c@wingechr.de",
         url="https://github.com/wingechr/datatools",

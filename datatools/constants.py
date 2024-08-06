@@ -5,11 +5,10 @@ import appdirs
 
 PARAM_SQL_QUERY = "q"
 ROOT_METADATA_PATH = "$"  # root
-MEDIA_TYPE_METADATA_PATH = "mediaType"
 HASHED_DATA_PATH_PREFIX = "hash"
-HASH_METHODS = ["md5", "sha256"]
+ALLOWED_HASH_METHODS = ["md5", "sha256"]
 
-DEFAULT_HASH_METHOD = HASH_METHODS[0]
+DEFAULT_HASH_METHOD = ALLOWED_HASH_METHODS[0]
 
 GLOBAL_LOCATION = os.path.join(
     appdirs.user_data_dir(
@@ -17,7 +16,7 @@ GLOBAL_LOCATION = os.path.join(
     ),
     "data",
 )
-DEFAULT_LOCAL_LOCATION = "__data__"
+LOCAL_LOCATION = "__data__"
 
 # default is 1024 * 8
 # wsgi often uses 1024 * 16
@@ -33,4 +32,3 @@ LOCALHOST = "localhost"
 
 
 STORAGE_SCHEME = "data"
-RESOURCE_URI_PREFIX = f"{STORAGE_SCHEME}:///"

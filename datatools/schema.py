@@ -23,10 +23,7 @@ def infer_schema_from_objects(data: list):
     builder = genson.SchemaBuilder()
     builder.add_schema({"type": "object", "properties": {}})
     for item in data:
-        try:
-            builder.add_object(item)
-        except genson.schema.node.SchemaGenerationError as exc:
-            logging.warning("%s: %s", exc, type(item))
+        builder.add_object(item)
     item_schema = builder.to_schema()
     schema = {"type": "array", "items": item_schema}
     return schema
@@ -432,8 +429,8 @@ class Constraint(ColumnCollection):
         super().__init__(columns=columns, name=name)
         for column in self.columns:
             if column.is_nullable:
-                raise SchemaError(
-                    "Constraint column should not be nullable: {column.name}"
+                logging.warning(
+                    "Constraint column should not be nullable: %s", column.name
                 )
 
     def validate(self, data: DataFrame):
@@ -616,7 +613,7 @@ class SchemaDialectSqlalchemy(SchemaDialect):
                 const_cols = [self._get_column(c) for c in constraint.columns]
                 constraints.append(ConstraintForeignKey(columns=const_cols))
             else:
-                logging.error("Not implemented: %s", type(constraint))
+                logging.error(f"Not implemented: {type(constraint)}")
 
         schema = TableSchema(
             columns=columns,

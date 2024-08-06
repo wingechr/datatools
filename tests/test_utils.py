@@ -1,9 +1,7 @@
 # import logging
-import inspect
 import os
 import re
 import unittest
-from functools import partial
 from io import BytesIO
 from pathlib import PurePosixPath, PureWindowsPath
 from tempfile import TemporaryDirectory
@@ -11,25 +9,20 @@ from tempfile import TemporaryDirectory
 import numpy as np
 import pandas as pd
 
-import datatools
 from datatools.utils import (
     CsvSerializer,
     as_byte_iterator,
     df_to_values,
     filepath_abs_to_uri,
     get_df_table_schema,
-    get_function_info,
     get_hostname,
     get_now_str,
     get_resource_path_name,
     get_sql_uri,
-    get_sqlite_query_uri,
     get_suffix,
     get_user_w_host,
-    is_callable,
     is_file_readonly,
     is_uri,
-    json_dumps,
     json_serialize,
     make_file_readonly,
     make_file_writable,
@@ -178,10 +171,6 @@ class TestUtils(unittest.TestCase):
         res = json_serialize(object)
         self.assertEqual(res, "object")
 
-        # test various null types
-        for x in [None, inspect._empty, np.nan, pd.NA]:
-            self.assertEqual(json_dumps(x), "null")
-
     def test_get_df_table_schema(self):
         df = pd.DataFrame(
             {
@@ -208,19 +197,14 @@ class TestUtils(unittest.TestCase):
         )
 
     def test_get_sql_uri(self):
-        sql_query = "select a, b from t"
         self.assertEqual(
             get_sql_uri(
                 connection_string_uri="mssql+pyodbc://"
                 "?odbc_connect=driver=sql server;server=myserver",
-                sql_query=sql_query,
+                sql_query="select a, b from t",
             ),
             "mssql+pyodbc://?odbc_connect=driver=sql server;server=myserver&q="
             "SELECT%20a%2C%20b%20FROM%20t",
-        )
-        self.assertEqual(
-            get_sqlite_query_uri(location=None, sql_query=sql_query),  # :memory:,
-            "sqlite:///:memory:?q=SELECT%20a%2C%20b%20FROM%20t",
         )
 
     def test_get_suffix(self):
@@ -241,165 +225,6 @@ class TestUtils(unittest.TestCase):
             ),
             [{"f": 1.5, "i": 1.0, "s": "a"}, {"f": None, "i": None, "s": "b"}],
         )
-
-    def test_get_function_info(self):
-        """get information from different types of callables.
-        callables can be
-        - functions
-        - partials
-        - decorated functions (with closure)
-        - lambda expression
-
-        """
-        b = 100
-
-        # regular function
-        def myfunc(a, c=1, d=None):
-            "myfunc docstring"
-            # b is from outer context
-            return a + b + c + (d or 0)
-
-        # function with partially bound args
-        myfunc_partial = partial(myfunc, 5, d=20)
-
-        # decorated function (with closure)
-        def make_myfunc_closure(b=None):
-            a = 10
-
-            def decorator(myfunc):
-
-                def myfunc_closure(c, d):
-                    return myfunc(a=a, b=b, c=c, d=d)
-
-                myfunc_closure.__name__ = myfunc.__name__
-                myfunc_closure.__doc__ = myfunc.__doc__
-
-                return myfunc_closure
-
-            return decorator
-
-        _myfunc_closure = make_myfunc_closure(5)(myfunc)
-
-        # lambda expression
-        f_lambda = lambda a, b, c, d: a + b + c + d  # noqa
-        f_lambda.__name__ = myfunc.__name__
-        f_lambda.__doc__ = myfunc.__doc__
-
-        info = get_function_info(myfunc)
-        info_partial = get_function_info(myfunc_partial)
-        info_closure = get_function_info(_myfunc_closure)
-        info_lambda = get_function_info(f_lambda)
-
-        # check generated names
-        self.assertEqual(info["name"], "myfunc")
-        # partial: name of original function
-        self.assertEqual(info_partial["name"], "myfunc")
-        # decorator: inner name (from inside decorator)
-        # but: in this example, we set myfunc_closure.__name__ = myfunc.__name__
-        self.assertEqual(info_closure["name"], "myfunc")
-        self.assertEqual(info_lambda["name"], "myfunc")  # manually set
-
-        # get docstrings
-        self.assertEqual(info["doc"], "myfunc docstring")
-        self.assertEqual(info_partial["doc"], "myfunc docstring")
-        # decorator: from inside decorator
-        # but: in this example, we set myfunc_closure.__doc__ = myfunc.__doc__
-        self.assertEqual(info_closure["doc"], "myfunc docstring")
-        self.assertEqual(info_lambda["doc"], "myfunc docstring")  # manually set
-
-        # get file in which function is defined
-        this_file = os.path.realpath(__file__)
-        self.assertEqual(os.path.realpath(info["file"]), this_file)
-        self.assertEqual(os.path.realpath(info_partial["file"]), this_file)
-        self.assertEqual(os.path.realpath(info_closure["file"]), this_file)
-        self.assertEqual(os.path.realpath(info_lambda["file"]), this_file)
-
-        # if possible: get bound values
-        # normal function: only get default values
-        self.assertDictEqual(
-            info["kwargs"],
-            {
-                "a": None,
-                "b": 100,  # from outer context
-                "c": 1,  # default value
-                "d": None,
-            },
-        )
-        # partial: get all bound
-        self.assertDictEqual(
-            info_partial["kwargs"],
-            {
-                "a": 5,  # from partial
-                "b": 100,  # from outer context
-                "c": 1,  # default value
-                "d": 20,  # from partial
-            },
-        )
-        # decorator/closure:
-        self.assertDictEqual(
-            info_closure["kwargs"],
-            {
-                "a": 10,  # from within decorator
-                "b": 5,  # from decorator call
-                "c": None,
-                "d": None,
-            },
-        )
-        # lmabda: nothing bound
-        self.assertDictEqual(
-            info_lambda["kwargs"], {"a": None, "b": None, "c": None, "d": None}
-        )
-
-        info2 = get_function_info(is_uri)
-
-        # version
-        self.assertEqual(info2["version"], f"datatools {datatools.__version__}")
-
-        # git
-        git_info = info2["git"]
-        self.assertTrue(git_info["origin"])
-
-    def test_is_callable(self):
-
-        # regular function
-        def f_fun(x):
-            return x
-
-        # lambda
-        f_lambda = lambda x: x  # noqa
-
-        # callable class
-        class F:
-            def __call__(self, x):
-                return x
-
-        f_cls = F()
-
-        # partial
-
-        def _f_fun(y, x):
-            return x
-
-        f_partial = partial(_f_fun, "Y")
-
-        # closure
-
-        def _f_closure(y):
-            def f_closure(x):
-                return _f_fun(y, x)
-
-            return f_closure
-
-        f_closure = _f_closure("y")
-
-        f_builtin = int
-
-        for callable in [f_builtin, f_fun, f_lambda, f_cls, f_partial, f_closure]:
-            self.assertTrue(is_callable(callable), callable)
-            self.assertEqual(callable(999), 999, callable)
-
-        for not_callable in ["string", 10]:
-            self.assertFalse(is_callable(not_callable), not_callable)
 
 
 class TestSerializers(unittest.TestCase):
