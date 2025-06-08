@@ -3,11 +3,36 @@ import inspect
 import json
 import logging
 from io import BytesIO, TextIOWrapper
-from typing import Any, Callable, Union, get_type_hints
+from typing import Any, Callable, Union, get_type_hints, get_args
 
 import pandas as pd
 
 RoleType = Union[str, int, None]
+
+
+def get_value_type(dtype: type) -> type:
+    # dict[Any, int] -> int
+    # list[int] -> int
+    return get_args(dtype)[-1]
+
+
+def str_is_uri(s: str) -> bool:
+    return ":" in s
+
+
+def is_data_uri(uri: str) -> bool:
+    return uri.startswith("data://")
+
+
+def as_resource(x, storage: "Storage" = None) -> "AbstractResource":
+    if isinstance(x, AbstractResource):
+        return x
+    if isinstance(x, str) and str_is_uri(x):
+        if not storage:
+            raise Exception("Storage not defined")
+        return Resource(storage, x)
+    else:
+        return LiteralResource(x)
 
 
 def dict_add(dct: dict, key: Any, value: Any) -> None:
@@ -45,6 +70,14 @@ def get_type_name(cls: type) -> str:
     return f"{cls.__module__}.{cls.__qualname__}"
 
 
+def as_io_dict(x) -> dict:
+    if x is None:
+        return {}
+    if not isinstance(x, dict):
+        return {None: x}
+    return x
+
+
 class Component:
     def __init__(self, id: str = None):
         self._id = id
@@ -64,10 +97,15 @@ class Component:
         return {"@id": self.id}
 
 
-class Resource:
-    def __init__(self, path: str, filetype: str = None):
-        self.path = path
-        self.id = self.path
+class AbstractResource:
+    pass
+
+
+class Resource(AbstractResource):
+    def __init__(self, storage: "Storage", id: str, filetype: str = None):
+        self.storage = storage
+        self.id = id
+        self.path = self.id.replace("data://", "")
         self.filetype = filetype
 
     @property
@@ -88,6 +126,27 @@ class Resource:
         with open(self.path_metadata, "wb") as file:
             file.write(metadata_b)
 
+    def infer_decoder(self, dtype=None) -> Callable:
+        print(f"infer_converter({self.filetype}, {dtype})")
+        return Function(csv_to_df, index="key")
+
+    def infer_encoder(self, dtype=None) -> Callable:
+        print(f"infer_converter({dtype}, {self.filetype})")
+        return Function(df_to_csv, index=True)
+
+
+class LiteralResource(AbstractResource):
+    def __init__(self, data: str):
+        self.data = data
+
+    def infer_decoder(self, dtype=None) -> Callable:
+        print(f"infer_converter(str, {dtype})")
+        return float
+
+    def infer_encoder(self, dtype=None) -> Callable:
+        print(f"infer_converter({dtype}, str)")
+        return str
+
 
 class Function(Component):
     def __init__(
@@ -107,6 +166,18 @@ class Function(Component):
         self.name = name or self.infer_function_name(function)
         self.input_types = input_types or self.infer_function_input_schema(function)
         self.output_type = output_type or self.infer_function_output_type(function)
+
+    def get_input_type(self, role: str = None):
+        if role is None:
+            # must be first role
+            role = next(self.input_types)
+        return self.input_types[role]
+
+    def get_output_type(self, role: str = None):
+        if role is None:
+            return self.output_type
+        else:
+            return get_value_type(self.output_type)
 
     def _create_id(self) -> str:
         return self.infer_function_id(self.function)
@@ -134,7 +205,12 @@ class Function(Component):
 
     @classmethod
     def infer_function_input_schema(cls, function: Callable) -> dict[str, type]:
-        sig = inspect.signature(function)
+        try:
+            sig = inspect.signature(function)
+        except ValueError:
+            # fails for some builtins, like str
+            return {None: None}
+
         type_hints = get_type_hints(function)
 
         return {
@@ -164,24 +240,24 @@ class Function(Component):
 class Input(Component):
     def __init__(
         self,
+        process: "Process",
         resource: Resource,
-        decoder: Union[Function, Callable],
+        function: Function,
         role: RoleType = None,
-        id: str = None,
     ):
-        super().__init__(id=id)
+        super().__init__()
         self.role: RoleType = role
-        self.decoder = Function.as_function(decoder)
+        self.function = function
         self.resource = resource
-        self._process: Process = None
+        self.process = process
 
     def load(self) -> Any:
         data_bytes = self.resource.read_bytes()
-        data = self.decoder(data_bytes)
+        data = self.function(data_bytes)
         return data
 
     def _create_id(self) -> str:
-        id_input = f"{self._process.id}/input"
+        id_input = f"{self.process.id}/input"
         if self.role is None:
             return id_input
         else:
@@ -195,7 +271,7 @@ class Input(Component):
         if self.resource:
             # use key "data"
             metadata["data"] = {"@id": self.resource.id}
-        metadata["decoder"] = self.decoder.get_metadata()
+        metadata["function"] = self.function.get_metadata()
 
         return metadata
 
@@ -203,19 +279,21 @@ class Input(Component):
 class LiteralInput(Input):
     def __init__(
         self,
+        process: "Process",
         data: str,
-        decoder: Callable,
+        function: Function,
         role: RoleType = None,
     ):
         super().__init__(
+            process=process,
             resource=None,
-            decoder=decoder,
+            function=function,
             role=role,
         )
         self.data = data
 
     def load(self) -> Any:
-        data = self.decoder(self.data)
+        data = self.function(self.data)
         return data
 
     def get_metadata(self):
@@ -229,16 +307,16 @@ class LiteralInput(Input):
 class Output(Component):
     def __init__(
         self,
+        process: "Process",
         resource: Resource,
-        encoder: Union[Function, Callable],
+        function: Function,
         role: RoleType = None,
-        id: str = None,
     ):
-        super().__init__(id=id)
+        super().__init__()
         self.role: RoleType = role
-        self.encoder = Function.as_function(encoder)
+        self.function = function
         self.resource = resource
-        self._process: Process = None
+        self.process = process
 
     def get_data(self, data: Any) -> Any:
         if self.role is None:
@@ -247,7 +325,7 @@ class Output(Component):
 
     def handle(self, data: Any) -> None:
         data = self.get_data(data)
-        data_bytes = self.encoder(data)
+        data_bytes = self.function(data)
 
         metadata_output = self.get_metadata()
         metadata_resource = {"created": metadata_output, "filetype": "TODO"}
@@ -256,7 +334,7 @@ class Output(Component):
         self.resource.save_metadata(metadata_resource)
 
     def _create_id(self) -> str:
-        id_output = f"{self._process.id}/output"
+        id_output = f"{self.process.id}/output"
         if self.role is None:
             return id_output
         else:
@@ -264,11 +342,16 @@ class Output(Component):
 
     def get_metadata(self):
         metadata = super().get_metadata()
-        metadata["encoder"] = self.encoder.get_metadata()
-        metadata["process"] = self._process.get_metadata()
+        metadata["function"] = self.function.get_metadata()
+        metadata["process"] = self.process.get_metadata()
         if self.role is not None:
             metadata["role"] = self.role
         return metadata
+
+
+class Storage:
+    def resource(self, id: str):
+        return Resource(storage=self, id=id)
 
 
 class Process(Component):
@@ -276,38 +359,60 @@ class Process(Component):
         self,
         function: Union[Function, Callable],
         id: str = None,
-        inputs: list[Input] = None,
-        outputs: list[Output] = None,
+        inputs: Union[AbstractResource, dict[str, AbstractResource]] = None,
+        outputs: Union[AbstractResource, dict[str, AbstractResource]] = None,
         context: Any = None,
+        default_storage: "Storage" = None,
     ):
         super().__init__(id=id)
         self.function: Function = Function.as_function(function)
-        self.inputs: list[Input] = []
-        self.outputs: list[Output] = []
+
+        self.inputs: dict[str, Input] = {}
+        for role, x in as_io_dict(inputs).items():
+            input_type = self.function.get_input_type(role)
+            x = as_resource(x, storage=default_storage)
+            if isinstance(x, LiteralResource):
+                inp = LiteralInput(
+                    process=self,
+                    data=x.data,
+                    function=Function.as_function(x.infer_decoder(input_type)),
+                    role=role,
+                )
+            else:
+                inp = Input(
+                    process=self,
+                    resource=x,
+                    function=Function.as_function(x.infer_decoder(input_type)),
+                    role=role,
+                )
+
+            self.inputs[role] = inp
+
+        self.outputs: dict[str, Output] = {}
+        for role, x in as_io_dict(outputs).items():
+            output_type = self.function.get_output_type(role)
+            x = as_resource(x, storage=default_storage)
+            outp = Output(
+                process=self,
+                role=role,
+                resource=x,
+                function=Function.as_function(x.infer_encoder(output_type)),
+            )
+
+            self.outputs[role] = outp
+
         self.context: Any = context
         self._metadata_run = None
-
-        for input in inputs or []:
-            self.add_input(input)
-
-        for output in outputs or []:
-            self.add_output(output)
-
-    def add_input(self, input: Input) -> None:
-        input._process = self
-        self.inputs.append(input)
-
-    def add_output(self, output: Output) -> None:
-        output._process = self
-        self.outputs.append(output)
+        self.default_storage = default_storage
 
     def check(self):
-        # check input/output types of encoder/decoder
+        # check input/output types of function/function
         input_types_names_ordered = list(self.function.input_types)
 
         args_kwargs: dict[RoleType, Any] = {}
-        for input in self.inputs:
+        for input in self.inputs.values():
             dict_add(args_kwargs, input.role, input)
+
         args, kwargs = split_args_kwargs(args_kwargs)
         for i, arg in enumerate(args):
             dict_add(kwargs, input_types_names_ordered[i], arg)
@@ -317,7 +422,7 @@ class Process(Component):
             type_expected = get_type_name(self.function.input_types.get(key))
             input: Input = kwargs.get(key)
             if input:
-                type_got = get_type_name(input.decoder.output_type)
+                type_got = get_type_name(input.function.output_type)
             else:
                 type_got = None
             if type_expected is None:
@@ -335,8 +440,8 @@ class Process(Component):
                 )
 
         type_expected = get_type_name(self.function.output_type)
-        for output in self.outputs:
-            type_got = get_type_name(list(output.encoder.input_types.values())[0])
+        for output in self.outputs.values():
+            type_got = get_type_name(list(output.function.input_types.values())[0])
             if type_expected != type_got and (
                 type_expected != "Any" and type_got != "Any"
             ):
@@ -358,7 +463,7 @@ class Process(Component):
         # process all inputs, combine with role into dict
         # role can be name, position (int), or None (All)
         args_kwargs: dict[RoleType, Any] = {}
-        for input in self.inputs:
+        for input in self.inputs.values():
             data = input.load()
             dict_add(args_kwargs, input.role, data)
 
@@ -368,7 +473,7 @@ class Process(Component):
         result = self.function(*args, **kwargs)
 
         # process output
-        for output in self.outputs:
+        for output in self.outputs.values():
             output.handle(result)
 
     def _create_id(self) -> str:
@@ -379,7 +484,7 @@ class Process(Component):
         metadata["run"] = self._metadata_run
         metadata["context"] = self.context
         metadata["function"] = self.function.get_metadata()
-        metadata["inputs"] = [input.get_metadata() for input in self.inputs]
+        metadata["inputs"] = [input.get_metadata() for input in self.inputs.values()]
 
         return metadata
 
@@ -408,17 +513,18 @@ def df_to_csv(
     return data_bytes
 
 
-proc = Process(function=dfmult, context={"project": "test"})
+st = Storage()
 
-proc.add_input(
-    Input(
-        resource=Resource("d1.csv"), role="df", decoder=Function(csv_to_df, index="key")
-    )
-)
-proc.add_input(LiteralInput(data="10", role="factor", decoder=float))
 
-proc.add_output(
-    Output(resource=Resource("d2.csv"), encoder=Function(df_to_csv, index=True))
+proc = Process(
+    function=dfmult,
+    context={"project": "test"},
+    inputs={
+        "df": "data://d1.csv",
+        "factor": "10",
+    },
+    outputs="data://d2.csv",
+    default_storage=st,
 )
 
 proc.run()
