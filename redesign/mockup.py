@@ -207,7 +207,10 @@ class Input:
         if self.resource:
             # use key "data"
             metadata["data"] = {"@id": self.resource.id}
-        metadata["function"] = self.function.get_metadata()
+
+        # metadata["function"] = self.function.get_metadata()
+        # only get id and description,not the whole thinf
+        metadata["decoder"] = {"@id": self.function.id}
 
         return metadata
 
@@ -278,7 +281,7 @@ class Output:
 
     def get_metadata(self):
         metadata = {"@id": self.id}
-        metadata["function"] = self.function.get_metadata()
+        metadata["encoder"] = self.function.get_metadata()
         metadata["process"] = self.process.get_metadata()
         if self.role is not None:
             metadata["role"] = self.role
@@ -309,7 +312,7 @@ class Process:
             for role, x in as_io_dict(inputs).items()
         }
 
-        self.id = self._create_id(input_resources)
+        self.id = id or self._create_id(input_resources)
 
         self.inputs: dict[str, Input] = {}
         for role, resource in input_resources.items():
