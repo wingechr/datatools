@@ -1,25 +1,26 @@
-from typing import Any, Union, get_args
 from io import BytesIO, TextIOWrapper
+from typing import Any, Callable, Union, get_args
+
 import pandas as pd
 
 RoleType = Union[str, int, None]
 
 
-def csv_to_df(
-    data: bytes, encoding="utf-8", index=None, **read_csv_kwargs
-) -> pd.DataFrame:
-    buf = TextIOWrapper(BytesIO(data), encoding=encoding)
-    df = pd.read_csv(buf, **read_csv_kwargs)
+def csv_to_df(bdata: bytes, encoding="utf-8", index=None, **kwargs) -> pd.DataFrame:
+    buf = TextIOWrapper(BytesIO(bdata), encoding=encoding)
+    df = pd.read_csv(buf, **kwargs)
+    # TODO index from metadata
+    index = "key"
     if index:
         df = df.set_index(index)
     return df
 
 
-def df_to_csv(
-    data: pd.DataFrame, encoding="utf-8", index=False, **to_csv_kwargs
-) -> bytes:
+def df_to_csv(df: pd.DataFrame, encoding="utf-8", index=False, **kwargs) -> bytes:
     buf = BytesIO()
-    data.to_csv(buf, index=index, encoding=encoding, **to_csv_kwargs)
+    # TODO index from metadata
+    index = True
+    df.to_csv(buf, index=index, encoding=encoding, **kwargs)
     buf.seek(0)
     data_bytes = buf.read()
     return data_bytes
@@ -86,5 +87,27 @@ def as_io_dict(x) -> dict:
     return x
 
 
+def infer_converter(from_type: Union[str, type], to_type: Union[str, type]) -> Callable:
+    if from_type == bytes and isinstance(to_type, str):
+        return lambda x: x
+    elif (from_type, to_type) == ("csv", pd.DataFrame):
+        return csv_to_df
+    elif (from_type, to_type) == (pd.DataFrame, "csv"):
+        return df_to_csv
+    else:
+        raise NotImplementedError((from_type, to_type))
+
+
 def get_default_filetype(dtype):
-    return "csv"
+    if dtype == pd.DataFrame:
+        return "csv"
+    return "pickle"
+
+
+def infer_loader(uri: str) -> Callable:
+    def dummy_loader(uri: str) -> bytes:
+        path = uri.replace("file://", "")
+        with open(path, "rb") as file:
+            return file.read()
+
+    return dummy_loader

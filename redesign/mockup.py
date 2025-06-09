@@ -2,86 +2,188 @@ import datetime
 import inspect
 import json
 import logging
+import os
+import re
 from typing import Any, Callable, Union, get_type_hints
+
 from utils import (
-    is_uri,
-    csv_to_df,
-    df_to_csv,
+    RoleType,
+    as_io_dict,
+    dict_add,
+    get_default_filetype,
     get_type_name,
     get_value_type,
+    infer_converter,
+    infer_loader,
+    is_data_uri,
+    is_uri,
     split_args_kwargs,
-    dict_add,
-    as_io_dict,
-    RoleType,
-    get_default_filetype,
 )
+
+ResourceOrStrType = Union["AbstractResource", str]
+ResourcesType = Union[ResourceOrStrType, dict[RoleType, ResourceOrStrType]]
 
 
 class AbstractResource:
 
     @classmethod
-    def as_resource(cls, x, storage: "Storage" = None) -> "AbstractResource":
+    def as_resource(
+        cls, x: ResourceOrStrType, storage: "Storage" = None
+    ) -> "AbstractResource":
         if isinstance(x, AbstractResource):
             return x
         if isinstance(x, str) and is_uri(x):
             if not storage:
                 raise Exception("Storage not defined")
-            return Resource(storage, x)
+            if is_data_uri(x):
+                path = x.replace("data://", "")
+                return Resource(storage, path)
+            else:
+                return RemoteResource(storage, x)
         else:
             return LiteralResource(x)
 
+    def get_bytes(self) -> bytes:
+        raise NotImplementedError()
+
+    def set_bytes(self, bdata: bytes) -> None:
+        raise NotImplementedError()
+
+    def get_data(self, dtype=None, **kwargs) -> Any:
+        decoder = self.infer_decoder(dtype)
+        bdata = self.get_bytes()
+        data = decoder(bdata, **kwargs)
+        return data
+
+    def set_data(self, data: Any, dtype=None, **kwargs) -> None:
+        encoder = self.infer_encoder(dtype)
+        bdata = encoder(data, **kwargs)
+        return self.set_bytes(bdata)
+
+    def set_metadata(self, metadata: dict) -> None:
+        raise NotImplementedError()
+
+    def get_metadata(self) -> dict:
+        raise NotImplementedError()
+
+    def infer_decoder(self, dtype=None) -> Callable:
+        raise NotImplementedError()
+
+    def infer_encoder(self, dtype=None) -> Callable:
+        raise NotImplementedError()
+
+    def exists(self) -> bool:
+        raise NotImplementedError()
+
+    def to_str(self) -> str:
+        raise NotImplementedError()
+
+
+class LiteralResource(AbstractResource):
+    def __init__(self, sdata: str):
+        if not isinstance(sdata, str):
+            logging.warning("literal data is not str")
+            sdata = "" if sdata is None else str(sdata)
+        self._sdata = sdata
+        self._bdata = sdata.encode()
+
+    def infer_decoder(self, dtype=None) -> Callable:
+        # uses dtype constructor
+        return lambda bdata: dtype(bdata.decode())
+
+    def get_bytes(self) -> bytes:
+        return self._bdata
+
+    def __str__(self) -> str:
+        return f"LiteralResource({self._sdata})"
+
+    def get_metadata(self) -> dict:
+        return {"@value": self._sdata}
+
+    def to_str(self) -> str:
+        return self._sdata
+
 
 class Resource(AbstractResource):
-    def __init__(self, storage: "Storage", id: str, filetype: str = None):
+    def __init__(self, storage: "Storage", path: str):
         self.storage = storage
-        self.id = id
-        self.path = self.id.replace("data://", "")
-        self.filetype = filetype
+        self.path = path
 
     @property
     def path_metadata(self) -> str:
         return self.path + ".metadata.json"
 
-    def read_bytes(self):
+    @property
+    def filetype(self) -> str:
+        return self.path.split(".")[-1]
+
+    @property
+    def uri(self) -> str:
+        return f"data://{self.path}"
+
+    def get_bytes(self):
         with open(self.path, "rb") as file:
             return file.read()
 
-    def save_bytes(self, data: bytes) -> bytes:
+    def set_bytes(self, data: bytes) -> bytes:
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
         with open(self.path, "wb") as file:
             file.write(data)
 
-    def save_metadata(self, metadata: Any) -> bytes:
+    def set_metadata(self, metadata: dict) -> None:
         metadata_s = json.dumps(metadata, indent=2, ensure_ascii=False)
         metadata_b = metadata_s.encode()
         with open(self.path_metadata, "wb") as file:
             file.write(metadata_b)
 
     def infer_decoder(self, dtype=None) -> Callable:
-        print(f"infer_converter({self.filetype}, {dtype})")
-        return Function(csv_to_df, index="key")
+        # TODO: arguemnts from metadata
+        return Function(infer_converter(self.filetype, dtype))
 
     def infer_encoder(self, dtype=None) -> Callable:
-        print(f"infer_converter({dtype}, {self.filetype})")
-        return Function(df_to_csv, index=True)
+        # TODO: arguemnts from metadata
+        return Function(infer_converter(dtype, self.filetype))
 
-    def __str__(self):
-        return self.id
+    def get_metadata(self) -> dict:
+        return {"@id": self.path}
+
+    def __str__(self) -> str:
+        return f"Resource({self.path})"
+
+    def exists(self) -> bool:
+        return os.path.exists(self.path)
+
+    def to_str(self) -> str:
+        return self.uri
 
 
-class LiteralResource(AbstractResource):
-    def __init__(self, data: str):
-        self.data = data
+class RemoteResource(Resource):
+    def __init__(self, storage: "Storage", source_uri: str, path: str = None):
+        self.storage = storage
+        self.source_uri = source_uri
+        self.path = path or storage.create_path_from_id(source_uri)
 
-    def infer_decoder(self, dtype=None) -> Callable:
-        print(f"infer_converter(str, {dtype})")
-        return float
+    def infer_loader(self) -> Callable:
+        return infer_loader(self.source_uri)
 
-    def infer_encoder(self, dtype=None) -> Callable:
-        print(f"infer_converter({dtype}, str)")
-        return str
+    def download(self):
+        process = Process(
+            function=self.infer_loader(),
+            inputs=LiteralResource(self.source_uri),
+            outputs=self,
+        )
+        process.run()
 
-    def __str__(self):
-        return self.data
+    def get_bytes(self):
+        if not self.exists():
+            self.download()
+        return super().get_bytes()
+
+    def __str__(self) -> str:
+        return f"RemoteResource({self.source_uri}, {self.path})"
+
+    def to_str(self) -> str:
+        return self.source_uri
 
 
 class Function:
@@ -106,7 +208,7 @@ class Function:
     def get_input_type(self, role: str = None):
         if role is None:
             # must be first role
-            role = next(self.input_types)
+            role = list(self.input_types.keys())[0]
         return self.input_types[role]
 
     def get_output_type(self, role: str = None):
@@ -122,7 +224,7 @@ class Function:
         return self.function(*args, **kwargs, **self.kwargs)
 
     @classmethod
-    def infer_function_id(cls, function: Callable):
+    def infer_function_id(cls, function: Callable) -> str:
         return "urn:function/" + cls.infer_function_name(function)
 
     @classmethod
@@ -159,132 +261,17 @@ class Function:
         type_hints = get_type_hints(function)
         return type_hints.get("return", None)
 
-    def get_metadata(self):
+    def get_metadata(self) -> dict:
         metadata = {"@id": self.id}
         if self.kwargs:
             metadata["kwargs"] = self.kwargs
         metadata["name"] = self.name
         metadata["description"] = self.description
-        metadata["inputTypes"] = {
-            k: get_type_name(v) for k, v in self.input_types.items()
-        }
-        metadata["outputType"] = get_type_name(self.output_type)
+        # metadata["inputTypes"] = {
+        #    k: get_type_name(v) for k, v in self.input_types.items()
+        # }
+        # metadata["outputType"] = get_type_name(self.output_type)
 
-        return metadata
-
-
-class Input:
-    def __init__(
-        self,
-        process: "Process",
-        resource: Resource,
-        function: Function,
-        role: RoleType = None,
-    ):
-        self.role: RoleType = role
-        self.function = function
-        self.resource = resource
-        self.process = process
-        self.id = self._create_id()
-
-    def load(self) -> Any:
-        data_bytes = self.resource.read_bytes()
-        data = self.function(data_bytes)
-        return data
-
-    def _create_id(self) -> str:
-        id_input = f"{self.process.id}/input"
-        if self.role is None:
-            return id_input
-        else:
-            return f"{id_input}/{self.role}"
-
-    def get_metadata(self):
-        metadata = {"@id": self.id}
-        if self.role is not None:
-            metadata["role"] = self.role
-        # NOTE: dont copy complete resource metadata
-        if self.resource:
-            # use key "data"
-            metadata["data"] = {"@id": self.resource.id}
-
-        # metadata["function"] = self.function.get_metadata()
-        # only get id and description,not the whole thinf
-        metadata["decoder"] = {"@id": self.function.id}
-
-        return metadata
-
-
-class LiteralInput(Input):
-    def __init__(
-        self,
-        process: "Process",
-        data: str,
-        function: Function,
-        role: RoleType = None,
-    ):
-        super().__init__(
-            process=process,
-            resource=None,
-            function=function,
-            role=role,
-        )
-        self.data = data
-
-    def load(self) -> Any:
-        data = self.function(self.data)
-        return data
-
-    def get_metadata(self):
-        metadata = super().get_metadata()
-        # overwrite from resource
-        metadata["data"] = {"@value": self.data}
-
-        return metadata
-
-
-class Output:
-    def __init__(
-        self,
-        process: "Process",
-        resource: Resource,
-        function: Function,
-        role: RoleType = None,
-    ):
-        self.role: RoleType = role
-        self.function = function
-        self.resource = resource
-        self.process = process
-        self.id = self._create_id()
-
-    def get_data(self, data: Any) -> Any:
-        if self.role is None:
-            return data
-        return data[self.role]
-
-    def handle(self, data: Any) -> None:
-        data = self.get_data(data)
-        data_bytes = self.function(data)
-
-        metadata_output = self.get_metadata()
-        metadata_resource = {"created": metadata_output, "filetype": "TODO"}
-
-        self.resource.save_bytes(data_bytes)
-        self.resource.save_metadata(metadata_resource)
-
-    def _create_id(self) -> str:
-        id_output = f"{self.process.id}/output"
-        if self.role is None:
-            return id_output
-        else:
-            return f"{id_output}/{self.role}"
-
-    def get_metadata(self):
-        metadata = {"@id": self.id}
-        metadata["encoder"] = self.function.get_metadata()
-        metadata["process"] = self.process.get_metadata()
-        if self.role is not None:
-            metadata["role"] = self.role
         return metadata
 
 
@@ -292,158 +279,113 @@ class Storage:
     def __init__(self, location: str):
         self.location = location
 
-    def resource(self, id: str):
-        return Resource(storage=self, id=id)
+    def resource(self, path: str):
+        return Resource(storage=self, path=path)
+
+    def create_path_from_id(self, id: str, suffix=None) -> str:
+        # TODO
+        path = re.sub("[^a-zA-Z0-9_.-]+", "/", id).strip("/")
+        return path + (suffix or "")
 
 
 class Process:
     def __init__(
         self,
         function: Union[Function, Callable],
-        id: str = None,
-        inputs: Union[AbstractResource, dict[str, AbstractResource]] = None,
-        outputs: Union[AbstractResource, dict[str, AbstractResource]] = None,
-        context: Any = None,
+        inputs: ResourcesType = None,
+        outputs: ResourcesType = None,
+        context: dict = None,
         default_storage: "Storage" = None,
     ):
         self.function: Function = Function.as_function(function)
-        input_resources = {
+
+        self.inputs: dict[str, AbstractResource] = {
             role: AbstractResource.as_resource(x, storage=default_storage)
             for role, x in as_io_dict(inputs).items()
         }
 
-        self.id = id or self._create_id(input_resources)
-
-        self.inputs: dict[str, Input] = {}
-        for role, resource in input_resources.items():
-            input_type = self.function.get_input_type(role)
-            if isinstance(resource, LiteralResource):
-                inp = LiteralInput(
-                    process=self,
-                    data=resource.data,
-                    function=Function.as_function(resource.infer_decoder(input_type)),
-                    role=role,
-                )
-            else:
-                inp = Input(
-                    process=self,
-                    resource=resource,
-                    function=Function.as_function(resource.infer_decoder(input_type)),
-                    role=role,
-                )
-
-            self.inputs[role] = inp
-
-        self.outputs: dict[str, Output] = {}
-
         if not outputs:
+            if not default_storage:
+                raise Exception("default_storage missing")
             # auto generate
             role = None
             output_type = self.function.get_output_type(role)
             filetype = get_default_filetype(output_type)
-            res = "data://d2.csv"
-
+            output_id = self._get_part_id(self._create_id(), "output")
+            path = default_storage.create_path_from_id(output_id, suffix=f".{filetype}")
+            res = default_storage.resource(path=path)
             outputs = {role: res}
+        self.outputs: dict[str, Resource] = {
+            role: AbstractResource.as_resource(x, storage=default_storage)
+            for role, x in as_io_dict(outputs).items()
+        }
 
-        for role, x in as_io_dict(outputs).items():
-            output_type = self.function.get_output_type(role)
-            x = AbstractResource.as_resource(x, storage=default_storage)
-            outp = Output(
-                process=self,
-                role=role,
-                resource=x,
-                function=Function.as_function(x.infer_encoder(output_type)),
-            )
+        print(self.inputs)
+        print(self.outputs)
 
-            self.outputs[role] = outp
-
-        self.context: Any = context
-        self._metadata_run = None
+        self.context: Any = context or {}
         self.default_storage = default_storage
 
-    def check(self):
-        # check input/output types of function/function
-        input_types_names_ordered = list(self.function.input_types)
+    def create_metadata_run(self) -> dict:
+        return {"timestamp": datetime.datetime.now().isoformat()}
 
-        args_kwargs: dict[RoleType, Any] = {}
-        for input in self.inputs.values():
-            dict_add(args_kwargs, input.role, input)
+    @classmethod
+    def _get_part_id(cls, id: str, inp_outp: str, role: str = None) -> str:
+        pid = f"{id}#{inp_outp}"
+        if role:
+            pid = f"{pid}/{role}"
+        return pid
 
-        args, kwargs = split_args_kwargs(args_kwargs)
-        for i, arg in enumerate(args):
-            dict_add(kwargs, input_types_names_ordered[i], arg)
+    def run(self, id=None) -> None:
 
-        all_keys = set(self.function.input_types) | set(kwargs)
-        for key in all_keys:
-            type_expected = get_type_name(self.function.input_types.get(key))
-            input: Input = kwargs.get(key)
-            if input:
-                type_got = get_type_name(input.function.output_type)
-            else:
-                type_got = None
-            if type_expected is None:
-                logging.warning("Unexpected input for %s", key)
-            elif type_got is None:
-                logging.warning("Missing input for %s", key)
-            elif type_expected != type_got and (
-                type_expected != "Any" and type_got != "Any"
-            ):
-                logging.warning(
-                    "input type %s does not match epexted %s for %s",
-                    type_got,
-                    type_expected,
-                    key,
-                )
+        if any(resource.exists() for resource in self.outputs.values()):
+            raise Exception("some outputs already exist")
 
-        type_expected = get_type_name(self.function.output_type)
-        for output in self.outputs.values():
-            type_got = get_type_name(list(output.function.input_types.values())[0])
-            if type_expected != type_got and (
-                type_expected != "Any" and type_got != "Any"
-            ):
-                logging.warning(
-                    "output type %s does not match epexted %s for %s",
-                    type_got,
-                    type_expected,
-                    output.role,
-                )
+        metadata = self.create_metadata_run() | self.context
 
-    def create_metadata_run(self):
-        self._metadata_run = {"timestamp": datetime.datetime.now().isoformat()}
-
-    def run(self) -> None:
-
-        self.check()
-        self.create_metadata_run()
+        id = id or self._create_id()
+        metadata["input"] = []
 
         # process all inputs, combine with role into dict
         # role can be name, position (int), or None (All)
         args_kwargs: dict[RoleType, Any] = {}
-        for input in self.inputs.values():
-            data = input.load()
-            dict_add(args_kwargs, input.role, data)
+        for role, resource in self.inputs.items():
+            input_type = self.function.get_input_type(role)
+            data = resource.get_data(input_type)
+            dict_add(args_kwargs, role, data)
+            metadata["input"].append(
+                {
+                    "@id": self._get_part_id(id, "input", role),
+                    "role": role,
+                    "resource": resource.get_metadata(),
+                    "type": get_type_name(input_type),
+                }
+            )
 
         args, kwargs = split_args_kwargs(args_kwargs)
 
         # call function
         result = self.function(*args, **kwargs)
+        metadata["function"] = self.function.get_metadata()
 
         # process output
-        for output in self.outputs.values():
-            output.handle(result)
+        for role, resource in self.outputs.items():
+            output_type = self.function.get_output_type(role)
+            if role is None:
+                data = result
+            else:
+                data = result[role]
 
-    def _create_id(self, resource: dict[str, AbstractResource]) -> str:
+            resource.set_data(data, output_type)
+            metadata["@id"] = self._get_part_id(id, "output", role)
+            metadata["type"] = get_type_name(output_type)
+            resource.set_metadata(metadata)
+
+    def _create_id(self) -> str:
         return (
             self.function.id
             + "?"
-            + "&".join(f"{role}={res}" for role, res in resource.items())
+            + "&".join(
+                f"{role}={res.to_str()}" for role, res in self.inputs.items()
+            )  # TODO: handle role=None
         )
-
-    def get_metadata(self):
-        metadata = {"@id": self.id}
-        metadata["run"] = self._metadata_run
-        metadata["context"] = self.context
-        metadata["function"] = self.function.get_metadata()
-        metadata["inputs"] = [input.get_metadata() for input in self.inputs.values()]
-
-        return metadata
