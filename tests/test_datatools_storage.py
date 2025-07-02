@@ -2,13 +2,11 @@
 import logging
 import unittest
 
-import jsonpath_ng
+import datatools
 
 logging.basicConfig(
     format="[%(asctime)s %(levelname)7s] %(message)s", level=logging.INFO
 )
-
-# import PACKAGE_NAME
 
 
 class TestTemplate(unittest.TestCase):
@@ -28,4 +26,4 @@ class TestTemplate(unittest.TestCase):
 
     # EXAMPLE
     def test_TEMPLATE(self):
-        self.assertTrue(isinstance(jsonpath_ng.__version__, str))
+        self.assertTrue(isinstance(datatools.__version__, str))
