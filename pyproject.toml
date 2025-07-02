@@ -3,7 +3,7 @@ name = "datatools"
 version = "0.12.0"
 description = "TODO"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 dependencies = [
     "jsonpath-ng>=1.7.0",
 ]

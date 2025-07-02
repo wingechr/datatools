@@ -1,8 +1,10 @@
 # coding: utf-8
 import logging
 import unittest
+from io import BytesIO
+from tempfile import TemporaryDirectory
 
-import datatools
+from datatools import Storage
 
 logging.basicConfig(
     format="[%(asctime)s %(levelname)7s] %(message)s", level=logging.INFO
@@ -11,19 +13,27 @@ logging.basicConfig(
 
 class TestTemplate(unittest.TestCase):
     def setUp(self):
-        pass
+        self.tempdir = TemporaryDirectory()
 
     def tearDown(self):
-        pass
+        self.tempdir.cleanup()
 
-    @classmethod
-    def setUpClass(cls):
-        pass
+    def test_datatools_basics(self):
+        storage = Storage(location=self.tempdir.name)
+        res = storage.resource("a/b.txt")
+        # read write metadata
+        value = "myvalue"
+        key = "mykey"
+        res.metadata.set(key, value)
+        self.assertEqual(res.metadata.get(key), value)
 
-    @classmethod
-    def tearDownClass(cls):
-        pass
+        # read write data
+        self.assertFalse(res.exist())
+        bdata = "test".encode()
+        res.write(BytesIO(bdata))
+        self.assertTrue(res.exist())
+        with res.open() as file:
+            self.assertTrue(file.read(), bdata)
 
-    # EXAMPLE
-    def test_TEMPLATE(self):
-        self.assertTrue(isinstance(datatools.__version__, str))
+        res.delete()
+        self.assertFalse(res.exist())
