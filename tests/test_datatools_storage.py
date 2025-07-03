@@ -11,14 +11,14 @@ logging.basicConfig(
 )
 
 
-class TestTemplate(unittest.TestCase):
+class TestDatatoolsStorage(unittest.TestCase):
     def setUp(self):
         self.tempdir = TemporaryDirectory()
 
     def tearDown(self):
         self.tempdir.cleanup()
 
-    def test_datatools_basics(self):
+    def test_datatools_storage_basics(self):
         storage = Storage(location=self.tempdir.name)
 
         # create resource
