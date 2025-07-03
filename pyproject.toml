@@ -1,12 +1,20 @@
 [project]
-name = "datatools"
+name = "wingechr-datatools"
 version = "0.12.0"
 description = "TODO"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.9,<3.14"
 dependencies = [
     "jsonpath-ng>=1.7.0",
 ]
+authors = [
+  { name="Christian Winger", email="c@wingechr.de" }
+]
+[project.urls]
+
+
+[tool.setuptools]
+packages = ["datatools"]
 
 [dependency-groups]
 dev = [
@@ -15,4 +23,14 @@ dev = [
     "tox>=4",
     "tox-uv>=1.13.1",
     "uv>=0.7.18",
+    "vulture>=2.14",
+]
+docs = [
+    "mdx-truly-sane-lists>=1.3",
+    "mistune~=2.0",
+    "mkdocs>=1.6.1",
+    "mkdocstrings-python>=1.16.12",
+    "pymdown-extensions>=10.16",
+    "mkdocs-jupyter",
+    "mkdocs-material"
 ]

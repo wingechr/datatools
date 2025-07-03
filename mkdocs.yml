@@ -1,0 +1,51 @@
+site_name: wingechr-datatools
+
+# Configuration
+theme:
+  name: material
+  locale: en
+  #features:
+  #- navigation.tabs
+  #- navigation.tabs.sticky
+  #- navigation.sections
+  #- navigation.indexes
+  #- navigation.path
+  #- navigation.tracking
+  #- navigation.footer
+  #- navigation.top
+  #- toc.follow
+  #- search.suggest
+  #- search.share
+
+# Extensions
+markdown_extensions:
+  - mdx_truly_sane_lists # important for nested lists formatted with prettier
+  #- admonition
+  #- attr_list
+  #- def_list
+  #- md_in_html
+  #- pymdownx.details
+  - pymdownx.superfences # code highlight
+  - pymdownx.snippets # include README
+
+plugins:
+  #- mkdocs-jupyter:
+  #    # execute: true is causes a lot of problems
+  #execute: false
+  - mkdocstrings:
+      handlers:
+        python:
+          # either install package or provide path here
+          paths: ["../datatools"]
+          options:
+            filters:
+              - "!^_[^_]"
+            allow_inspection: true
+            show_source: false
+            show_root_heading: true
+            show_root_full_path: true
+            docstring_style: numpy
+            show_signature: true
+            show_signature_annotations: true
+  - search:
+      lang: en

@@ -53,7 +53,7 @@ class TestTemplate(unittest.TestCase):
         self.assertFalse(res in storage.list())
 
         # create again without having a path
-        res = storage.store(BytesIO(bdata), suffix=".txt")
+        res = storage.write(BytesIO(bdata), suffix=".txt")
         self.assertEqual(res.path, "md5/098f6bcd4621d373cade4e832627b4f6.txt")
         with res.open() as file:
             self.assertTrue(file.read(), bdata)
