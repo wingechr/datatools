@@ -15,7 +15,7 @@ class TestDatatoolsProcess(unittest.TestCase):
         output = {}
 
         def get_store_output(key):
-            def store_output(value):
+            def store_output(value, _metadata):
                 output[key] = value
 
             return store_output

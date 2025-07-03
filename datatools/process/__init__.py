@@ -1,30 +1,94 @@
 from dataclasses import dataclass
-from typing import Any, Callable, Union, cast
+from typing import Any, Callable, Union
 
 __all__ = ["Process", "ProcessException"]
 
-RoleType = Union[None, int, str]
+Key = Union[None, int, str]
+KeyDict = dict[Key, Any]
+KeyAny = Union[None, Any, list[Any], KeyDict, tuple[list[Any], dict[str, Any]]]
+Type = Any
 
-Inputs = dict[RoleType, Callable]
-Outputs = dict[RoleType, Callable]
+
+def infer_converter(type_from: Type, type_to: Type) -> Callable:
+    # TODO
+    return lambda x: x
+
+
+def infer_from_bytes(type: Type) -> Callable:
+    return infer_converter(bytes, type)
+
+
+def infer_to_bytes(type: Type) -> Callable:
+    return infer_converter(type, bytes)
 
 
 @dataclass(frozen=True)
 class Function:
+
+    function: Callable
+
     def __call__(self, *args, **kwargs) -> Any:
+        return self.function(*args, **kwargs)
+
+    @classmethod
+    def as_function(cls, function: Union["Function", Any]) -> "Function":
+        if isinstance(function, Function):
+            return function
+        return Function(function=function)
+
+    def get_input_type(self, key: Key) -> Type:
+        # TODO
+        pass
+
+    def get_output_type(self, key: Key) -> Type:
+        # TODO
         pass
 
 
 @dataclass(frozen=True)
 class Input:
+
+    read_input: Any
+
     def __call__(self) -> Any:
-        pass
+        return self.read_input()
+
+    @classmethod
+    def as_input(cls, input: Union["Input", Any], type_to: Type) -> "Input":
+        if isinstance(input, Input):
+            return input
+
+        from_bytes = infer_from_bytes(type_to)
+
+        def read_input():
+            bdata = input()
+            data = from_bytes(bdata)
+            return data
+
+        return Input(read_input)
 
 
 @dataclass(frozen=True)
 class Output:
-    def __call__(self, data: Any) -> None:
-        pass
+
+    handle_output_data_metadata: Any
+
+    def __call__(self, data: Any, metadata: Any) -> None:
+        # write output function must be take data and metadata
+        return self.handle_output_data_metadata(data, metadata)
+
+    @classmethod
+    def as_output(cls, output: Union["Output", Any], type_from: Type) -> "Output":
+        if isinstance(output, Output):
+            return output
+
+        to_bytes = infer_to_bytes(type_from)
+
+        def handle_output_data_metadata(data: Any, metadata: Any):
+            bdata = to_bytes(data)
+            return output(bdata, metadata)
+
+        return Output(handle_output_data_metadata)
 
 
 class ProcessException(Exception):
@@ -32,17 +96,9 @@ class ProcessException(Exception):
         pass
 
 
-Parameter = Union[Input, Output]
-
-RoleTypeDict = dict[RoleType, Any]
-RoleTypeAny = Union[
-    None, Any, list[Any], RoleTypeDict, tuple[list[Any], dict[str, Any]]
-]
-
-
 def any_to_dict(
-    items: RoleTypeAny,
-) -> dict[RoleType, Any]:
+    items: KeyAny,
+) -> dict[Key, Any]:
     if items is None:
         return {}
     elif isinstance(items, tuple):
@@ -57,7 +113,7 @@ def any_to_dict(
 
 
 def get_args_kwargs_from_dict(
-    data: dict[RoleType, Any],
+    data: dict[Key, Any],
 ) -> tuple[list[Any], dict[str, Any]]:
     args_d = {}
     kwargs = {}
@@ -83,22 +139,33 @@ def get_args_kwargs_from_dict(
 @dataclass(frozen=True)
 class Process:
     function: Callable
-    inputs: RoleTypeAny = None
-    outputs: RoleTypeAny = None
+    inputs: KeyAny = None
+    outputs: KeyAny = None
 
     def __post_init__(self) -> None:
-        # must use __setattr__ because we use frozen=True
-        object.__setattr__(self, "inputs", any_to_dict(self.inputs))
-        object.__setattr__(self, "outputs", any_to_dict(self.outputs))
+        # change attributes:
+        # wrap / ensure proper classes
+        # save changes: must use __setattr__ because we use frozen=True
+        function = Function.as_function(self.function)
+        inputs = {
+            key: Input.as_input(input, function.get_input_type(key))
+            for key, input in any_to_dict(self.inputs).items()
+        }
+        outputs = {
+            key: Output.as_output(output, function.get_output_type(key))
+            for key, output in any_to_dict(self.outputs).items()
+        }
+
+        object.__setattr__(self, "function", function)
+        object.__setattr__(self, "inputs", inputs)
+        object.__setattr__(self, "outputs", outputs)
 
     def __call__(self) -> None:
         """Run the process."""
 
         # read input values
-        data = {
-            idx: read_input()
-            for idx, read_input in cast(dict[RoleType, Callable], self.inputs).items()
-        }
+        inputs = any_to_dict(self.inputs)
+        data = {key: read_input() for key, read_input in inputs.items()}
 
         # map to function arguments
         args, kwargs = get_args_kwargs_from_dict(data)
@@ -106,7 +173,12 @@ class Process:
         # call original functions
         result = self.function(*args, **kwargs)
 
+        # create process metadata # TODO
+        metadata = {}
+
         # map to outputs and save
-        for idx, write_output in cast(dict[RoleType, Callable], self.outputs).items():
-            value = result if idx is None else result[idx]
-            write_output(value)
+        outputs = any_to_dict(self.outputs)
+        for key, write_output in outputs.items():
+            partial_result = result if key is None else result[key]
+            # write output function must be take data and metadata
+            write_output(partial_result, metadata)
