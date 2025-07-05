@@ -24,6 +24,7 @@ def infer_to_bytes(type: Type) -> Callable:
 
 @dataclass(frozen=True)
 class Function:
+    """can be used as decorator aroundfunctions"""
 
     function: Callable
 
