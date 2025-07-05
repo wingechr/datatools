@@ -34,11 +34,6 @@ class Function:
         """Call the underlying function."""
         return self.function(*args, **kwargs)
 
-    @property
-    def __signature__(self):
-        """Return the signature of the function."""
-        return inspect.signature(self.function)
-
     def __post_init__(self):
         update_attrs = {}
         if self.parameters_types is None:
@@ -59,6 +54,8 @@ class Function:
                 "Either create Function manually "
                 f"or add type hints: {self.parameters_types}"
             )
+        # set signature to underlying function (@pproperty is not working here)
+        object.__setattr__(self, "__signature__", inspect.signature(self.function))
 
     @classmethod
     def wrap(cls) -> Callable:
@@ -132,7 +129,7 @@ class Input:
 @dataclass(frozen=True)
 class Output:
 
-    handle_output_data_metadata: Any
+    handle_output_data_metadata: Callable
     type_from: Type
 
     def __call__(self, data: Any, metadata: Any) -> None:
@@ -143,7 +140,7 @@ class Output:
     def wrap(cls, output: Any, type_from: Type = None) -> "Output":
         if not isinstance(output, Output):
             if isinstance(output, Resource):
-                handle_output_data_metadata = output.get_writer(type_from=type_from)
+                handle_output_data_metadata = output.get_dumper(type_from=type_from)
             elif isinstance(output, Callable):
                 handle_output_data_metadata = output
             else:

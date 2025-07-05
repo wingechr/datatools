@@ -305,9 +305,12 @@ class Resource:
         # get optional parameter names for convert
         # min_idx = 1: skip first parameter (data)
         optional_param_names = get_keyword_only_parameters_types(convert, min_idx=1)
-
         # try to get these from metadata (if they exist)
-        optional_kwargs = self.metadata.get(optional_param_names)
+        optional_kwargs = {
+            k: v
+            for k, v in self.metadata.get(optional_param_names).items()
+            if v is not None
+        }
 
         def loader(**kwargs):
             # user kwargs have higher priority than metadata
@@ -318,14 +321,36 @@ class Resource:
 
         return loader
 
-    def get_writer(self, type_from: Type) -> Callable:
+    def get_dumper(self, type_from: Type) -> Callable:
         filetype = self._get_filetype()
         convert = Converter.get(type_from=type_from, type_to=filetype)
+        try:
+            get_metadata = Converter.get(type_from=type_from, type_to=Metadata)
+        except KeyError:
+            get_metadata = None
+
+        # get optional parameter names for convert
+        # min_idx = 2: skip first 2 parameter (data, metadata)
+        optional_param_names = get_keyword_only_parameters_types(convert, min_idx=2)
+        # try to get these from metadata (if they exist)
+        optional_kwargs = {
+            k: v
+            for k, v in self.metadata.get(optional_param_names).items()
+            if v is not None
+        }
 
         def writer(data, metadata=None, **kwargs):
+            # user kwargs have higher priority than metadata
+            kwargs = optional_kwargs | kwargs
+            metadata = (metadata or {}) | kwargs
+            if get_metadata:
+                # get metadata from data
+                metadata = get_metadata(data) | metadata
+
             # write metadata
             if metadata:
                 self.metadata.set(**metadata)
+
             self.write(convert(data, **kwargs))
 
         return writer
@@ -338,7 +363,7 @@ class Resource:
 
     def dump(self, data: Any, metadata: Optional[dict] = None, **kwargs) -> None:
         datatype = cast(str, self.metadata.get(METADATA_DATATYPE) or type(data))
-        writer = self.get_writer(type_from=datatype)
+        writer = self.get_dumper(type_from=datatype)
         # update metadata
         metadata = {METADATA_DATATYPE: datatype} | kwargs | (metadata or {})
         writer(data, metadata, **kwargs)

@@ -134,6 +134,6 @@ def jsonpath_get(data: dict, key: str) -> Any:
     elif len(result) == 1:
         result = result[0]
     else:
-        logging.warning("multiple results in metadata found")
+        logging.info("multiple results in metadata found for %s", key)
 
     return result

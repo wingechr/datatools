@@ -95,10 +95,9 @@ class Converter:
         # Support instance methods
         return self.__class__(self.function.__get__(instance, owner))
 
-    @property
-    def __signature__(self):
-        """Return the signature of the function."""
-        return inspect.signature(self.function)
+    def __post_init__(self):
+        # set signature to underlying function (@pproperty is not working here)
+        object.__setattr__(self, "__signature__", inspect.signature(self.function))
 
 
 # register some default converters
