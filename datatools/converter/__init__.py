@@ -1,34 +1,35 @@
 """Type conversion"""
 
 import functools
-from typing import Any, Callable
+from dataclasses import dataclass
+from typing import Any, Callable, ClassVar
 
-__all__ = ["register_converter", "get_converter", "Type", "ConverterException"]
+__all__ = ["Converter", "Type", "ConverterException"]
 
 Type = Any
-
-
-converters: dict[tuple[Type, Type], Callable] = {}
 
 
 class ConverterException(Exception):
     pass
 
 
-def register_converter(type_from: Type, type_to: Type):
-    def decorator(fun):
-        @functools.wraps(fun)
-        def _fun(*args, **kwargs):
-            return fun(*args, **kwargs)
+@dataclass(frozen=True)
+class Converter:
+    _converters: ClassVar[dict[tuple[Type, Type], Callable]] = {}
+    function: Callable
 
-        # register
-        # TODO: warn when overwriting?
-        converters[(type_from, type_to)] = _fun
+    @classmethod
+    def get(cls, type_from: Type, type_to: Type) -> Callable:
+        return cls._converters[(type_from, type_to)]
 
-        return _fun
+    @classmethod
+    def register(cls, type_from: Type, type_to: Type):
+        def decorator(function) -> Converter:
+            converter = Converter(function=function)
+            cls._converters[(type_from, type_to)] = converter
+            return converter
 
-    return decorator
+        return decorator
 
-
-def get_converter(type_from: Type, type_to: Type) -> Callable:
-    return converters[(type_from, type_to)]
+    def __call__(self, *args, **kwargs):
+        return self.function(*args, **kwargs)

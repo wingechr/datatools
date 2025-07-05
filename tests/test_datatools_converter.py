@@ -3,7 +3,7 @@ import logging
 import unittest
 from tempfile import TemporaryDirectory
 
-from datatools.converter import get_converter, register_converter
+from datatools.converter import Converter
 
 logging.basicConfig(
     format="[%(asctime)s %(levelname)7s] %(message)s", level=logging.INFO
@@ -19,7 +19,7 @@ class TestDatatoolsConverter(unittest.TestCase):
 
     def test_datatools_converter_basics(self):
 
-        @register_converter(str, int)
+        @Converter.register(str, int)
         def str_to_int(s: str) -> int:
             return int(s)
 
@@ -27,4 +27,4 @@ class TestDatatoolsConverter(unittest.TestCase):
         self.assertEqual(str_to_int("1"), 1)
 
         # decorated function can be found with get_converter
-        self.assertEqual(get_converter(str, int)("1"), 1)
+        self.assertEqual(Converter.get(str, int)("1"), 1)
