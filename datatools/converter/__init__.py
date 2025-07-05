@@ -1,8 +1,9 @@
 """Type conversion"""
 
+import inspect
 import json
 from dataclasses import dataclass
-from io import BytesIO, IOBase
+from io import BytesIO, TextIOWrapper
 from itertools import product
 from typing import Any, Callable, ClassVar, Union
 
@@ -90,21 +91,31 @@ class Converter:
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return self.function(*args, **kwargs)
 
+    def __get__(self, instance, owner):
+        # Support instance methods
+        return self.__class__(self.function.__get__(instance, owner))
+
+    @property
+    def __signature__(self):
+        """Return the signature of the function."""
+        return inspect.signature(self.function)
+
 
 # register some default converters
 
-json_types = [get_type_name(x) for x in [list, dict]]
+json_types: list[Type] = [get_type_name(x) for x in [list, dict]]
 
 
 @Converter.register(json_types, ".json")
-def json_dump(data: object) -> BytesIO:
+def json_dump(data: object, encoding="utf-8") -> BytesIO:
     return BytesIO(
         json.dumps(
             data, indent=2, ensure_ascii=False, sort_keys=False, default=json_serialize
-        ).encode()
+        ).encode(encoding=encoding)
     )
 
 
 @Converter.register(".json", json_types)
-def json_load(buffer: IOBase) -> object:
-    return json.load(buffer)
+def json_load(buffer: BytesIO, encoding="utf-8") -> object:
+    with TextIOWrapper(buffer, encoding=encoding) as text_buffer:
+        return json.load(text_buffer)

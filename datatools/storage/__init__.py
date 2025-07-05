@@ -8,11 +8,17 @@ from dataclasses import dataclass
 from functools import cached_property
 from io import BytesIO, IOBase
 from pathlib import Path
-from typing import Callable, Iterable, Literal, Optional
+from typing import Callable, Iterable, Literal, Optional, Union, cast
 
 from datatools.classes import Any, MetadataKey, MetadataValue, ResourcePath, Type
 from datatools.process import Converter
-from datatools.utils import get_filetype_from_filename, json_serialize
+from datatools.utils import (
+    get_filetype_from_filename,
+    get_keyword_only_parameters_types,
+    json_serialize,
+    jsonpath_get,
+    jsonpath_update,
+)
 
 __all__ = ["Storage", "Resource"]
 
@@ -89,7 +95,7 @@ class Storage:
                 # only find metadata
                 if not f.endswith(self.__metadata_suffix):
                     continue
-                offset = -len(self.__metadata_suffix) - 1
+                offset = -len(self.__metadata_suffix)
                 f = f[:offset]
                 path = self.__get_path(Path(os.path.join(rt, f)))
                 resource = self.ressource(path)
@@ -168,14 +174,18 @@ class Storage:
         filepath_meta = self.__get_filepath_metadata(path)
         metadata = self.__metadata_read(filepath_meta)
         # update metadata
-        metadata = metadata | key_vals
+        for key, val in key_vals.items():
+            jsonpath_update(metadata, key, val)
+
         data = json.dumps(
             metadata, indent=2, ensure_ascii=False, default=json_serialize
         ).encode()
         with self.__open_write(filepath_meta) as file:
             file.write(data)
 
-    def _metadata_get(self, path: ResourcePath, key: MetadataKey) -> MetadataValue:
+    def _metadata_get(
+        self, path: ResourcePath, key: Union[MetadataKey, Iterable[MetadataKey]]
+    ) -> Union[MetadataValue, dict[MetadataKey, MetadataValue]]:
         """Get metadata entry for resource.
 
         Parameters
@@ -192,7 +202,16 @@ class Storage:
         """
         filepath_meta = self.__get_filepath_metadata(path)
         metadata = self.__metadata_read(filepath_meta)
-        return metadata.get(key)
+
+        # get results via jsonpath
+        if isinstance(key, MetadataKey):
+            return jsonpath_get(metadata, key)
+        elif isinstance(key, list):
+            return {k: jsonpath_get(metadata, k) for k in key}
+        else:
+            raise TypeError(
+                f"key must be MetadataKey or list of MetadataKey, got {type(key)}"
+            )
 
     # @cache
     def __get_filepath(self, path: ResourcePath) -> Path:
@@ -208,7 +227,7 @@ class Storage:
     # @cache
     def __get_filepath_metadata(self, path: ResourcePath) -> Path:
         filepath = self.__get_filepath(path)
-        return filepath.parent / f"{filepath.name}.{self.__metadata_suffix}"
+        return filepath.parent / f"{filepath.name}{self.__metadata_suffix}"
 
     def __open_write(self, filepath: Path) -> IOBase:
         filepath.parent.mkdir(exist_ok=True, parents=True)
@@ -275,15 +294,25 @@ class Resource:
         return Metadata(self)
 
     def _get_filetype(self) -> Type:
-        return self.metadata.get(METADATA_FILETYPE) or get_filetype_from_filename(
-            self.path
-        )
+        return cast(
+            str, self.metadata.get(METADATA_FILETYPE)
+        ) or get_filetype_from_filename(self.path)
 
     def get_loader(self, type_to: Type) -> Callable:
         filetype = self._get_filetype()
         convert = Converter.get(type_from=filetype, type_to=type_to)
 
+        # get optional parameter names for convert
+        # min_idx = 1: skip first parameter (data)
+        optional_param_names = get_keyword_only_parameters_types(convert, min_idx=1)
+
+        # try to get these from metadata (if they exist)
+        optional_kwargs = self.metadata.get(optional_param_names)
+
         def loader(**kwargs):
+            # user kwargs have higher priority than metadata
+            kwargs = optional_kwargs | kwargs
+
             with self.open() as file:
                 return convert(file, **kwargs)
 
@@ -302,13 +331,13 @@ class Resource:
         return writer
 
     def load(self, **kwargs) -> Any:
-        datatype = self.metadata.get(METADATA_DATATYPE)
+        datatype = cast(str, self.metadata.get(METADATA_DATATYPE))
         loader = self.get_loader(type_to=datatype)
         data = loader(**kwargs)
         return data
 
     def dump(self, data: Any, metadata: Optional[dict] = None, **kwargs) -> None:
-        datatype = self.metadata.get(METADATA_DATATYPE) or type(data)
+        datatype = cast(str, self.metadata.get(METADATA_DATATYPE) or type(data))
         writer = self.get_writer(type_from=datatype)
         # update metadata
         metadata = {METADATA_DATATYPE: datatype} | kwargs | (metadata or {})
@@ -321,7 +350,9 @@ class Metadata:
 
     resource: Resource
 
-    def get(self, key: MetadataKey) -> MetadataValue:
+    def get(
+        self, key: Union[MetadataKey, Iterable[MetadataKey]]
+    ) -> Union[MetadataValue, dict[MetadataKey, MetadataValue]]:
         """Get metadata entry for resource.
 
         Parameters

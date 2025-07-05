@@ -1,3 +1,4 @@
+import inspect
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, cast
 
@@ -32,6 +33,11 @@ class Function:
     def __call__(self, *args, **kwargs):
         """Call the underlying function."""
         return self.function(*args, **kwargs)
+
+    @property
+    def __signature__(self):
+        """Return the signature of the function."""
+        return inspect.signature(self.function)
 
     def __post_init__(self):
         update_attrs = {}

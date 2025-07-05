@@ -1,9 +1,12 @@
 import datetime
 import inspect
+import logging
 from functools import cache as _cache
 from functools import update_wrapper
 from pathlib import Path
 from typing import Callable, Union, get_args, get_type_hints
+
+import jsonpath_ng
 
 from datatools.classes import Any, ParameterKey, Type
 
@@ -83,6 +86,19 @@ def get_parameters_types(function: Callable) -> dict[str, Any]:
     return parameter_types
 
 
+def get_keyword_only_parameters_types(
+    function: Callable, min_idx: int = 0
+) -> list[str]:
+    parameters = inspect.signature(function).parameters
+    return [
+        name
+        for idx, (name, param) in enumerate(parameters.items())
+        if idx >= min_idx
+        and param.kind
+        in {inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD}
+    ]
+
+
 def json_serialize(x):
     if isinstance(x, datetime.datetime):
         return x.strftime("%Y-%m-%dT%H:%M:%S%z")
@@ -94,3 +110,30 @@ def json_serialize(x):
         return get_type_name(x)
     else:
         raise NotImplementedError(type(x))
+
+
+def jsonpath_update(data: dict, key: str, val: Any) -> None:
+    key_pattern = jsonpath_ng.parse(key)
+    # NOTE: for some reason, update_or_create in jsonpath_ng  does not
+    # work with types that cannot be serialized to JSON
+    try:
+        val = json_serialize(val)
+    except NotImplementedError:
+        pass
+    key_pattern.update_or_create(data, val)
+
+
+def jsonpath_get(data: dict, key: str) -> Any:
+    key_pattern = jsonpath_ng.parse(key)
+    match = key_pattern.find(data)
+    result = [x.value for x in match]
+    # TODO: we always get a list (multiple matches),
+    # but most of the time, we want only one
+    if len(result) == 0:
+        result = None
+    elif len(result) == 1:
+        result = result[0]
+    else:
+        logging.warning("multiple results in metadata found")
+
+    return result
