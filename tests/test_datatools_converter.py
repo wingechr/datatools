@@ -3,7 +3,7 @@ import logging
 import unittest
 from tempfile import TemporaryDirectory
 
-from datatools.converter import Converter
+from datatools import Converter
 
 logging.basicConfig(
     format="[%(asctime)s %(levelname)7s] %(message)s", level=logging.INFO

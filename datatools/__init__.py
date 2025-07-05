@@ -1,8 +1,20 @@
 __version__ = "0.12.0"
 
-from datatools.converter import Converter, ConverterException, Type
-from datatools.process import Process, ProcessException
-from datatools.storage import Metadata, Resource, Storage, StorageException
+from datatools import utils
+from datatools.classes import (
+    ConverterException,
+    Key,
+    MetadataKey,
+    MetadataValue,
+    ProcessException,
+    ResourcePath,
+    StorageException,
+    Type,
+    UnknownType,
+)
+from datatools.converter import Converter
+from datatools.process import Function
+from datatools.storage import Metadata, Resource, Storage
 
 __all__ = [
     "Storage",
@@ -10,8 +22,18 @@ __all__ = [
     "StorageException",
     "ProcessException",
     "Metadata",
-    "Process",
+    "Function",
     "Converter",
     "Type",
     "ConverterException",
+    "utils",
+    "StorageException",
+    "ProcessException",
+    "ConverterException",
+    "Type",
+    "UnknownType",
+    "ResourcePath",
+    "MetadataKey",
+    "MetadataValue",
+    "Key",
 ]

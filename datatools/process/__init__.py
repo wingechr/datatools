@@ -1,25 +1,24 @@
 from dataclasses import dataclass
-from typing import Any, Callable, Union
+from typing import Any, Callable, Optional, cast
 
-__all__ = ["Process", "ProcessException"]
+from datatools.classes import Key, Type
+from datatools.converter import Converter
+from datatools.storage import Resource
+from datatools.utils import (
+    get_args_kwargs_from_dict,
+    get_parameters_types,
+    get_result_type,
+    get_value_type,
+)
 
-Key = Union[None, int, str]
-KeyDict = dict[Key, Any]
-KeyAny = Union[None, Any, list[Any], KeyDict, tuple[list[Any], dict[str, Any]]]
-Type = Any
-
-
-def infer_converter(type_from: Type, type_to: Type) -> Callable:
-    # TODO
-    return lambda x: x
-
-
-def infer_from_bytes(type: Type) -> Callable:
-    return infer_converter(bytes, type)
+__all__ = ["Function"]
 
 
-def infer_to_bytes(type: Type) -> Callable:
-    return infer_converter(type, bytes)
+def constant_as_function(value: Any) -> Callable:
+    def fun():
+        return value
+
+    return fun
 
 
 @dataclass(frozen=True)
@@ -27,145 +26,133 @@ class Function:
     """can be used as decorator aroundfunctions"""
 
     function: Callable
+    parameters_types: Optional[dict[str, Type]] = None
+    result_type: Optional[Type] = None
 
-    def __call__(self, *args, **kwargs) -> Any:
+    def __call__(self, *args, **kwargs):
         return self.function(*args, **kwargs)
 
+    def __post_init__(self):
+        update_attrs = {}
+        if self.parameters_types is None:
+            update_attrs["parameters_types"] = get_parameters_types(self.function)
+        if self.result_type is None:
+            update_attrs["result_type"] = get_result_type(self.function)
+        for key, val in update_attrs.items():
+            object.__setattr__(self, key, val)
+
     @classmethod
-    def as_function(cls, function: Union["Function", Any]) -> "Function":
-        if isinstance(function, Function):
-            return function
-        return Function(function=function)
+    def wrap(cls) -> Callable:
+        def decorator(function) -> Function:
+            if isinstance(function, Function):
+                return function
+            return Function(function=function)
+
+        return decorator
 
     def get_input_type(self, key: Key) -> Type:
-        # TODO
-        pass
+        param = self.get_parameter_name(key)
+        parameters_types = self.parameters_types or {}
+        return parameters_types[param]
 
-    def get_output_type(self, key: Key) -> Type:
-        # TODO
-        pass
+    def get_parameter_name(self, key: Key) -> str:
+        if key is None:
+            key = 0
+        if isinstance(key, int):
+            parameters_types = list(self.parameters_types or {})
+            key = parameters_types[key]
+        return key
+
+    def process(self, *input_args: Any, **input_kwargs: Any) -> "Process":
+        # combine args / kwargs
+        input_args_kwargs = {
+            key: input for key, input in enumerate(input_args)
+        } | input_kwargs
+        inputs = {
+            cast(Key, key): Input.wrap(input=input, type_to=self.get_input_type(key))
+            for key, input in input_args_kwargs.items()
+        }
+        return Process(function=self, inputs=inputs)
 
 
 @dataclass(frozen=True)
 class Input:
 
     read_input: Any
+    type_to: Type
 
     def __call__(self) -> Any:
         return self.read_input()
 
     @classmethod
-    def as_input(cls, input: Union["Input", Any], type_to: Type) -> "Input":
-        if isinstance(input, Input):
-            return input
+    def wrap(cls, input: Any, type_to: Type = None) -> "Input":
+        if not isinstance(input, Input):
+            if isinstance(input, Resource):
+                read_input = input.get_loader(type_to=type_to)
+            elif not isinstance(input, Callable):
+                # literal: convert now
+                input_converted = Converter.convert_to(input, type_to=type_to)
 
-        from_bytes = infer_from_bytes(type_to)
+                def read_input():
+                    return input_converted
 
-        def read_input():
-            bdata = input()
-            data = from_bytes(bdata)
-            return data
-
-        return Input(read_input)
+            else:
+                # generic callable
+                read_input = input
+            input = Input(read_input=read_input, type_to=type_to)
+        return input
 
 
 @dataclass(frozen=True)
 class Output:
 
     handle_output_data_metadata: Any
+    type_from: Type
 
     def __call__(self, data: Any, metadata: Any) -> None:
         # write output function must be take data and metadata
         return self.handle_output_data_metadata(data, metadata)
 
     @classmethod
-    def as_output(cls, output: Union["Output", Any], type_from: Type) -> "Output":
-        if isinstance(output, Output):
-            return output
-
-        to_bytes = infer_to_bytes(type_from)
-
-        def handle_output_data_metadata(data: Any, metadata: Any):
-            bdata = to_bytes(data)
-            return output(bdata, metadata)
-
-        return Output(handle_output_data_metadata)
-
-
-class ProcessException(Exception):
-    pass
-
-
-def any_to_dict(
-    items: KeyAny,
-) -> dict[Key, Any]:
-    if items is None:
-        return {}
-    elif isinstance(items, tuple):
-        args, kwargs = items
-        return dict(list(enumerate(args)) + list(kwargs.items()))
-    elif isinstance(items, list):
-        return dict(enumerate(items))
-    elif isinstance(items, dict):
-        return items
-    else:
-        return {None: items}
-
-
-def get_args_kwargs_from_dict(
-    data: dict[Key, Any],
-) -> tuple[list[Any], dict[str, Any]]:
-    args_d = {}
-    kwargs = {}
-    if None in data:  # primitive: must be the only one
-        args = [data[None]]
-    else:
-        for k, v in data.items():
-            if isinstance(k, int):
-                args_d[k] = v
-            elif isinstance(k, str):
-                kwargs[k] = v
+    def wrap(cls, output: Any, type_from: Type = None) -> "Output":
+        if not isinstance(output, Output):
+            if isinstance(output, Resource):
+                handle_output_data_metadata = output.get_writer(type_from=type_from)
+            elif isinstance(output, Callable):
+                handle_output_data_metadata = output
             else:
-                raise TypeError(k)
-        if args_d:
-            # fill missing positionals with None
-            args = [args_d.get(i, None) for i in range(max(args_d) + 1)]
-        else:
-            args = []
-
-    return args, kwargs
+                raise TypeError(output)
+            output = Output(
+                handle_output_data_metadata=handle_output_data_metadata,
+                type_from=type_from,
+            )
+        return output
 
 
 @dataclass(frozen=True)
 class Process:
-    function: Callable
-    inputs: KeyAny = None
-    outputs: KeyAny = None
+    function: Function
+    inputs: dict[Key, Input]
 
-    def __post_init__(self) -> None:
-        # change attributes:
-        # wrap / ensure proper classes
-        # save changes: must use __setattr__ because we use frozen=True
-        function = Function.as_function(self.function)
-        inputs = {
-            key: Input.as_input(input, function.get_input_type(key))
-            for key, input in any_to_dict(self.inputs).items()
-        }
-        outputs = {
-            key: Output.as_output(output, function.get_output_type(key))
-            for key, output in any_to_dict(self.outputs).items()
-        }
-
-        object.__setattr__(self, "function", function)
-        object.__setattr__(self, "inputs", inputs)
-        object.__setattr__(self, "outputs", outputs)
-
-    def __call__(self) -> None:
+    def __call__(self, *output_args, **output_kwargs) -> None:
         """Run the process."""
 
+        # first: prepare outputs
+        output_args_kwargs = dict(enumerate(output_args)) | output_kwargs
+        type_from = self.function.result_type
+        # if only single arg: make it as None == single output
+        if set(output_args_kwargs) == {0}:
+            output_args_kwargs = {None: output_args_kwargs[0]}
+        else:
+            type_from = get_value_type(type_from)
+
+        outputs = {
+            key: Output.wrap(output=output, type_from=type_from)
+            for key, output in output_args_kwargs.items()
+        }
+
         # read input values
-        inputs = any_to_dict(self.inputs)
-        data = {key: read_input() for key, read_input in inputs.items()}
+        data = {key: input() for key, input in self.inputs.items()}
 
         # map to function arguments
         args, kwargs = get_args_kwargs_from_dict(data)
@@ -176,9 +163,7 @@ class Process:
         # create process metadata # TODO
         metadata = {}
 
-        # map to outputs and save
-        outputs = any_to_dict(self.outputs)
-        for key, write_output in outputs.items():
+        for key, output in outputs.items():
             partial_result = result if key is None else result[key]
             # write output function must be take data and metadata
-            write_output(partial_result, metadata)
+            output(partial_result, metadata)

@@ -7,23 +7,13 @@ from dataclasses import dataclass
 from functools import cached_property
 from io import BytesIO, IOBase
 from pathlib import Path
-from typing import Any, Iterable, Literal
+from typing import Callable, Iterable, Literal
 
-# from datatools.utils import cache
+from datatools.classes import Any, MetadataKey, MetadataValue, ResourcePath, Type
+from datatools.process import Converter
+from datatools.utils import get_filetype_from_filename
 
-__all__ = ["Storage", "Resource", "StorageException"]
-
-ResourcePath = str
-MetadataKey = str
-MetadataValue = Any
-
-
-class StorageException(Exception):
-    pass
-
-
-class InvalidPathException(StorageException):
-    pass
+__all__ = ["Storage", "Resource"]
 
 
 @dataclass(frozen=True)
@@ -142,7 +132,9 @@ class Storage:
         """
         filepath = self.__get_filepath(path)
         with self.__open_write(filepath) as file:
-            file.write(data.read())
+            # TODO: wrap into byte iterator
+            for chunk in data:
+                file.write(chunk)
 
     def _delete(self, path: ResourcePath) -> None:
         """Delete resource's data (and metadata).
@@ -271,6 +263,42 @@ class Resource:
         Metadata
         """
         return Metadata(self)
+
+    def get_filetype(self) -> Type:
+        return self.metadata.get("filetype") or get_filetype_from_filename(self.path)
+
+    def get_datatype(self) -> Type:
+        return self.metadata.get("datatype")
+
+    def get_loader(self, type_to: Type) -> Callable:
+        type_from = self.get_filetype()
+        return Converter.get(type_from=type_from, type_to=type_to)
+
+    def get_writer(self, type_from: Type) -> Callable:
+        type_to = self.get_filetype()
+        convert = Converter.get(type_from=type_from, type_to=type_to)
+
+        def writer(data, metadata):
+            # write metadata
+            self.metadata.set(**metadata)
+            # convert and write data
+            with self.open() as file:
+                file.write(convert(data))
+
+        return writer
+
+    def load(self) -> Any:
+        type_to = self.get_datatype()
+        type_from = self.get_filetype()
+        convert = Converter.get(type_from=type_from, type_to=type_to)
+        with self.open() as file:
+            return convert(file)
+
+    def dump(self, data: Any) -> None:
+        type_to = self.get_filetype()
+        type_from = self.get_datatype()
+        convert = Converter.get(type_from=type_from, type_to=type_to)
+        return self.write(convert(data))
 
 
 @dataclass(frozen=True)

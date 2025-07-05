@@ -2,7 +2,7 @@
 import logging
 import unittest
 
-from datatools import Process
+from datatools import Function
 
 logging.basicConfig(
     format="[%(asctime)s %(levelname)7s] %(message)s", level=logging.INFO
@@ -20,30 +20,22 @@ class TestDatatoolsProcess(unittest.TestCase):
 
             return store_output
 
-        def get_get_input(value):
+        def get_get_int_input(value):
             def get_input():
                 return value
 
             return get_input
 
-        def function(*args, **kwargs):
+        # create a function object
+        @Function.wrap()
+        def function(*args: int, **kwargs: float) -> tuple[int, float]:
             return (sum(args), sum(kwargs.values()))
 
-        # input output: single
-        proc = Process(
-            function=function,
-            inputs=get_get_input(1),
-            outputs=get_store_output("test1"),
-        )
-        proc()
-        self.assertEqual(output["test1"], (1, 0))
+        # wrapped function still should work normally
+        self.assertEqual(function(1, 2, a=3, b=4), (3, 7))
 
-        # input output: single
-        proc = Process(
-            function=function,
-            inputs={0: get_get_input(2), 1: get_get_input(3), "x": get_get_input(4)},
-            outputs=[get_store_output("test2.1"), get_store_output("test2.2")],
-        )
-        proc()
-        self.assertEqual(output["test2.1"], 2 + 3)
-        self.assertEqual(output["test2.2"], 4)
+        # bind inputs to create process
+        process = function.process(get_get_int_input(1))
+        # run process
+        process(get_store_output("test1"))
+        self.assertEqual(output["test1"], (1, 0))
