@@ -44,12 +44,8 @@ class TestDatatoolsStorage(unittest.TestCase):
         # test list all resources and equality
         self.assertTrue(res in storage.list())
 
-        # delete (but keep metadata)
-        res.delete(keep_metadata=True)
-        self.assertFalse(res.exist())
-        # -> still in storage, because metadata still exists
-        self.assertTrue(res in storage.list())
         res.delete()
+        self.assertFalse(res.exist())
         self.assertFalse(res in storage.list())
 
         # create again without having a path

@@ -1,3 +1,5 @@
+"""Storege for data with connected metadata"""
+
 import hashlib
 import json
 import os
@@ -17,6 +19,10 @@ MetadataValue = Any
 
 
 class StorageException(Exception):
+    pass
+
+
+class InvalidPathException(StorageException):
     pass
 
 
@@ -138,23 +144,17 @@ class Storage:
         with self.__open_write(filepath) as file:
             file.write(data.read())
 
-    def _delete(self, path: ResourcePath, keep_metadata: bool = False) -> None:
+    def _delete(self, path: ResourcePath) -> None:
         """Delete resource's data (and metadata).
 
         Parameters
         ----------
         path : ResourcePath
             unique resource path ins storage
-        keep_metadata : bool, optional
-            if True, don't delete the metadata
         """
-        filepath = self.__get_filepath(path)
-        # data might not exist
-        if filepath.exists():
-            filepath.unlink()
-        if not keep_metadata:
-            filepath_meta = self.__get_filepath_metadata(path)
-            filepath_meta.unlink()
+        for filepath in [self.__get_filepath(path), self.__get_filepath_metadata(path)]:
+            if filepath.exists():
+                filepath.unlink()
 
     def _metadata_set(self, path: ResourcePath, **key_vals) -> None:
         """Set (mutliple) metadata entries for resource.
@@ -228,7 +228,7 @@ class Resource:
     path: ResourcePath
 
     def exist(self) -> bool:
-        """Check if resource has data stored (Metadata will be ignored).
+        """Check if resource has data stored (metadata will be ignored).
 
         Returns
         -------
@@ -258,16 +258,9 @@ class Resource:
         """
         return self.storage._write(self.path, data)
 
-    def delete(self, keep_metadata: bool = False) -> None:
-        """Delete resource's data (and metadata).
-
-        Parameters
-        ----------
-        keep_metadata : bool, optional
-            if True, don't delete the metadata
-
-        """
-        return self.storage._delete(self.path, keep_metadata=keep_metadata)
+    def delete(self) -> None:
+        """Delete resource's data (and metadata)."""
+        return self.storage._delete(self.path)
 
     @cached_property
     def metadata(self) -> "Metadata":
