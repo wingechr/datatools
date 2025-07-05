@@ -92,8 +92,7 @@ class Output:
 
 
 class ProcessException(Exception):
-    def __call__(self) -> Any:
-        pass
+    pass
 
 
 def any_to_dict(
