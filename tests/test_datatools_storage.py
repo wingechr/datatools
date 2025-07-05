@@ -1,28 +1,29 @@
 # coding: utf-8
-import logging
+
+import os
 import unittest
 from io import BytesIO
 from tempfile import TemporaryDirectory
 
-from datatools import Storage
+import pandas as pd
 
-logging.basicConfig(
-    format="[%(asctime)s %(levelname)7s] %(message)s", level=logging.INFO
-)
+from datatools import Converter, Storage
 
 
 class TestDatatoolsStorage(unittest.TestCase):
     def setUp(self):
         self.tempdir = TemporaryDirectory()
+        assert os.path.exists(self.tempdir.name)
 
     def tearDown(self):
         self.tempdir.cleanup()
+        assert not os.path.exists(self.tempdir.name)
 
     def test_datatools_storage_basics(self):
         storage = Storage(location=self.tempdir.name)
 
         # create resource
-        res = storage.get("a/b.txt")
+        res = storage.ressource("a/b.txt")
 
         # read/write metadata
         key = "$mykey"
@@ -56,5 +57,42 @@ class TestDatatoolsStorage(unittest.TestCase):
 
         # can get empty metadata without error, even if resource does not exist
         self.assertEqual(
-            storage.get("nonexistent/path").metadata.get("nonexistent/key"), None
+            storage.ressource("nonexistent/path").metadata.get("nonexistent/key"), None
         )
+
+    def test_datatools_storage_w_json_converter(self):
+        storage = Storage(location=self.tempdir.name)
+        res = storage.ressource("test.json")
+        data = [1, 2, 3]
+
+        res.dump(data)
+
+        result = res.load()
+        self.assertEqual(result, data)
+
+    def test_datatools_storage_w_csv_df_converter(self):
+        storage = Storage(location=self.tempdir.name)
+        res = storage.ressource("test.csv")
+        res.metadata.set(datatype=pd.DataFrame)
+        data = pd.DataFrame([{"a": 1, "b": "2"}, {"a": 3, "b": "x"}]).set_index("a")
+
+        @Converter.register(pd.DataFrame, ".csv")
+        def df_to_csv(df: pd.DataFrame, **kwargs):
+            buf = BytesIO()
+            df.to_csv(buf, **kwargs)
+            buf.seek(0)
+            return buf
+
+        @Converter.register(".csv", pd.DataFrame)
+        def csv_to_df(buf: BytesIO, **kwargs):
+            df = pd.read_csv(buf, **kwargs)
+            return df
+
+        writer_kwargs = {"encoding": "utf-16"}
+        reader_kwargs = {"index_col": "a", "encoding": "utf-16"}
+        res.dump(data, metadata=None, **writer_kwargs)
+
+        result = res.load(**reader_kwargs)
+        pd.testing.assert_frame_equal(data, result)
+
+        # use resource as input

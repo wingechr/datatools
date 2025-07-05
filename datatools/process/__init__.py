@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, cast
 
-from datatools.classes import Key, Type
+from datatools.classes import ParameterKey, Type
 from datatools.converter import Converter
 from datatools.storage import Resource
 from datatools.utils import (
@@ -23,13 +23,14 @@ def constant_as_function(value: Any) -> Callable:
 
 @dataclass(frozen=True)
 class Function:
-    """can be used as decorator aroundfunctions"""
+    """can be used as decorator around functions"""
 
     function: Callable
     parameters_types: Optional[dict[str, Type]] = None
     result_type: Optional[Type] = None
 
     def __call__(self, *args, **kwargs):
+        """Call the underlying function."""
         return self.function(*args, **kwargs)
 
     def __post_init__(self):
@@ -41,6 +42,18 @@ class Function:
         for key, val in update_attrs.items():
             object.__setattr__(self, key, val)
 
+        if self.result_type is None:
+            raise TypeError(
+                "Function result type could not be detected. "
+                f"Either create Function manually or add type hints: {self.function}"
+            )
+        if any(x is None for x in (self.parameters_types or {}).values()):
+            raise TypeError(
+                "Function parameter types could not be detected. "
+                "Either create Function manually "
+                f"or add type hints: {self.parameters_types}"
+            )
+
     @classmethod
     def wrap(cls) -> Callable:
         def decorator(function) -> Function:
@@ -50,12 +63,12 @@ class Function:
 
         return decorator
 
-    def get_input_type(self, key: Key) -> Type:
+    def get_input_type(self, key: ParameterKey) -> Type:
         param = self.get_parameter_name(key)
         parameters_types = self.parameters_types or {}
         return parameters_types[param]
 
-    def get_parameter_name(self, key: Key) -> str:
+    def get_parameter_name(self, key: ParameterKey) -> str:
         if key is None:
             key = 0
         if isinstance(key, int):
@@ -69,7 +82,9 @@ class Function:
             key: input for key, input in enumerate(input_args)
         } | input_kwargs
         inputs = {
-            cast(Key, key): Input.wrap(input=input, type_to=self.get_input_type(key))
+            cast(ParameterKey, key): Input.wrap(
+                input=input, type_to=self.get_input_type(key)
+            )
             for key, input in input_args_kwargs.items()
         }
         return Process(function=self, inputs=inputs)
@@ -99,6 +114,11 @@ class Input:
             else:
                 # generic callable
                 read_input = input
+            if type_to is None:
+                raise TypeError(
+                    "Input type could not be detected. "
+                    f"Either create Input manually or add type hints: {input}"
+                )
             input = Input(read_input=read_input, type_to=type_to)
         return input
 
@@ -122,6 +142,11 @@ class Output:
                 handle_output_data_metadata = output
             else:
                 raise TypeError(output)
+            if type_from is None:
+                raise TypeError(
+                    "Output type could not be detected. "
+                    f"Either create Output manually or add type hints: {output}"
+                )
             output = Output(
                 handle_output_data_metadata=handle_output_data_metadata,
                 type_from=type_from,
@@ -132,7 +157,7 @@ class Output:
 @dataclass(frozen=True)
 class Process:
     function: Function
-    inputs: dict[Key, Input]
+    inputs: dict[ParameterKey, Input]
 
     def __call__(self, *output_args, **output_kwargs) -> None:
         """Run the process."""

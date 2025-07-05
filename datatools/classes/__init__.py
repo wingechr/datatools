@@ -1,4 +1,3 @@
-import inspect
 from typing import Any, Union
 
 __all__ = [
@@ -6,19 +5,18 @@ __all__ = [
     "ProcessException",
     "ConverterException",
     "Type",
-    "UnknownType",
     "ResourcePath",
     "MetadataKey",
     "MetadataValue",
-    "Key",
+    "ParameterKey",
 ]
 
-Type = Any
-UnknownType = inspect._empty
+
+Type = Union[type, str, None]
 ResourcePath = str
 MetadataKey = str
 MetadataValue = Any
-Key = Union[None, int, str]
+ParameterKey = Union[None, int, str]
 
 
 class DatatoolsException(Exception):

@@ -1,10 +1,11 @@
+import datetime
 import inspect
 from functools import cache as _cache
 from functools import update_wrapper
 from pathlib import Path
 from typing import Callable, Union, get_args, get_type_hints
 
-from datatools.classes import Any, Key, Type
+from datatools.classes import Any, ParameterKey, Type
 
 
 def cache(func: Callable) -> Callable:
@@ -38,7 +39,7 @@ def get_filetype_from_filename(filename: Union[Path, str]) -> Type:
 
 
 def get_args_kwargs_from_dict(
-    data: dict[Key, Any],
+    data: dict[ParameterKey, Any],
 ) -> tuple[list[Any], dict[str, Any]]:
     args_d = {}
     kwargs = {}
@@ -70,8 +71,8 @@ def get_value_type(dtype: Type) -> Type:
 def get_result_type(function: Callable) -> Type:
     sig = inspect.signature(function)
     return_type = sig.return_annotation
-    # if return_type == inspect._empty:
-    #    pass
+    if return_type == inspect._empty:
+        return_type = None
     return return_type
 
 
@@ -80,3 +81,16 @@ def get_parameters_types(function: Callable) -> dict[str, Any]:
     hints = get_type_hints(function)
     parameter_types = {name: hints.get(name, None) for name in sig.parameters}
     return parameter_types
+
+
+def json_serialize(x):
+    if isinstance(x, datetime.datetime):
+        return x.strftime("%Y-%m-%dT%H:%M:%S%z")
+    elif isinstance(x, datetime.date):
+        return x.strftime("%Y-%m-%d")
+    elif isinstance(x, datetime.time):
+        return x.strftime("%H:%M:%S")
+    elif isinstance(x, type):
+        return get_type_name(x)
+    else:
+        raise NotImplementedError(type(x))

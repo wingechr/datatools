@@ -2,18 +2,22 @@
 
 import hashlib
 import json
+import logging
 import os
 from dataclasses import dataclass
 from functools import cached_property
 from io import BytesIO, IOBase
 from pathlib import Path
-from typing import Callable, Iterable, Literal
+from typing import Callable, Iterable, Literal, Optional
 
 from datatools.classes import Any, MetadataKey, MetadataValue, ResourcePath, Type
 from datatools.process import Converter
-from datatools.utils import get_filetype_from_filename
+from datatools.utils import get_filetype_from_filename, json_serialize
 
 __all__ = ["Storage", "Resource"]
+
+METADATA_DATATYPE = "datatype"
+METADATA_FILETYPE = "filetype"
 
 
 @dataclass(frozen=True)
@@ -24,7 +28,7 @@ class Storage:
 
     # @cache
 
-    def get(self, path: ResourcePath) -> "Resource":
+    def ressource(self, path: ResourcePath) -> "Resource":
         """Return resource for given path. Path might be changed
 
         Parameters
@@ -61,7 +65,7 @@ class Storage:
         bdata = data.read()
         hashsum = getattr(hashlib, hashtype)(bdata).hexdigest()
         path = f"{hashtype}/{hashsum}{suffix}"
-        resource = self.get(path)
+        resource = self.ressource(path)
         data = BytesIO(bdata)
         resource.write(data)
         return resource
@@ -88,7 +92,7 @@ class Storage:
                 offset = -len(self.__metadata_suffix) - 1
                 f = f[:offset]
                 path = self.__get_path(Path(os.path.join(rt, f)))
-                resource = self.get(path)
+                resource = self.ressource(path)
                 yield resource
 
     def _has_data(self, path: ResourcePath) -> bool:
@@ -118,7 +122,10 @@ class Storage:
         IOBase
             Binary data stream
         """
-        return open(self.__get_filepath(path), "rb")
+
+        filepath = self.__get_filepath(path)
+        logging.debug("opening rb: %s", filepath)
+        return open(filepath, "rb")
 
     def _write(self, path: ResourcePath, data: IOBase) -> None:
         """Write resource data.
@@ -162,7 +169,9 @@ class Storage:
         metadata = self.__metadata_read(filepath_meta)
         # update metadata
         metadata = metadata | key_vals
-        data = json.dumps(metadata, indent=2, ensure_ascii=False).encode()
+        data = json.dumps(
+            metadata, indent=2, ensure_ascii=False, default=json_serialize
+        ).encode()
         with self.__open_write(filepath_meta) as file:
             file.write(data)
 
@@ -203,6 +212,7 @@ class Storage:
 
     def __open_write(self, filepath: Path) -> IOBase:
         filepath.parent.mkdir(exist_ok=True, parents=True)
+        logging.debug("opening wb: %s", filepath)
         return open(filepath, "wb")
 
     def __metadata_read(self, filepath_meta: Path) -> dict:
@@ -264,41 +274,45 @@ class Resource:
         """
         return Metadata(self)
 
-    def get_filetype(self) -> Type:
-        return self.metadata.get("filetype") or get_filetype_from_filename(self.path)
-
-    def get_datatype(self) -> Type:
-        return self.metadata.get("datatype")
+    def _get_filetype(self) -> Type:
+        return self.metadata.get(METADATA_FILETYPE) or get_filetype_from_filename(
+            self.path
+        )
 
     def get_loader(self, type_to: Type) -> Callable:
-        type_from = self.get_filetype()
-        return Converter.get(type_from=type_from, type_to=type_to)
+        filetype = self._get_filetype()
+        convert = Converter.get(type_from=filetype, type_to=type_to)
+
+        def loader(**kwargs):
+            with self.open() as file:
+                return convert(file, **kwargs)
+
+        return loader
 
     def get_writer(self, type_from: Type) -> Callable:
-        type_to = self.get_filetype()
-        convert = Converter.get(type_from=type_from, type_to=type_to)
+        filetype = self._get_filetype()
+        convert = Converter.get(type_from=type_from, type_to=filetype)
 
-        def writer(data, metadata):
+        def writer(data, metadata=None, **kwargs):
             # write metadata
-            self.metadata.set(**metadata)
-            # convert and write data
-            with self.open() as file:
-                file.write(convert(data))
+            if metadata:
+                self.metadata.set(**metadata)
+            self.write(convert(data, **kwargs))
 
         return writer
 
-    def load(self) -> Any:
-        type_to = self.get_datatype()
-        type_from = self.get_filetype()
-        convert = Converter.get(type_from=type_from, type_to=type_to)
-        with self.open() as file:
-            return convert(file)
+    def load(self, **kwargs) -> Any:
+        datatype = self.metadata.get(METADATA_DATATYPE)
+        loader = self.get_loader(type_to=datatype)
+        data = loader(**kwargs)
+        return data
 
-    def dump(self, data: Any) -> None:
-        type_to = self.get_filetype()
-        type_from = self.get_datatype()
-        convert = Converter.get(type_from=type_from, type_to=type_to)
-        return self.write(convert(data))
+    def dump(self, data: Any, metadata: Optional[dict] = None, **kwargs) -> None:
+        datatype = self.metadata.get(METADATA_DATATYPE) or type(data)
+        writer = self.get_writer(type_from=datatype)
+        # update metadata
+        metadata = {METADATA_DATATYPE: datatype} | kwargs | (metadata or {})
+        writer(data, metadata, **kwargs)
 
 
 @dataclass(frozen=True)

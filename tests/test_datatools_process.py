@@ -1,15 +1,18 @@
 # coding: utf-8
-import logging
+
 import unittest
+from tempfile import TemporaryDirectory
 
-from datatools import Function
-
-logging.basicConfig(
-    format="[%(asctime)s %(levelname)7s] %(message)s", level=logging.INFO
-)
+from datatools import Function, Storage
 
 
 class TestDatatoolsProcess(unittest.TestCase):
+    def setUp(self):
+        self.tempdir = TemporaryDirectory()
+
+    def tearDown(self):
+        self.tempdir.cleanup()
+
     def test_datatools_proceess_basics(self):
 
         output = {}
@@ -39,3 +42,23 @@ class TestDatatoolsProcess(unittest.TestCase):
         # run process
         process(get_store_output("test1"))
         self.assertEqual(output["test1"], (1, 0))
+
+    def test_datatools_proceess_resource(self):
+
+        storage = Storage(self.tempdir.name)
+
+        res_inp = storage.ressource("input.json")
+        res_outp = storage.ressource("output.json")
+
+        res_inp.dump([1, 2, 3])
+
+        def function(data: list, factor: int) -> list:
+            return data * factor
+
+        func = Function(function)
+        proc = func.process(res_inp, 10)
+
+        self.assertFalse(res_outp.exist())
+        proc(res_outp)
+        self.assertTrue(res_outp.exist())
+        proc(res_outp)

@@ -3,14 +3,13 @@ __version__ = "0.12.0"
 from datatools import utils
 from datatools.classes import (
     ConverterException,
-    Key,
     MetadataKey,
     MetadataValue,
+    ParameterKey,
     ProcessException,
     ResourcePath,
     StorageException,
     Type,
-    UnknownType,
 )
 from datatools.converter import Converter
 from datatools.process import Function
@@ -31,9 +30,8 @@ __all__ = [
     "ProcessException",
     "ConverterException",
     "Type",
-    "UnknownType",
     "ResourcePath",
     "MetadataKey",
     "MetadataValue",
-    "Key",
+    "ParameterKey",
 ]
