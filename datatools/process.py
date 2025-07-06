@@ -1,3 +1,4 @@
+import datetime
 from dataclasses import dataclass
 from functools import cached_property
 from typing import Any, Callable, Optional, cast
@@ -28,6 +29,7 @@ class Function:
     """can be used as decorator around functions"""
 
     function: Callable
+    id: Optional[str] = None
     name: Optional[str] = None
     description: Optional[str] = None
     parameters_types: Optional[dict[str, Type]] = None
@@ -48,10 +50,13 @@ class Function:
             )
         if self.result_type is None:
             object.__setattr__(self, "result_type", get_result_type(self.function))
+
         if self.name is None:
             object.__setattr__(self, "name", self.function.__name__)
         if self.description is None:
             object.__setattr__(self, "description", self.function.__doc__)
+        if self.id is None:
+            object.__setattr__(self, "id", f"todo://{self.name}")
 
         if self.result_type is None:
             raise TypeError(
@@ -92,22 +97,25 @@ class Function:
         input_args_kwargs = {
             key: input for key, input in enumerate(input_args)
         } | input_kwargs
+
         inputs = {
             cast(ParameterKey, key): Input.wrap(
                 input=input, type_to=self.get_input_type(key)
             )
             for key, input in input_args_kwargs.items()
         }
-        return Process(function=self, inputs=inputs)
+        process_id = f"{self.id}/process"
+        return Process(function=self, inputs=inputs, id=process_id)
 
     @cached_property
     def metadata(self) -> dict[str, Any]:
         """Metadata about the function."""
         return {
+            "@id": self.id,
             "name": self.name,
             "description": self.description,
-            "parameters_types": self.parameters_types,
-            "result_type": self.result_type,
+            # "parameters_types": self.parameters_types,
+            "datatype": self.result_type,
         }
 
 
@@ -116,6 +124,7 @@ class Input:
 
     read_input: Any
     type_to: Type
+    source: Any = None
 
     def __call__(self) -> Any:
         return self.read_input()
@@ -123,10 +132,13 @@ class Input:
     @classmethod
     def wrap(cls, input: Any, type_to: Type = None) -> "Input":
         if not isinstance(input, Input):
+            source = None
             if isinstance(input, Resource):
                 read_input = input.get_loader(type_to=type_to)
+                source = {"@id": input.path}
             elif not isinstance(input, Callable):
                 # literal: convert now
+                source = {"@value": input}
                 input_converted = Converter.convert_to(input, type_to=type_to)
 
                 def read_input():
@@ -140,8 +152,17 @@ class Input:
                     "Input type could not be detected. "
                     f"Either create Input manually or add type hints: {input}"
                 )
-            input = Input(read_input=read_input, type_to=type_to)
+            input = Input(read_input=read_input, type_to=type_to, source=source)
+
         return input
+
+    @cached_property
+    def metadata(self) -> dict[str, Any]:
+        """Metadata about the function."""
+        return {
+            "source": self.source,
+            "datatype": self.type_to,
+        }
 
 
 @dataclass(frozen=True)
@@ -179,6 +200,8 @@ class Output:
 class Process:
     function: Function
     inputs: dict[ParameterKey, Input]
+    id: str
+    context: Optional[dict[str, Any]] = None
 
     def __call__(self, *output_args, **output_kwargs) -> None:
         """Run the process."""
@@ -207,9 +230,38 @@ class Process:
         result = self.function(*args, **kwargs)
 
         # create process metadata # TODO
-        metadata = self.function.metadata
+        dynmic_metadata = {"datetime": datetime.datetime.now()}
+        metadata = self.metadata | dynmic_metadata
 
         for key, output in outputs.items():
+            metadata = {
+                "@id": f"{self.id}/output/{key}",
+                "createdBy": metadata,
+                "datatype": output.type_from,
+            }
             partial_result = result if key is None else result[key]
             # write output function must be take data and metadata
             output(partial_result, metadata)
+
+    @classmethod
+    def from_uri(cls, uri: str) -> "Process":
+        handler = Converter.convert_to(uri, Callable)
+        function = Function(function=handler)
+        process = function.process(uri)
+        return process
+
+    @cached_property
+    def metadata(self) -> dict[str, Any]:
+        """Metadata about the function."""
+        return {
+            "@id": self.id,
+            "function": self.function.metadata,
+            "inputs": [
+                input.metadata
+                | {
+                    "role": self.function.get_parameter_name(key),
+                    "@id": f"{self.id}/input/{key}",
+                }
+                for key, input in self.inputs.items()
+            ],
+        } | (self.context or {})

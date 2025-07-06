@@ -5,6 +5,7 @@ from tempfile import TemporaryDirectory
 from typing import Callable
 
 from datatools import Converter, Function, Storage
+from datatools.process import Process
 
 
 class TestDatatoolsProcess(unittest.TestCase):
@@ -67,14 +68,12 @@ class TestDatatoolsProcess(unittest.TestCase):
 
     def test_datatools_proceess_handler(self):
         url = "http://example.com"
+        process = Process.from_uri(url)
 
-        handler = Converter.convert_to(url, Callable)
         path = "http/example.com/index.html"
         storage = Storage(self.tempdir.name)
         resource = storage.ressource(path)
 
-        function = Function(function=handler)
-        process = function.process(url)
         self.assertFalse(resource.exist())
         process(resource)
         self.assertTrue(resource.exist())

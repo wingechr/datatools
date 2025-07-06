@@ -368,6 +368,7 @@ class Resource:
             if metadata:
                 self.metadata.set(**metadata)
 
+            # TODO get byte metadata (size, hash)
             self.write(convert(data, **kwargs))
 
         return writer
