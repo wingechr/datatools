@@ -1,10 +1,13 @@
 # coding: utf-8
 
 import unittest
-from typing import Union
+from typing import Callable, Union
 
+from datatools import Converter
 from datatools.utils import (
     get_keyword_only_parameters_types,
+    get_parameters_types,
+    is_type_class,
     jsonpath_get,
     jsonpath_update,
 )
@@ -41,3 +44,21 @@ class TestDatatoolsUtils(unittest.TestCase):
             pass
 
         self.assertEqual(get_keyword_only_parameters_types(fun, min_idx=4), ["k2"])
+
+    def test_get_parameters_types(self):
+        def fun(a: str) -> int:
+            return int(a)
+
+        self.assertEqual(get_parameters_types(fun), {"a": str})
+
+        # check if it also works after we decorate it as Converter
+        fun = Converter.autoregister(fun)
+
+        self.assertEqual(get_parameters_types(fun), {"a": str})
+
+    def test_is_type(self):
+        self.assertTrue(is_type_class(int))
+        self.assertFalse(is_type_class("test"))
+        self.assertFalse(is_type_class(None))
+        self.assertTrue(is_type_class(Callable))
+        self.assertTrue(is_type_class(Union[str, None]))

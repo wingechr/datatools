@@ -10,14 +10,23 @@ from io import BytesIO, IOBase
 from pathlib import Path
 from typing import Callable, Iterable, Literal, Optional, Union, cast
 
-from datatools.classes import Any, MetadataKey, MetadataValue, ResourcePath, Type
+from datatools.classes import (
+    Any,
+    MetadataKey,
+    MetadataValue,
+    ResourcePath,
+    StorageException,
+    Type,
+)
 from datatools.process import Converter
 from datatools.utils import (
     get_filetype_from_filename,
     get_keyword_only_parameters_types,
+    get_type_name,
     json_serialize,
     jsonpath_get,
     jsonpath_update,
+    passthrough,
 )
 
 __all__ = ["Storage", "Resource"]
@@ -144,6 +153,8 @@ class Storage:
             Binary data stream
         """
         filepath = self.__get_filepath(path)
+        if filepath.exists():
+            raise StorageException("Resource exists")
         with self.__open_write(filepath) as file:
             # TODO: wrap into byte iterator
             for chunk in data:
@@ -323,7 +334,13 @@ class Resource:
 
     def get_dumper(self, type_from: Type) -> Callable:
         filetype = self._get_filetype()
-        convert = Converter.get(type_from=type_from, type_to=filetype)
+        # get converter if type_from is not byte like
+        # TODO:
+        if get_type_name(type_from) in {get_type_name(BytesIO)}:
+            convert = passthrough
+        else:
+            convert = Converter.get(type_from=type_from, type_to=filetype)
+
         try:
             get_metadata = Converter.get(type_from=type_from, type_to=Metadata)
         except KeyError:

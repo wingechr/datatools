@@ -1,4 +1,5 @@
-from typing import Any, Union
+from typing import Any, Callable, Union
+from urllib.parse import ParseResult
 
 __all__ = [
     "StorageException",
@@ -11,12 +12,13 @@ __all__ = [
     "ParameterKey",
 ]
 
-
-Type = Union[type, str, None]
+Url = ParseResult
+Type = Union[type, str, None, type(Callable)]
 ResourcePath = str
 MetadataKey = str
 MetadataValue = Any
 ParameterKey = Union[None, int, str]
+OptionalStr = Union[str, None]
 
 
 class DatatoolsException(Exception):

@@ -2,8 +2,9 @@
 
 import unittest
 from tempfile import TemporaryDirectory
+from typing import Callable
 
-from datatools import Function, Storage
+from datatools import Converter, Function, Storage
 
 
 class TestDatatoolsProcess(unittest.TestCase):
@@ -61,4 +62,21 @@ class TestDatatoolsProcess(unittest.TestCase):
         self.assertFalse(res_outp.exist())
         proc(res_outp)
         self.assertTrue(res_outp.exist())
-        proc(res_outp)
+        # cannot run process again, because resource already exists
+        self.assertRaises(Exception, proc, res_outp)
+
+    def test_datatools_proceess_handler(self):
+        url = "http://example.com"
+
+        handler = Converter.convert_to(url, Callable)
+        path = "http/example.com/index.html"
+        storage = Storage(self.tempdir.name)
+        resource = storage.ressource(path)
+
+        function = Function(function=handler)
+        process = function.process(url)
+        self.assertFalse(resource.exist())
+        process(resource)
+        self.assertTrue(resource.exist())
+
+        print(resource.metadata.get("$"))

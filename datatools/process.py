@@ -1,11 +1,12 @@
-import inspect
 from dataclasses import dataclass
+from functools import cached_property
 from typing import Any, Callable, Optional, cast
 
 from datatools.classes import ParameterKey, Type
 from datatools.converter import Converter
 from datatools.storage import Resource
 from datatools.utils import (
+    copy_signature,
     get_args_kwargs_from_dict,
     get_parameters_types,
     get_result_type,
@@ -27,6 +28,8 @@ class Function:
     """can be used as decorator around functions"""
 
     function: Callable
+    name: Optional[str] = None
+    description: Optional[str] = None
     parameters_types: Optional[dict[str, Type]] = None
     result_type: Optional[Type] = None
 
@@ -35,13 +38,20 @@ class Function:
         return self.function(*args, **kwargs)
 
     def __post_init__(self):
-        update_attrs = {}
+
+        # set signature to underlying function (@pproperty is not working here)
+        copy_signature(self, self.function)
+
         if self.parameters_types is None:
-            update_attrs["parameters_types"] = get_parameters_types(self.function)
+            object.__setattr__(
+                self, "parameters_types", get_parameters_types(self.function)
+            )
         if self.result_type is None:
-            update_attrs["result_type"] = get_result_type(self.function)
-        for key, val in update_attrs.items():
-            object.__setattr__(self, key, val)
+            object.__setattr__(self, "result_type", get_result_type(self.function))
+        if self.name is None:
+            object.__setattr__(self, "name", self.function.__name__)
+        if self.description is None:
+            object.__setattr__(self, "description", self.function.__doc__)
 
         if self.result_type is None:
             raise TypeError(
@@ -54,8 +64,6 @@ class Function:
                 "Either create Function manually "
                 f"or add type hints: {self.parameters_types}"
             )
-        # set signature to underlying function (@pproperty is not working here)
-        object.__setattr__(self, "__signature__", inspect.signature(self.function))
 
     @classmethod
     def wrap(cls) -> Callable:
@@ -91,6 +99,16 @@ class Function:
             for key, input in input_args_kwargs.items()
         }
         return Process(function=self, inputs=inputs)
+
+    @cached_property
+    def metadata(self) -> dict[str, Any]:
+        """Metadata about the function."""
+        return {
+            "name": self.name,
+            "description": self.description,
+            "parameters_types": self.parameters_types,
+            "result_type": self.result_type,
+        }
 
 
 @dataclass(frozen=True)
@@ -189,7 +207,7 @@ class Process:
         result = self.function(*args, **kwargs)
 
         # create process metadata # TODO
-        metadata = {}
+        metadata = self.function.metadata
 
         for key, output in outputs.items():
             partial_result = result if key is None else result[key]

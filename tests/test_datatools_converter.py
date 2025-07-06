@@ -2,6 +2,7 @@
 
 import unittest
 from tempfile import TemporaryDirectory
+from typing import Callable
 
 from datatools import Converter
 
@@ -24,3 +25,8 @@ class TestDatatoolsConverter(unittest.TestCase):
 
         # decorated function can be found with get_converter
         self.assertEqual(Converter.get(str, int)("1"), 1)
+
+    def test_datatools_converter_handlers(self):
+        url = "http://example.com"
+        handler = Converter.convert_to(url, Callable)
+        self.assertTrue(isinstance(handler, Callable))

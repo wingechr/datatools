@@ -1,34 +1,44 @@
 """Type conversion"""
 
-import inspect
 import json
+import logging
 from dataclasses import dataclass
 from io import BytesIO, TextIOWrapper
 from itertools import product
 from typing import Any, Callable, ClassVar, Union
 
-from datatools.classes import Type
-from datatools.utils import get_type_name, json_serialize
+import requests
+
+from datatools.classes import OptionalStr, Type
+from datatools.utils import (
+    copy_signature,
+    get_parameters_types,
+    get_result_type,
+    get_type_name,
+    json_serialize,
+    passthrough,
+)
 
 __all__ = ["Converter"]
 
 
-def clean_type(dtype: Type) -> Type:
+def clean_type(dtype: Type) -> OptionalStr:
     if isinstance(dtype, type):
         return get_type_name(dtype)
     return dtype
 
 
-def get_cleaned_type_list(types: Union[Type, list[Type]]) -> list[Type]:
+def get_cleaned_type_list(types: Union[Type, list[Type]]) -> list[OptionalStr]:
     if not isinstance(types, list):
         types = [types]
-    types = [clean_type(x) for x in types]
-    return types
+    return [clean_type(x) for x in types]
 
 
 @dataclass(frozen=True)
 class Converter:
-    _converters: ClassVar[dict[tuple[Type, Type], Callable]] = {}
+    _converters: ClassVar[dict[tuple[Union[str, None], Union[str, None]], Callable]] = (
+        {}
+    )
     function: Callable
 
     @classmethod
@@ -36,7 +46,7 @@ class Converter:
         type_from = clean_type(type_from)
         type_to = clean_type(type_to)
         if type_from == type_to:
-            return lambda x: x
+            return passthrough
         return cls._converters[(type_from, type_to)]
 
     @classmethod
@@ -45,16 +55,29 @@ class Converter:
         type_from: Union[Type, list[Type]],
         type_to: Union[Type, list[Type]],
     ) -> Callable:
-        type_from = get_cleaned_type_list(type_from)
-        type_to = get_cleaned_type_list(type_to)
+        types_from = get_cleaned_type_list(type_from)
+        types_to = get_cleaned_type_list(type_to)
 
         def decorator(function) -> Converter:
             converter = Converter(function=function)
-            for tf, tt in product(type_from, type_to):
-                cls._converters[(tf, tt)] = converter
+            for tf_tt in product(types_from, types_to):
+                if tf_tt in cls._converters:
+                    logging.warning("Overwriting exising Converter %s, %s", *tf_tt)
+                else:
+                    logging.debug("Registering Converter %s, %s", *tf_tt)
+                cls._converters[tf_tt] = converter
             return converter
 
         return decorator
+
+    @classmethod
+    def autoregister(
+        cls,
+        function: Callable,
+    ) -> Callable:
+        type_from = list(get_parameters_types(function).values())[0]
+        type_to = get_result_type(function)
+        return cls.register(type_from=type_from, type_to=type_to)(function)
 
     @classmethod
     def convert_return(cls, type_to: Type, type_from: Type = None) -> Callable:
@@ -83,10 +106,10 @@ class Converter:
         return decorator
 
     @classmethod
-    def convert_to(cls, data: Type, type_to: Type = None) -> Any:
+    def convert_to(cls, data: Type, type_to: Type = None, **kwargs) -> Any:
         type_from = get_type_name(type(data))
         convert = Converter.get(type_from, type_to)
-        return convert(data)
+        return convert(data, **kwargs)
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return self.function(*args, **kwargs)
@@ -97,7 +120,7 @@ class Converter:
 
     def __post_init__(self):
         # set signature to underlying function (@pproperty is not working here)
-        object.__setattr__(self, "__signature__", inspect.signature(self.function))
+        copy_signature(self, self.function)
 
 
 # register some default converters
@@ -118,3 +141,17 @@ def json_dump(data: object, encoding="utf-8") -> BytesIO:
 def json_load(buffer: BytesIO, encoding="utf-8") -> object:
     with TextIOWrapper(buffer, encoding=encoding) as text_buffer:
         return json.load(text_buffer)
+
+
+@Converter.register(["https:", "http:"], None)
+def download(url: str, headers: Union[dict, None] = None) -> BytesIO:
+    """Download content from a URL and return it as a BytesIO object."""
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()  # Raise an error for bad responses
+    return BytesIO(response.content)
+
+
+@Converter.autoregister
+def get_handler(url: str) -> Callable:
+    scheme = url.split(":")[0]
+    return Converter.get(f"{scheme}:", None)

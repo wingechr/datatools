@@ -6,7 +6,7 @@ import sys
 from functools import cache as _cache
 from functools import update_wrapper
 from pathlib import Path
-from typing import Callable, Union, get_args, get_type_hints
+from typing import Callable, Union, get_args
 
 import jsonpath_ng
 
@@ -31,12 +31,18 @@ def cache(func: Callable) -> Callable:
     return update_wrapper(cached_func, func)
 
 
-def get_type_name(cls: type) -> str:
+@_cache
+def get_type_name(cls: Type) -> str:
     if cls is None:
         return "Any"
-    return f"{cls.__module__}.{cls.__qualname__}"
+    if isinstance(cls, str):
+        return cls
+    # remove leading underscore from module name
+    modulename = str(cls.__module__).lstrip("_")
+    return f"{modulename}.{cls.__qualname__}"
 
 
+@_cache
 def get_filetype_from_filename(filename: Union[Path, str]) -> Type:
     """returns something like .txt"""
     suffix = str(filename).split(".")[-1]
@@ -67,6 +73,7 @@ def get_args_kwargs_from_dict(
     return args, kwargs
 
 
+@_cache
 def get_value_type(dtype: Type) -> Type:
     # dict[Any, int] -> int
     # list[int] -> int
@@ -83,8 +90,11 @@ def get_result_type(function: Callable) -> Type:
 
 def get_parameters_types(function: Callable) -> dict[str, Any]:
     sig = inspect.signature(function)
-    hints = get_type_hints(function)
-    parameter_types = {name: hints.get(name, None) for name in sig.parameters}
+    # hints = get_type_hints(function)  # does not work with my decorated classes
+    # parameter_types = {
+    #    name: hints.get(name, None) for name, param in sig.parameters.items()
+    # }
+    parameter_types = {name: param.annotation for name, param in sig.parameters.items()}
     return parameter_types
 
 
@@ -101,6 +111,17 @@ def get_keyword_only_parameters_types(
     ]
 
 
+def is_type_class(x) -> bool:
+    """Check if x is a type."""
+    # return isinstance(x, type)
+    if inspect.isclass(x):
+        return True
+    # special case: typping classes are not real classes
+    if type(x).__module__ == "typing":
+        return True
+    return False
+
+
 def json_serialize(x):
     if isinstance(x, datetime.datetime):
         return x.strftime("%Y-%m-%dT%H:%M:%S%z")
@@ -108,7 +129,7 @@ def json_serialize(x):
         return x.strftime("%Y-%m-%d")
     elif isinstance(x, datetime.time):
         return x.strftime("%H:%M:%S")
-    elif isinstance(x, type):
+    elif is_type_class(x):
         return get_type_name(x)
     else:
         raise NotImplementedError(type(x))
@@ -149,3 +170,13 @@ def import_module_from_path(name, filepath):
     sys.modules[name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def copy_signature(self: object, other: Callable) -> None:
+    object.__setattr__(self, "__signature__", inspect.signature(other))
+    object.__setattr__(self, "__name__", other.__name__)
+    object.__setattr__(self, "__doc__", other.__doc__)
+
+
+def passthrough(x: Any) -> Any:
+    return x
