@@ -1,1 +1,1 @@
-from datatools import Function, Storage
+from datatools import Function, Storage  # noqa: F401

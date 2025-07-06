@@ -55,7 +55,7 @@ class TestDatatoolsProcess(unittest.TestCase):
         def function(data: list, factor: int) -> list:
             return data * factor
 
-        func = Function(function)
+        func = Function(function=function)
         proc = func.process(res_inp, 10)
 
         self.assertFalse(res_outp.exist())
