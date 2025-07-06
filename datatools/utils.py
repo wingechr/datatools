@@ -37,9 +37,14 @@ def get_type_name(cls: Type) -> str:
         return "Any"
     if isinstance(cls, str):
         return cls
+    if cls.__module__ == "typing":
+        return str(cls)
+
     # remove leading underscore from module name
     modulename = str(cls.__module__).lstrip("_")
-    return f"{modulename}.{cls.__qualname__}"
+    classname = cls.__qualname__
+
+    return f"{modulename}.{classname}"
 
 
 @_cache
