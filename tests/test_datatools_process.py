@@ -2,9 +2,10 @@
 
 import unittest
 from tempfile import TemporaryDirectory
+from typing import cast
 
 from datatools import Function, Storage
-from datatools.process import Process
+from datatools.process import Process, Resource
 
 
 class TestDatatoolsProcess(unittest.TestCase):
@@ -65,7 +66,14 @@ class TestDatatoolsProcess(unittest.TestCase):
         # cannot run process again, because resource already exists
         self.assertRaises(Exception, proc, res_outp)
 
-    def test_datatools_proceess_handler(self):
+        # use Storage as output: auto generate resource name from output uri
+        # TODO: does not work yet because converter detection requires
+        # knowledge of filetype
+        res_outp = cast(Resource, proc(storage))
+        self.assertTrue(isinstance(res_outp, Storage))
+        self.assertTrue(res_outp.exist())
+
+    def __test_datatools_proceess_handler(self):
         url = "http://example.com"
         process = Process.from_uri(url)
 

@@ -20,6 +20,7 @@ from datatools.classes import (
 )
 from datatools.process import Converter
 from datatools.utils import (
+    cache,
     get_filetype_from_filename,
     get_keyword_only_parameters_types,
     get_type_name,
@@ -41,8 +42,12 @@ class Storage:
 
     __metadata_suffix = ".metadata.json"
 
-    # @cache
+    @cache
+    def get_valid_resource_name(self, name: ResourceName) -> ResourceName:
+        """Validate resource name, if not valid, raise exception."""
+        return name
 
+    @cache
     def ressource(self, name: ResourceName) -> "Resource":
         """Return resource for given name. Path might be changed
 
@@ -55,7 +60,7 @@ class Storage:
         -------
         Resource
         """
-        # TODO: validate name?
+        name = self.get_valid_resource_name(name)
         return Resource(self, name)
 
     def write(
@@ -224,17 +229,17 @@ class Storage:
                 f"key must be MetadataKey or list of MetadataKey, got {type(key)}"
             )
 
-    # @cache
+    @cache
     def __get_filepath(self, name: ResourceName) -> Path:
         # TODO: ensure its a proper name inside of storage locacion
         # file must contain "." and suffix
         return Path(self.location) / name
 
-    # @cache
+    @cache
     def __get_path(self, filepath: Path) -> ResourceName:
         return filepath.absolute().relative_to(self.location).as_posix()
 
-    # @cache
+    @cache
     def __get_filepath_metadata(self, name: ResourceName) -> Path:
         filepath = self.__get_filepath(name)
         return filepath.parent / f"{filepath.name}{self.__metadata_suffix}"

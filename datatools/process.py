@@ -1,11 +1,11 @@
 import datetime
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Any, Callable, Optional, cast
+from typing import Any, Callable, Optional, Union, cast
 
-from datatools.classes import ParameterKey, Type
+from datatools.classes import ParameterKey, ProcessException, Type
 from datatools.converter import Converter
-from datatools.storage import Resource
+from datatools.storage import Resource, Storage
 from datatools.utils import (
     copy_signature,
     get_args_kwargs_from_dict,
@@ -168,6 +168,7 @@ class Input:
 @dataclass(frozen=True)
 class Output:
 
+    uri: str
     handle_output_data_metadata: Callable
     type_from: Type
 
@@ -176,10 +177,15 @@ class Output:
         return self.handle_output_data_metadata(data, metadata)
 
     @classmethod
-    def wrap(cls, output: Any, type_from: Type = None) -> "Output":
+    def wrap(cls, output_uri: str, output: Any, type_from: Type = None) -> "Output":
         if not isinstance(output, Output):
             if isinstance(output, Resource):
                 handle_output_data_metadata = output.get_dumper(type_from=type_from)
+            elif isinstance(output, Storage):
+                # use output.uri as resource name (storage will modify it)
+                handle_output_data_metadata = output.ressource(
+                    name=output_uri
+                ).get_dumper(type_from=type_from)
             elif isinstance(output, Callable):
                 handle_output_data_metadata = output
             else:
@@ -190,6 +196,7 @@ class Output:
                     f"Either create Output manually or add type hints: {output}"
                 )
             output = Output(
+                uri=output_uri,
                 handle_output_data_metadata=handle_output_data_metadata,
                 type_from=type_from,
             )
@@ -203,7 +210,7 @@ class Process:
     id: str
     context: Optional[dict[str, Any]] = None
 
-    def __call__(self, *output_args, **output_kwargs) -> None:
+    def __call__(self, *output_args, **output_kwargs) -> Union[dict, Any]:
         """Run the process."""
 
         # first: prepare outputs
@@ -215,8 +222,16 @@ class Process:
         else:
             type_from = get_value_type(type_from)
 
+        if None in output_args_kwargs:
+            if not set(output_args_kwargs) == {None}:
+                raise ProcessException(
+                    "Output specification conflict: single output but multiple defined"
+                )
+
         outputs = {
-            key: Output.wrap(output=output, type_from=type_from)
+            key: Output.wrap(
+                output_uri=f"{self.id}/output/{key}", output=output, type_from=type_from
+            )
             for key, output in output_args_kwargs.items()
         }
 
@@ -233,15 +248,21 @@ class Process:
         dynmic_metadata = {"datetime": datetime.datetime.now()}
         metadata = self.metadata | dynmic_metadata
 
+        results = {}
         for key, output in outputs.items():
             metadata = {
-                "@id": f"{self.id}/output/{key}",
+                "@id": output.uri,
                 "createdBy": metadata,
                 "datatype": output.type_from,
             }
             partial_result = result if key is None else result[key]
             # write output function must be take data and metadata
-            output(partial_result, metadata)
+            results[key] = output(partial_result, metadata)
+
+        if None in output_args_kwargs:
+            results = results[None]
+
+        return results
 
     @classmethod
     def from_uri(cls, uri: str) -> "Process":
