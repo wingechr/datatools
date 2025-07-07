@@ -4,35 +4,32 @@ version = "0.13.0"
 description = "TODO"
 readme = "README.md"
 requires-python = ">=3.9,<3.14"
-dependencies = [
-    "jsonpath-ng>=1.7.0",
-    "pandas>=2.3.0",
-    "requests>=2.32.4",
-]
 authors = [
   { name="Christian Winger", email="c@wingechr.de" }
 ]
+dependencies = [
+    "jsonpath-ng>=1.7.0",
+    "pandas>=2",
+    "requests>=2",
+]
 [project.urls]
-
-
 [tool.setuptools]
 packages = ["datatools"]
 
 [dependency-groups]
 dev = [
     "bumpversion>=0.6.0",
-    "pre-commit>=3.5.0",
+    "pre-commit>=4.2.0",
     "tox>=4",
-    "tox-uv>=1.13.1",
-    "uv>=0.7.18",
+    "tox-uv>=1.26.1",
+    "uv>=0.7.19",
     "vulture>=2.14",
 ]
 docs = [
     "mdx-truly-sane-lists>=1.3",
     "mistune~=2.0",
-    "mkdocs>=1.6.1",
-    "mkdocstrings-python>=1.16.12",
+    "mkdocs>=1.6",
+    "mkdocs-material", # NOTE problems installing in windows
+    "mkdocstrings-python>=1.16",
     "pymdown-extensions>=10.16",
-    "mkdocs-jupyter",
-    "mkdocs-material"
 ]

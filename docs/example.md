@@ -1,5 +1,5 @@
 # Example
 
 ```python
---8<-- "tests/example.py"
+--8<-- "docs/example.py"
 ```
