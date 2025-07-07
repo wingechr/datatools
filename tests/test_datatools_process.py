@@ -2,9 +2,8 @@
 
 import unittest
 from tempfile import TemporaryDirectory
-from typing import Callable
 
-from datatools import Converter, Function, Storage
+from datatools import Function, Storage
 from datatools.process import Process
 
 
@@ -70,9 +69,9 @@ class TestDatatoolsProcess(unittest.TestCase):
         url = "http://example.com"
         process = Process.from_uri(url)
 
-        path = "http/example.com/index.html"
+        name = "http/example.com/index.html"
         storage = Storage(self.tempdir.name)
-        resource = storage.ressource(path)
+        resource = storage.ressource(name)
 
         self.assertFalse(resource.exist())
         process(resource)

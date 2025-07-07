@@ -7,7 +7,7 @@ from datatools.classes import (
     MetadataValue,
     ParameterKey,
     ProcessException,
-    ResourcePath,
+    ResourceName,
     StorageException,
     Type,
 )
@@ -30,7 +30,7 @@ __all__ = [
     "ProcessException",
     "ConverterException",
     "Type",
-    "ResourcePath",
+    "ResourceName",
     "MetadataKey",
     "MetadataValue",
     "ParameterKey",

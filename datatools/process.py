@@ -135,7 +135,7 @@ class Input:
             source = None
             if isinstance(input, Resource):
                 read_input = input.get_loader(type_to=type_to)
-                source = {"@id": input.path}
+                source = {"@id": input.name}
             elif not isinstance(input, Callable):
                 # literal: convert now
                 source = {"@value": input}

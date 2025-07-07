@@ -51,13 +51,13 @@ class TestDatatoolsStorage(unittest.TestCase):
 
         # create again without having a path
         res = storage.write(BytesIO(bdata), suffix=".txt")
-        self.assertEqual(res.path, "md5/098f6bcd4621d373cade4e832627b4f6.txt")
+        self.assertEqual(res.name, "md5/098f6bcd4621d373cade4e832627b4f6.txt")
         with res.open() as file:
             self.assertTrue(file.read(), bdata)
 
         # can get empty metadata without error, even if resource does not exist
         self.assertEqual(
-            storage.ressource("nonexistent/path").metadata.get("nonexistent_key"), None
+            storage.ressource("nonexistent/name").metadata.get("nonexistent_key"), None
         )
 
     def test_datatools_storage_w_json_converter(self):

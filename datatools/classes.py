@@ -6,7 +6,7 @@ __all__ = [
     "ProcessException",
     "ConverterException",
     "Type",
-    "ResourcePath",
+    "ResourceName",
     "MetadataKey",
     "MetadataValue",
     "ParameterKey",
@@ -14,7 +14,7 @@ __all__ = [
 
 Url = ParseResult
 Type = Union[type, str, None, type(Callable)]
-ResourcePath = str
+ResourceName = str
 MetadataKey = str
 MetadataValue = Any
 ParameterKey = Union[None, int, str]
