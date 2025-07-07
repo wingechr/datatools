@@ -46,8 +46,8 @@ class TestDatatoolsUtils(unittest.TestCase):
         self.assertEqual(get_keyword_only_parameters_types(fun, min_idx=4), ["k2"])
 
     def test_get_parameters_types(self):
-        def fun(a: str) -> int:
-            return int(a)
+        def fun(a: str) -> float:
+            return float(a)
 
         self.assertEqual(get_parameters_types(fun), {"a": str})
 

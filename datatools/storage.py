@@ -39,6 +39,7 @@ METADATA_FILETYPE = "filetype"
 @dataclass(frozen=True)
 class Storage:
     location: str
+    default_filetype: str = ".pickle"
 
     __metadata_suffix = ".metadata.json"
 
@@ -47,8 +48,8 @@ class Storage:
         """Validate resource name, if not valid, raise exception."""
         return name
 
-    @cache
-    def ressource(self, name: ResourceName) -> "Resource":
+    # @cache
+    def resource(self, name: ResourceName) -> "Resource":
         """Return resource for given name. Path might be changed
 
         Parameters
@@ -85,7 +86,7 @@ class Storage:
         bdata = data.read()
         hashsum = getattr(hashlib, hashtype)(bdata).hexdigest()
         name = f"{hashtype}/{hashsum}{suffix}"
-        resource = self.ressource(name)
+        resource = self.resource(name)
         data = BytesIO(bdata)
         resource.write(data)
         return resource
@@ -112,7 +113,7 @@ class Storage:
                 offset = -len(self.__metadata_suffix)
                 f = f[:offset]
                 name = self.__get_path(Path(os.path.join(rt, f)))
-                resource = self.ressource(name)
+                resource = self.resource(name)
                 yield resource
 
     def _has_data(self, name: ResourceName) -> bool:

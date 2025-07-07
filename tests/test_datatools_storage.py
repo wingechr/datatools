@@ -23,7 +23,7 @@ class TestDatatoolsStorage(unittest.TestCase):
         storage = Storage(location=self.tempdir.name)
 
         # create resource
-        res = storage.ressource("a/b.txt")
+        res = storage.resource("a/b.txt")
 
         # read/write metadata
         key = "mykey"
@@ -57,12 +57,12 @@ class TestDatatoolsStorage(unittest.TestCase):
 
         # can get empty metadata without error, even if resource does not exist
         self.assertEqual(
-            storage.ressource("nonexistent/name").metadata.get("nonexistent_key"), None
+            storage.resource("nonexistent/name").metadata.get("nonexistent_key"), None
         )
 
     def test_datatools_storage_w_json_converter(self):
         storage = Storage(location=self.tempdir.name)
-        res = storage.ressource("test.json")
+        res = storage.resource("test.json")
         data = [1, 2, 3]
 
         res.dump(data)
@@ -71,7 +71,7 @@ class TestDatatoolsStorage(unittest.TestCase):
 
     def test_datatools_storage_w_csv_df_converter(self):
         storage = Storage(location=self.tempdir.name)
-        res = storage.ressource("test.csv")
+        res = storage.resource("test.csv")
         res.metadata.set(datatype=pd.DataFrame)
         data = pd.DataFrame([{"a": 1, "b": 2}, {"a": 3, "b": 4}])
 

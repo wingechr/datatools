@@ -183,9 +183,12 @@ class Output:
                 handle_output_data_metadata = output.get_dumper(type_from=type_from)
             elif isinstance(output, Storage):
                 # use output.uri as resource name (storage will modify it)
-                handle_output_data_metadata = output.ressource(
-                    name=output_uri
-                ).get_dumper(type_from=type_from)
+                # NOTE: we need to determine file type / extension.
+                # until we find a better solution, we use ths storages default
+                storage = output
+                name = f"{output_uri}{storage.default_filetype}"
+                resource = output.resource(name=name)
+                handle_output_data_metadata = resource.get_dumper(type_from=type_from)
             elif isinstance(output, Callable):
                 handle_output_data_metadata = output
             else:

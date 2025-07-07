@@ -1,10 +1,10 @@
 import datetime
+import functools
 import importlib.util
 import inspect
 import logging
 import sys
 from functools import cache as _cache
-from functools import update_wrapper
 from pathlib import Path
 from typing import Callable, Union, get_args
 
@@ -26,9 +26,10 @@ def cache(func: Callable) -> Callable:
     Callable
         cache decorated function
     """
-
-    cached_func = _cache(func)
-    return update_wrapper(cached_func, func)
+    result = func
+    result = _cache(func)
+    result = functools.wraps(func)(result)
+    return result
 
 
 @_cache

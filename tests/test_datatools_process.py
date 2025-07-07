@@ -49,8 +49,8 @@ class TestDatatoolsProcess(unittest.TestCase):
 
         storage = Storage(self.tempdir.name)
 
-        res_inp = storage.ressource("input.json")
-        res_outp = storage.ressource("output.json")
+        res_inp = storage.resource("input.json")
+        res_outp = storage.resource("output.json")
 
         res_inp.dump([1, 2, 3])
 
@@ -66,6 +66,19 @@ class TestDatatoolsProcess(unittest.TestCase):
         # cannot run process again, because resource already exists
         self.assertRaises(Exception, proc, res_outp)
 
+    def __test_datatools_proceess_storage(self):
+
+        storage = Storage(self.tempdir.name)
+
+        res_inp = storage.resource("input.json")
+        res_inp.dump([1, 2, 3])
+
+        def function(data: list, factor: int) -> list:
+            return data * factor
+
+        func = Function(function=function)
+        proc = func.process(res_inp, 10)
+
         # use Storage as output: auto generate resource name from output uri
         # TODO: does not work yet because converter detection requires
         # knowledge of filetype
@@ -73,13 +86,12 @@ class TestDatatoolsProcess(unittest.TestCase):
         self.assertTrue(isinstance(res_outp, Storage))
         self.assertTrue(res_outp.exist())
 
-    def __test_datatools_proceess_handler(self):
-        url = "http://example.com"
-        process = Process.from_uri(url)
+    def __test_datatools_proceess_uri(self):
+        uri = "http://example.com"
+        process = Process.from_uri(uri)
 
-        name = "http/example.com/index.html"
         storage = Storage(self.tempdir.name)
-        resource = storage.ressource(name)
+        resource = storage.resource(name=uri)
 
         self.assertFalse(resource.exist())
         process(resource)
