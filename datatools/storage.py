@@ -23,6 +23,7 @@ from datatools.utils import (
     cache,
     get_filetype_from_filename,
     get_keyword_only_parameters_types,
+    get_resource_path_name,
     get_type_name,
     json_serialize,
     jsonpath_get,
@@ -43,10 +44,9 @@ class Storage:
 
     __metadata_suffix = ".metadata.json"
 
-    @cache
     def get_valid_resource_name(self, name: ResourceName) -> ResourceName:
         """Validate resource name, if not valid, raise exception."""
-        return name
+        return get_resource_path_name(name)
 
     # @cache
     def resource(self, name: ResourceName) -> "Resource":

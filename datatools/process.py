@@ -172,14 +172,19 @@ class Output:
     handle_output_data_metadata: Callable
     type_from: Type
 
+    result_object: Any = None
+
     def __call__(self, data: Any, metadata: Any) -> None:
         # write output function must be take data and metadata
-        return self.handle_output_data_metadata(data, metadata)
+        self.handle_output_data_metadata(data, metadata)
+        return self.result_object
 
     @classmethod
     def wrap(cls, output_uri: str, output: Any, type_from: Type = None) -> "Output":
         if not isinstance(output, Output):
+            result_object = None
             if isinstance(output, Resource):
+                result_object = output
                 handle_output_data_metadata = output.get_dumper(type_from=type_from)
             elif isinstance(output, Storage):
                 # use output.uri as resource name (storage will modify it)
@@ -189,10 +194,12 @@ class Output:
                 name = f"{output_uri}{storage.default_filetype}"
                 resource = output.resource(name=name)
                 handle_output_data_metadata = resource.get_dumper(type_from=type_from)
+                result_object = resource
             elif isinstance(output, Callable):
                 handle_output_data_metadata = output
             else:
                 raise TypeError(output)
+
             if type_from is None:
                 raise TypeError(
                     "Output type could not be detected. "
@@ -202,6 +209,7 @@ class Output:
                 uri=output_uri,
                 handle_output_data_metadata=handle_output_data_metadata,
                 type_from=type_from,
+                result_object=result_object,
             )
         return output
 

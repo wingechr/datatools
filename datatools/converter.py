@@ -2,11 +2,13 @@
 
 import json
 import logging
+import pickle
 from dataclasses import dataclass
 from io import BytesIO, TextIOWrapper
 from itertools import product
 from typing import Any, Callable, ClassVar, Union
 
+import pandas as pd
 import requests
 
 from datatools.classes import OptionalStr, Type
@@ -126,6 +128,7 @@ class Converter:
 # register some default converters
 
 json_types: list[Type] = [get_type_name(x) for x in [list, dict]]
+pickle_types: list[Type] = [get_type_name(x) for x in [list, dict, pd.DataFrame]]
 
 
 @Converter.register(json_types, ".json")
@@ -141,6 +144,16 @@ def json_dump(data: object, encoding="utf-8") -> BytesIO:
 def json_load(buffer: BytesIO, encoding="utf-8") -> object:
     with TextIOWrapper(buffer, encoding=encoding) as text_buffer:
         return json.load(text_buffer)
+
+
+@Converter.register(pickle_types, ".pickle")
+def pickle_dump(data: object) -> BytesIO:
+    return BytesIO(pickle.dumps(data))
+
+
+@Converter.register(".pickle", pickle_types)
+def pickle_load(buffer: BytesIO) -> object:
+    return pickle.load(buffer)
 
 
 @Converter.register(["https:", "http:"], None)

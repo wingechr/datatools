@@ -7,6 +7,7 @@ from datatools import Converter
 from datatools.utils import (
     get_keyword_only_parameters_types,
     get_parameters_types,
+    get_resource_path_name,
     is_type_class,
     jsonpath_get,
     jsonpath_update,
@@ -62,3 +63,7 @@ class TestDatatoolsUtils(unittest.TestCase):
         self.assertFalse(is_type_class(None))
         self.assertTrue(is_type_class(Callable))
         self.assertTrue(is_type_class(Union[str, None]))
+
+    def test_datatools_utils_get_resource_path_name(self):
+        for name, valid_name in [("A", "a")]:
+            self.assertEqual(get_resource_path_name(name), valid_name)

@@ -66,7 +66,7 @@ class TestDatatoolsProcess(unittest.TestCase):
         # cannot run process again, because resource already exists
         self.assertRaises(Exception, proc, res_outp)
 
-    def __test_datatools_proceess_storage(self):
+    def test_datatools_proceess_storage(self):
 
         storage = Storage(self.tempdir.name)
 
@@ -76,25 +76,22 @@ class TestDatatoolsProcess(unittest.TestCase):
         def function(data: list, factor: int) -> list:
             return data * factor
 
-        func = Function(function=function)
-        proc = func.process(res_inp, 10)
+        function = Function(function=function)
+        process = function.process(res_inp, 10)
 
         # use Storage as output: auto generate resource name from output uri
         # TODO: does not work yet because converter detection requires
         # knowledge of filetype
-        res_outp = cast(Resource, proc(storage))
-        self.assertTrue(isinstance(res_outp, Storage))
+        res_outp = cast(Resource, process(storage))
+        self.assertTrue(isinstance(res_outp, Resource))
         self.assertTrue(res_outp.exist())
 
-    def __test_datatools_proceess_uri(self):
-        uri = "http://example.com"
+    def test_datatools_proceess_uri(self):
+        storage = Storage(self.tempdir.name)
+
+        uri = "http://example.com#/index.html"
         process = Process.from_uri(uri)
 
-        storage = Storage(self.tempdir.name)
-        resource = storage.resource(name=uri)
-
-        self.assertFalse(resource.exist())
-        process(resource)
-        self.assertTrue(resource.exist())
-
-        print(resource.metadata.get("$"))
+        res_outp = cast(Resource, process(storage))
+        self.assertTrue(isinstance(res_outp, Resource))
+        self.assertTrue(res_outp.exist())
