@@ -9,6 +9,7 @@ authors = [
 ]
 dependencies = [
     "appdirs>=1.4.4",
+    "chardet>=5.2.0",
     "jsonpath-ng>=1.7.0",
     "pandas>=2",
     "requests>=2",
