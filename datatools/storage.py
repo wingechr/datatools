@@ -10,7 +10,7 @@ from io import BytesIO, IOBase
 from pathlib import Path
 from typing import Callable, Iterable, Literal, Optional, Union, cast
 
-from datatools.classes import (
+from datatools.base import (
     Any,
     MetadataKey,
     MetadataValue,

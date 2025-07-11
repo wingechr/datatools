@@ -3,7 +3,6 @@
 import json
 import logging
 import pickle
-from dataclasses import dataclass
 from io import BytesIO, TextIOWrapper
 from itertools import product
 from typing import Any, Callable, ClassVar, Union
@@ -11,7 +10,7 @@ from typing import Any, Callable, ClassVar, Union
 import pandas as pd
 import requests
 
-from datatools.classes import OptionalStr, Type
+from datatools.base import OptionalStr, Type
 from datatools.utils import (
     copy_signature,
     get_parameters_types,
@@ -36,12 +35,15 @@ def get_cleaned_type_list(types: Union[Type, list[Type]]) -> list[OptionalStr]:
     return [clean_type(x) for x in types]
 
 
-@dataclass(frozen=True)
 class Converter:
     _converters: ClassVar[dict[tuple[Union[str, None], Union[str, None]], Callable]] = (
         {}
     )
-    function: Callable
+
+    def __init__(self, function: Callable):
+        self.function = function
+        copy_signature(self, self.function)
+        print(self.__file__)
 
     @classmethod
     def get(cls, type_from: Type, type_to: Type) -> Callable:
@@ -119,10 +121,6 @@ class Converter:
     def __get__(self, instance, owner):
         # Support instance methods
         return self.__class__(self.function.__get__(instance, owner))
-
-    def __post_init__(self):
-        # set signature to underlying function (@pproperty is not working here)
-        copy_signature(self, self.function)
 
 
 # register some default converters

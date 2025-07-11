@@ -1,14 +1,18 @@
 import datetime
 from dataclasses import dataclass
 from functools import cached_property
+from pathlib import Path
 from typing import Any, Callable, Optional, Union, cast
 
-from datatools.classes import ParameterKey, ProcessException, Type
+from datatools.base import FUNCTION_URI_PREFIX, ParameterKey, ProcessException, Type
 from datatools.converter import Converter
 from datatools.storage import Resource, Storage
 from datatools.utils import (
     copy_signature,
     get_args_kwargs_from_dict,
+    get_function_filepath,
+    get_git_info,
+    get_git_root,
     get_parameters_types,
     get_result_type,
     get_value_type,
@@ -24,51 +28,43 @@ def constant_as_function(value: Any) -> Callable:
     return fun
 
 
-@dataclass(frozen=True)
+def get_function_uri(function: Callable) -> str:
+    # get git info
+    filepath = get_function_filepath(function)
+    git_root = get_git_root(filepath)
+    # find git repository
+    git_info = get_git_info(git_root)
+    path = Path(filepath).relative_to(git_root)
+    name = function.__name__
+    return f"{FUNCTION_URI_PREFIX}%(origin)s/{path}/-/%(commit)s:{name}" % git_info
+
+
 class Function:
     """can be used as decorator around functions"""
 
-    function: Callable
-    id: Optional[str] = None
-    name: Optional[str] = None
-    description: Optional[str] = None
-    parameters_types: Optional[dict[str, Type]] = None
-    result_type: Optional[Type] = None
+    def __init__(
+        self,
+        function: Callable,
+        id: Optional[str] = None,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        parameters_types: Optional[dict[str, Type]] = None,
+        result_type: Optional[Type] = None,
+    ):
 
-    def __call__(self, *args, **kwargs):
-        """Call the underlying function."""
-        return self.function(*args, **kwargs)
-
-    def __post_init__(self):
+        self.function = function
+        self.id = id or get_function_uri(function)
+        self.name = name or self.function.__name__
+        self.description = description or self.function.__doc__
+        self.parameters_types = parameters_types or get_parameters_types(self.function)
+        self.result_type = result_type or get_result_type(self.function)
 
         # set signature to underlying function (@pproperty is not working here)
         copy_signature(self, self.function)
 
-        if self.parameters_types is None:
-            object.__setattr__(
-                self, "parameters_types", get_parameters_types(self.function)
-            )
-        if self.result_type is None:
-            object.__setattr__(self, "result_type", get_result_type(self.function))
-
-        if self.name is None:
-            object.__setattr__(self, "name", self.function.__name__)
-        if self.description is None:
-            object.__setattr__(self, "description", self.function.__doc__)
-        if self.id is None:
-            object.__setattr__(self, "id", f"todo://{self.name}")
-
-        if self.result_type is None:
-            raise TypeError(
-                "Function result type could not be detected. "
-                f"Either create Function manually or add type hints: {self.function}"
-            )
-        if any(x is None for x in (self.parameters_types or {}).values()):
-            raise TypeError(
-                "Function parameter types could not be detected. "
-                "Either create Function manually "
-                f"or add type hints: {self.parameters_types}"
-            )
+    def __call__(self, *args, **kwargs):
+        """Call the underlying function."""
+        return self.function(*args, **kwargs)
 
     @classmethod
     def wrap(cls) -> Callable:
@@ -90,7 +86,7 @@ class Function:
         if isinstance(key, int):
             parameters_types = list(self.parameters_types or {})
             key = parameters_types[key]
-        return key
+        return cast(str, key)
 
     def process(self, *input_args: Any, **input_kwargs: Any) -> "Process":
         # combine args / kwargs

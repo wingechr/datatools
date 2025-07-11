@@ -34,9 +34,7 @@ import sqlparse
 import tzlocal
 import unidecode
 
-from datatools.classes import ParameterKey, Type
-
-from .constants import (
+from datatools.base import (
     ANONYMOUS_USER,
     DATE_FMT,
     DATETIMETZ_FMT,
@@ -46,6 +44,9 @@ from .constants import (
     LOCALHOST,
     PARAM_SQL_QUERY,
     TIME_FMT,
+    ParameterKey,
+    StrPath,
+    Type,
 )
 
 
@@ -238,9 +239,11 @@ def import_module_from_path(name, filepath):
 
 
 def copy_signature(self: object, other: Callable) -> None:
+
     object.__setattr__(self, "__signature__", inspect.signature(other))
     object.__setattr__(self, "__name__", other.__name__)
     object.__setattr__(self, "__doc__", other.__doc__)
+    object.__setattr__(self, "__file__", get_function_filepath(other))
 
 
 def passthrough(x: Any) -> Any:
@@ -841,7 +844,7 @@ def get_default_suffix(media_type: str) -> str:
     }.get(media_type, "")
 
 
-def get_git_info(repo_path: str) -> dict:
+def get_git_info(repo_path: StrPath) -> dict:
     """get git branch,commit and is clean status
     from a local git repository, given as a path"""
 
@@ -874,7 +877,6 @@ def get_git_info(repo_path: str) -> dict:
     return {
         "branch": branch,
         "commit": commit,
-        "is_clean": is_clean,
         "origin": origin_url,
     }
 
@@ -898,17 +900,15 @@ def get_module_version(func: Callable) -> Union[str, None]:
         pass
 
 
-def get_function_git_info(func: Callable) -> dict:
-    # get git info
-    file = inspect.getfile(func)
-    # find git repository
-    for path in Path(file).parents:
-        if (path / ".git").exists():
-            try:
-                return get_git_info(str(path))
-            except Exception:
-                pass
-    return {}
+def get_function_filepath(function: Callable) -> str:
+    try:
+        return function.__file__
+    except AttributeError:
+        return inspect.getfile(function)
+
+
+def get_git_root(filepath: StrPath) -> Path:
+    return next(path for path in Path(filepath).parents if (path / ".git").exists())
 
 
 def rmtree_readonly(path: str) -> None:
