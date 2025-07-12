@@ -3,7 +3,7 @@
 import json
 import logging
 import pickle
-from io import BytesIO, TextIOWrapper
+from io import BufferedIOBase, BytesIO, TextIOWrapper
 from itertools import product
 from typing import Any, Callable, ClassVar, Union
 
@@ -13,8 +13,9 @@ import requests
 from datatools.base import OptionalStr, Type
 from datatools.utils import (
     copy_signature,
-    get_parameters_types,
-    get_result_type,
+    filepath_from_uri,
+    get_function_datatype,
+    get_function_parameters_datatypes,
     get_type_name,
     json_serialize,
     passthrough,
@@ -43,7 +44,6 @@ class Converter:
     def __init__(self, function: Callable):
         self.function = function
         copy_signature(self, self.function)
-        print(self.__file__)
 
     @classmethod
     def get(cls, type_from: Type, type_to: Type) -> Callable:
@@ -79,8 +79,8 @@ class Converter:
         cls,
         function: Callable,
     ) -> Callable:
-        type_from = list(get_parameters_types(function).values())[0]
-        type_to = get_result_type(function)
+        type_from = list(get_function_parameters_datatypes(function).values())[0]
+        type_to = get_function_datatype(function)
         return cls.register(type_from=type_from, type_to=type_to)(function)
 
     @classmethod
@@ -130,7 +130,7 @@ pickle_types: list[Type] = [get_type_name(x) for x in [list, dict, pd.DataFrame]
 
 
 @Converter.register(json_types, ".json")
-def json_dump(data: object, encoding="utf-8") -> BytesIO:
+def json_dump(data: object, encoding="utf-8") -> BufferedIOBase:
     return BytesIO(
         json.dumps(
             data, indent=2, ensure_ascii=False, sort_keys=False, default=json_serialize
@@ -145,21 +145,28 @@ def json_load(buffer: BytesIO, encoding="utf-8") -> object:
 
 
 @Converter.register(pickle_types, ".pickle")
-def pickle_dump(data: object) -> BytesIO:
+def pickle_dump(data: object) -> BufferedIOBase:
     return BytesIO(pickle.dumps(data))
 
 
 @Converter.register(".pickle", pickle_types)
-def pickle_load(buffer: BytesIO) -> object:
+def pickle_load(buffer: BufferedIOBase) -> object:
     return pickle.load(buffer)
 
 
 @Converter.register(["https:", "http:"], None)
-def download(url: str, headers: Union[dict, None] = None) -> BytesIO:
-    """Download content from a URL and return it as a BytesIO object."""
+def download(url: str, headers: Union[dict, None] = None) -> BufferedIOBase:
+    """Download content from a URL and return it as a BufferedIOBase object."""
     response = requests.get(url, headers=headers)
     response.raise_for_status()  # Raise an error for bad responses
     return BytesIO(response.content)
+
+
+@Converter.register("file:", None)
+def filecopy(url: str) -> BufferedIOBase:
+    """Copy file."""
+    path = filepath_from_uri(url)
+    return path.open("rb")
 
 
 @Converter.autoregister

@@ -63,9 +63,12 @@ def cache(func: Callable) -> Callable:
     Callable
         cache decorated function
     """
+
     result = func
     result = functools.cache(func)
-    result = functools.wraps(func)(result)
+    # none of these work for IDE intellisense:
+    # result = functools.wraps(func)(result)
+    # copy_signature(result, func)
     return result
 
 
@@ -123,7 +126,7 @@ def get_value_type(dtype: Type) -> Type:
     return get_args(dtype)[-1]
 
 
-def get_result_type(function: Callable) -> Type:
+def get_function_datatype(function: Callable) -> Type:
     sig = inspect.signature(function)
     return_type = sig.return_annotation
     if return_type == inspect._empty:
@@ -131,7 +134,7 @@ def get_result_type(function: Callable) -> Type:
     return return_type
 
 
-def get_parameters_types(function: Callable) -> dict[str, Any]:
+def get_function_parameters_datatypes(function: Callable) -> dict[str, Any]:
     sig = inspect.signature(function)
     # hints = get_type_hints(function)  # does not work with my decorated classes
     # parameter_types = {
@@ -881,6 +884,10 @@ def get_git_info(repo_path: StrPath) -> dict:
     }
 
 
+def get_function_description(function: Callable) -> Union[str, None]:
+    return function.__doc__
+
+
 def get_module_version(func: Callable) -> Union[str, None]:
     # get module version (or parent module version)
     version = None
@@ -935,6 +942,10 @@ def get_sqlite_connection_string(location=None) -> str:
         result = re.sub("^file://[^/]*/", "sqlite:///", result)
 
     return result
+
+
+def filepath_from_uri(file_uri: str) -> Path:
+    return Path(file_uri.replace("file:///", ""))
 
 
 def get_sqlite_query_uri(

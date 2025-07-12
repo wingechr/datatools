@@ -1,20 +1,28 @@
 import datetime
-from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 from typing import Any, Callable, Optional, Union, cast
 
-from datatools.base import FUNCTION_URI_PREFIX, ParameterKey, ProcessException, Type
+from datatools.base import (
+    FUNCTION_URI_PREFIX,
+    PROCESS_URI_PREFIX,
+    Metadata,
+    ParameterKey,
+    ParamterTypes,
+    ProcessException,
+    Type,
+)
 from datatools.converter import Converter
 from datatools.storage import Resource, Storage
 from datatools.utils import (
     copy_signature,
     get_args_kwargs_from_dict,
+    get_function_datatype,
+    get_function_description,
     get_function_filepath,
+    get_function_parameters_datatypes,
     get_git_info,
     get_git_root,
-    get_parameters_types,
-    get_result_type,
     get_value_type,
 )
 
@@ -34,9 +42,9 @@ def get_function_uri(function: Callable) -> str:
     git_root = get_git_root(filepath)
     # find git repository
     git_info = get_git_info(git_root)
-    path = Path(filepath).relative_to(git_root)
+    path = Path(filepath).relative_to(git_root).as_posix()
     name = function.__name__
-    return f"{FUNCTION_URI_PREFIX}%(origin)s/{path}/-/%(commit)s:{name}" % git_info
+    return f"{FUNCTION_URI_PREFIX}%(origin)s/%(commit)s/{path}:{name}" % git_info
 
 
 class Function:
@@ -45,19 +53,23 @@ class Function:
     def __init__(
         self,
         function: Callable,
-        id: Optional[str] = None,
+        uri: Optional[str] = None,
         name: Optional[str] = None,
         description: Optional[str] = None,
-        parameters_types: Optional[dict[str, Type]] = None,
+        parameters_types: Optional[ParamterTypes] = None,
         result_type: Optional[Type] = None,
     ):
 
-        self.function = function
-        self.id = id or get_function_uri(function)
-        self.name = name or self.function.__name__
-        self.description = description or self.function.__doc__
-        self.parameters_types = parameters_types or get_parameters_types(self.function)
-        self.result_type = result_type or get_result_type(self.function)
+        self.function: Callable = function
+        self.uri: str = uri or get_function_uri(function)
+        self.name: str = name or self.function.__name__
+        self.description: Optional[str] = description or get_function_description(
+            function
+        )
+        self.parameters_types: ParamterTypes = (
+            parameters_types or get_function_parameters_datatypes(function)
+        )
+        self.result_type: Type = result_type or get_function_datatype(function)
 
         # set signature to underlying function (@pproperty is not working here)
         copy_signature(self, self.function)
@@ -100,14 +112,13 @@ class Function:
             )
             for key, input in input_args_kwargs.items()
         }
-        process_id = f"{self.id}/process"
-        return Process(function=self, inputs=inputs, id=process_id)
+        return Process(function=self, inputs=inputs)
 
     @cached_property
-    def metadata(self) -> dict[str, Any]:
+    def metadata(self) -> Metadata:
         """Metadata about the function."""
         return {
-            "@id": self.id,
+            "@uri": self.uri,
             "name": self.name,
             "description": self.description,
             # "parameters_types": self.parameters_types,
@@ -115,12 +126,12 @@ class Function:
         }
 
 
-@dataclass(frozen=True)
 class Input:
 
-    read_input: Any
-    type_to: Type
-    source: Any = None
+    def __init__(self, read_input: Callable, type_to: Type, source_uri_or_literal: str):
+        self.read_input: Callable = read_input
+        self.type_to: Type = type_to
+        self.source_uri_or_literal: str = source_uri_or_literal
 
     def __call__(self) -> Any:
         return self.read_input()
@@ -128,13 +139,13 @@ class Input:
     @classmethod
     def wrap(cls, input: Any, type_to: Type = None) -> "Input":
         if not isinstance(input, Input):
-            source = None
+            source_uri_or_literal = None
             if isinstance(input, Resource):
                 read_input = input.get_loader(type_to=type_to)
-                source = {"@id": input.name}
+                source_uri_or_literal = input.name
             elif not isinstance(input, Callable):
                 # literal: convert now
-                source = {"@value": input}
+                source_uri_or_literal = str(input)
                 input_converted = Converter.convert_to(input, type_to=type_to)
 
                 def read_input():
@@ -143,32 +154,42 @@ class Input:
             else:
                 # generic callable
                 read_input = input
+                source_uri_or_literal = ""  # TODO
             if type_to is None:
                 raise TypeError(
                     "Input type could not be detected. "
                     f"Either create Input manually or add type hints: {input}"
                 )
-            input = Input(read_input=read_input, type_to=type_to, source=source)
+            input = Input(
+                read_input=read_input,
+                type_to=type_to,
+                source_uri_or_literal=source_uri_or_literal,
+            )
 
         return input
 
     @cached_property
-    def metadata(self) -> dict[str, Any]:
+    def metadata(self) -> Metadata:
         """Metadata about the function."""
         return {
-            "source": self.source,
+            "source": self.source_uri_or_literal,
             "datatype": self.type_to,
         }
 
 
-@dataclass(frozen=True)
 class Output:
 
-    uri: str
-    handle_output_data_metadata: Callable
-    type_from: Type
-
-    result_object: Any = None
+    def __init__(
+        self,
+        uri: str,
+        handle_output_data_metadata: Callable,
+        type_from: Type,
+        result_object: Any = None,
+    ):
+        self.uri = uri
+        self.handle_output_data_metadata = handle_output_data_metadata
+        self.type_from = type_from
+        self.result_object = result_object
 
     def __call__(self, data: Any, metadata: Any) -> None:
         # write output function must be take data and metadata
@@ -210,12 +231,34 @@ class Output:
         return output
 
 
-@dataclass(frozen=True)
+def get_process_uri(
+    function: Function,
+    inputs: dict[ParameterKey, Input],
+) -> str:
+    uri = function.uri
+    params = "&".join(
+        f"{name}={input.source_uri_or_literal}" for name, input in inputs.items()
+    )
+    uri = uri.replace(FUNCTION_URI_PREFIX, PROCESS_URI_PREFIX) + f"?{params}"
+    return uri
+
+
 class Process:
-    function: Function
-    inputs: dict[ParameterKey, Input]
-    id: str
-    context: Optional[dict[str, Any]] = None
+
+    def __init__(
+        self,
+        function: Function,
+        inputs: dict[ParameterKey, Input],
+        uri: Optional[str] = None,
+        context: Optional[Metadata] = None,
+    ):
+        self.function = function
+        self.inputs = inputs
+        self.uri = uri or get_process_uri(
+            function,
+            inputs,
+        )
+        self.context: Metadata = context or {}
 
     def __call__(self, *output_args, **output_kwargs) -> Union[dict, Any]:
         """Run the process."""
@@ -237,7 +280,9 @@ class Process:
 
         outputs = {
             key: Output.wrap(
-                output_uri=f"{self.id}/output/{key}", output=output, type_from=type_from
+                output_uri=f"{self.uri}/output/{key}",
+                output=output,
+                type_from=type_from,
             )
             for key, output in output_args_kwargs.items()
         }
@@ -258,7 +303,7 @@ class Process:
         results = {}
         for key, output in outputs.items():
             metadata = {
-                "@id": output.uri,
+                "@uri": output.uri,
                 "createdBy": metadata,
                 "datatype": output.type_from,
             }
@@ -276,19 +321,26 @@ class Process:
         handler = Converter.convert_to(uri, Callable)
         function = Function(function=handler)
         process = function.process(uri)
+
+        # path = uri_to_data_path(uri)
+        # suffix = get_suffix(path)
+        # datatype = get_function_filepath(handler)
+        # raise Exception(datatype, suffix)
+        # we need to determine a file type (from suffix)
+
         return process
 
     @cached_property
-    def metadata(self) -> dict[str, Any]:
+    def metadata(self) -> Metadata:
         """Metadata about the function."""
         return {
-            "@id": self.id,
+            "@uri": self.uri,
             "function": self.function.metadata,
             "inputs": [
                 input.metadata
                 | {
                     "role": self.function.get_parameter_name(key),
-                    "@id": f"{self.id}/input/{key}",
+                    "@uri": f"{self.uri}/input/{key}",
                 }
                 for key, input in self.inputs.items()
             ],

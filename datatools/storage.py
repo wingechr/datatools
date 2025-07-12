@@ -6,7 +6,7 @@ import logging
 import os
 from dataclasses import dataclass
 from functools import cached_property
-from io import BytesIO, IOBase
+from io import BufferedIOBase, BytesIO, IOBase
 from pathlib import Path
 from typing import Callable, Iterable, Literal, Optional, Union, cast
 
@@ -39,7 +39,7 @@ METADATA_FILETYPE = "filetype"
 
 @dataclass(frozen=True)
 class Storage:
-    location: str
+    location: str = "__data__"
     default_filetype: str = ".pickle"
 
     __metadata_suffix = ".metadata.json"
@@ -341,7 +341,7 @@ class Resource:
         filetype = self._get_filetype()
         # get converter if type_from is not byte like
         # TODO:
-        if get_type_name(type_from) in {get_type_name(BytesIO)}:
+        if get_type_name(type_from) in {get_type_name(BufferedIOBase)}:
             convert = passthrough
         else:
             convert = Converter.get(type_from=type_from, type_to=filetype)

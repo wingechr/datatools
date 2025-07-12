@@ -5,8 +5,8 @@ from typing import Callable, Union
 
 from datatools import Converter
 from datatools.utils import (
+    get_function_parameters_datatypes,
     get_keyword_only_parameters_types,
-    get_parameters_types,
     get_resource_path_name,
     is_type_class,
     jsonpath_get,
@@ -50,12 +50,12 @@ class TestDatatoolsUtils(unittest.TestCase):
         def fun(a: str) -> float:
             return float(a)
 
-        self.assertEqual(get_parameters_types(fun), {"a": str})
+        self.assertEqual(get_function_parameters_datatypes(fun), {"a": str})
 
         # check if it also works after we decorate it as Converter
         fun = Converter.autoregister(fun)
 
-        self.assertEqual(get_parameters_types(fun), {"a": str})
+        self.assertEqual(get_function_parameters_datatypes(fun), {"a": str})
 
     def test_is_type(self):
         self.assertTrue(is_type_class(int))
