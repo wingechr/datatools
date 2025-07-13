@@ -127,6 +127,7 @@ class Converter:
 
 json_types: list[Type] = [get_type_name(x) for x in [list, dict]]
 pickle_types: list[Type] = [get_type_name(x) for x in [list, dict, pd.DataFrame]]
+sql_protocols: list[Type] = ["sqlite:"]
 
 
 @Converter.register(json_types, ".json")
@@ -167,6 +168,12 @@ def filecopy(url: str) -> BufferedIOBase:
     """Copy file."""
     path = filepath_from_uri(url)
     return path.open("rb")
+
+
+@Converter.register(sql_protocols, None)
+def sql_download(url: str) -> BufferedIOBase:
+    """Copy data from sql database"""
+    raise NotImplementedError()
 
 
 @Converter.autoregister

@@ -118,7 +118,8 @@ class Function:
     def metadata(self) -> Metadata:
         """Metadata about the function."""
         return {
-            "@uri": self.uri,
+            "@id": self.uri,
+            "@type": "Function",
             "name": self.name,
             "description": self.description,
             # "parameters_types": self.parameters_types,
@@ -303,7 +304,7 @@ class Process:
         results = {}
         for key, output in outputs.items():
             metadata = {
-                "@uri": output.uri,
+                "@id": output.uri,
                 "createdBy": metadata,
                 "datatype": output.type_from,
             }
@@ -334,13 +335,15 @@ class Process:
     def metadata(self) -> Metadata:
         """Metadata about the function."""
         return {
-            "@uri": self.uri,
+            "@id": self.uri,
+            "@type": "Process",
             "function": self.function.metadata,
-            "inputs": [
+            "input": [
                 input.metadata
                 | {
                     "role": self.function.get_parameter_name(key),
-                    "@uri": f"{self.uri}/input/{key}",
+                    "@id": f"{self.uri}/input/{key}",
+                    "@type": "input",
                 }
                 for key, input in self.inputs.items()
             ],

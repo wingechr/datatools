@@ -66,7 +66,7 @@ class TestDatatoolsProcess(unittest.TestCase):
         # cannot run process again, because resource already exists
         self.assertRaises(Exception, proc, res_outp)
 
-    def __TODO__test_datatools_proceess_storage(self):
+    def test_datatools_proceess_storage(self):
 
         storage = Storage(self.tempdir.name)
 

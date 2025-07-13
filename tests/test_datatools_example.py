@@ -24,23 +24,24 @@ class TestDatatoolsExample(unittest.TestCase):
         self.df_test = pd.DataFrame([{"key": 1}, {"key": 2}])
 
         # create csv file
-        self.test_csv_path = self.tempdir.name + "/test.csv"
-        self.test_csv_uri = filepath_abs_to_uri(Path(self.test_csv_path).absolute())
-        self.df_test.to_csv(self.test_csv_path)
+        test_csv_path = self.tempdir.name + "/test.csv"
+        self.test_uri_file = filepath_abs_to_uri(Path(test_csv_path).absolute())
+        self.df_test.to_csv(test_csv_path)
+        self.df_test.to_excel(test_csv_path.replace(".csv", ".xlsx"))
 
         # add webserver that will serve tempdir
         host = "localhost"
         port = get_free_port()
         handler_class = partial(SimpleHTTPRequestHandler, directory=self.tempdir.name)
-        self.test_csv_url = f"http://{host}:{port}/test.csv"
+        self.test_uri_http = f"http://{host}:{port}/test.xlsx"
         httpd = HTTPServer((host, port), handler_class)
         server_thread = Thread(target=httpd.serve_forever, daemon=True)
         server_thread.start()
 
         # add database
         db_path = Path(self.tempdir.name + "/test.sqlite3").as_posix()
-        self.test_db_url = f"sqlite:///{db_path}"  # host must be empty
-        self.df_test.to_sql("test", self.test_db_url)
+        self.test_uri_sql = f"sqlite:///{db_path}"  # host must be empty
+        self.df_test.to_sql("test", self.test_uri_sql)
 
     def tearDown(self):
         self.tempdir.cleanup()
@@ -52,8 +53,13 @@ class TestDatatoolsExample(unittest.TestCase):
         print(storage)
 
         # auto import remote data
-        process = Process.from_uri(self.test_csv_uri)
-        print(process.metadata)
+        for uri in [self.test_uri_file, self.test_uri_http, self.test_uri_sql]:
+            process = Process.from_uri(uri)
+            import json
+
+            from datatools.utils import json_serialize
+
+            print(json.dumps(process.metadata, indent=2, default=json_serialize))
 
 
 class TestDatatoolsDocs(unittest.TestCase):

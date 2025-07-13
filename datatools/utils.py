@@ -847,6 +847,7 @@ def get_default_suffix(media_type: str) -> str:
     }.get(media_type, "")
 
 
+@cache  # should not change during run
 def get_git_info(repo_path: StrPath) -> dict:
     """get git branch,commit and is clean status
     from a local git repository, given as a path"""
