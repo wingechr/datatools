@@ -14,6 +14,7 @@ from datatools.utils import (
     filepath_abs_to_uri,
     get_free_port,
     get_hostname,
+    get_uri_scheme,
     import_module_from_path,
 )
 

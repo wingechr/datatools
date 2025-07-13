@@ -5,13 +5,20 @@ import logging
 import pickle
 from io import BufferedIOBase, BytesIO, TextIOWrapper
 from itertools import product
-from typing import Any, Callable, ClassVar, Union
+from typing import Any, Callable, ClassVar, Optional, Union
 from urllib.parse import parse_qs, urlsplit
 
 import pandas as pd
 import requests
 
-from datatools.base import PARAM_SQL_QUERY, MetadataDict, OptionalStr, Type
+from datatools.base import (
+    PARAM_SQL_QUERY,
+    MetadataDict,
+    OptionalStr,
+    ParameterKey,
+    Type,
+    UriHandlerType,
+)
 from datatools.utils import (
     copy_signature,
     filepath_from_uri,
@@ -39,16 +46,16 @@ def get_cleaned_type_list(types: Union[Type, list[Type]]) -> list[OptionalStr]:
 
 
 class Converter:
-    _converters: ClassVar[dict[tuple[Union[str, None], Union[str, None]], Callable]] = (
-        {}
-    )
+    _converters: ClassVar[
+        dict[tuple[Union[str, None], Union[str, None]], Callable[..., Any]]
+    ] = {}
 
-    def __init__(self, function: Callable):
+    def __init__(self, function: Callable[..., Any]):
         self.function = function
         copy_signature(self, self.function)
 
     @classmethod
-    def get(cls, type_from: Type, type_to: Type) -> Callable:
+    def get(cls, type_from: Type, type_to: Type) -> Callable[..., Any]:
         type_from = clean_type(type_from)
         type_to = clean_type(type_to)
         if type_from == type_to:
@@ -60,11 +67,11 @@ class Converter:
         cls,
         type_from: Union[Type, list[Type]],
         type_to: Union[Type, list[Type]],
-    ) -> Callable:
+    ) -> Callable[..., Any]:
         types_from = get_cleaned_type_list(type_from)
         types_to = get_cleaned_type_list(type_to)
 
-        def decorator(function) -> Converter:
+        def decorator(function: Callable[..., Any]) -> Converter:
             converter = Converter(function=function)
             for tf_tt in product(types_from, types_to):
                 if tf_tt in cls._converters:
@@ -82,19 +89,28 @@ class Converter:
         return decorator
 
     @classmethod
+    def register_uri_handler(
+        cls,
+        scheme_from: Union[Type, list[Type]],
+    ) -> Callable[..., Any]:
+        return cls.register(scheme_from, UriHandlerType)
+
+    @classmethod
     def autoregister(
         cls,
-        function: Callable,
-    ) -> Callable:
+        function: Callable[..., Any],
+    ) -> Callable[..., Any]:
         type_from = list(get_function_parameters_datatypes(function).values())[0]
         type_to = get_function_datatype(function)
         return cls.register(type_from=type_from, type_to=type_to)(function)
 
     @classmethod
-    def convert_return(cls, type_to: Type, type_from: Type = None) -> Callable:
+    def convert_return(
+        cls, type_to: Type, type_from: Type = None
+    ) -> Callable[..., Any]:
         if type_from is None:
             # get converter after function returned result
-            def decorator(function) -> Callable:
+            def decorator(function: Callable[..., Any]) -> Callable[..., Any]:
                 def decorated_function(*args, **kwargs):
                     result = function(*args, **kwargs)
                     type_from = get_type_name(type(result))
@@ -105,10 +121,10 @@ class Converter:
 
         else:
             # get converter bofore function returned result
-            def decorator(function) -> Callable:
+            def decorator(function: Callable[..., Any]) -> Callable[..., Any]:
                 converter = Converter.get(type_from, type_to)
 
-                def decorated_function(*args, **kwargs):
+                def decorated_function(*args: Any, **kwargs: Any):
                     result = function(*args, **kwargs)
                     return converter(result)
 
@@ -117,7 +133,7 @@ class Converter:
         return decorator
 
     @classmethod
-    def convert_to(cls, data: Type, type_to: Type = None, **kwargs) -> Any:
+    def convert_to(cls, data: Type, type_to: Type = None, **kwargs: Any) -> Any:
         type_from = get_type_name(type(data))
         convert = Converter.get(type_from, type_to)
         return convert(data, **kwargs)
@@ -125,7 +141,7 @@ class Converter:
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return self.function(*args, **kwargs)
 
-    def __get__(self, instance, owner):
+    def __get__(self, instance: Any, owner: Any):
         # Support instance methods
         return self.__class__(self.function.__get__(instance, owner))
 
@@ -138,7 +154,7 @@ sql_protocols: list[Type] = ["sqlite:"]
 
 
 @Converter.register(json_types, ".json")
-def json_dump(data: object, encoding="utf-8") -> BufferedIOBase:
+def json_dump(data: object, encoding: str = "utf-8") -> BufferedIOBase:
     return BytesIO(
         json.dumps(
             data, indent=2, ensure_ascii=False, sort_keys=False, default=json_serialize
@@ -147,7 +163,7 @@ def json_dump(data: object, encoding="utf-8") -> BufferedIOBase:
 
 
 @Converter.register(".json", json_types)
-def json_load(buffer: BytesIO, encoding="utf-8") -> object:
+def json_load(buffer: BytesIO, encoding: str = "utf-8") -> object:
     with TextIOWrapper(buffer, encoding=encoding) as text_buffer:
         return json.load(text_buffer)
 
@@ -162,15 +178,15 @@ def pickle_load(buffer: BufferedIOBase) -> object:
     return pickle.load(buffer)
 
 
-@Converter.register(["https:", "http:"], None)
-def download(url: str, headers: Union[dict, None] = None) -> BufferedIOBase:
+@Converter.register_uri_handler(["https:", "http:"])
+def download(url: str, headers: Union[dict[Any, Any], None] = None) -> BufferedIOBase:
     """Download content from a URL and return it as a BufferedIOBase object."""
     response = requests.get(url, headers=headers)
     response.raise_for_status()  # Raise an error for bad responses
     return BytesIO(response.content)
 
 
-@Converter.register("file:", None)
+@Converter.register_uri_handler("file:")
 def filecopy(url: str) -> BufferedIOBase:
     """Copy file."""
     path = filepath_from_uri(url)
@@ -180,32 +196,34 @@ def filecopy(url: str) -> BufferedIOBase:
 @Converter.register(pd.DataFrame, ".json")
 def dataframe_to_json(df: pd.DataFrame) -> BufferedIOBase:
     # buf = BytesIO()
-    data = df.to_dict(orient="records")
+    data = df.to_dict(orient="records")  # type: ignore
     return json_dump(data)
 
 
 @Converter.register(".json", pd.DataFrame)
 def json_to_dataframe(buffer: BufferedIOBase, encoding: str = "utf-8") -> pd.DataFrame:
     with TextIOWrapper(buffer, encoding=encoding) as text_buffer:  # type: ignore
-        return pd.read_json(text_buffer)
+        return pd.read_json(text_buffer)  # type:ignore
 
 
 @Converter.register(".csv", pd.DataFrame)
 def csv_to_dataframe(
-    buffer: BufferedIOBase, encoding: str = "utf-8", index_col=None
+    buffer: BufferedIOBase,
+    encoding: str = "utf-8",
+    index_col: Optional[list[ParameterKey]] = None,
 ) -> pd.DataFrame:
     with TextIOWrapper(buffer, encoding=encoding) as text_buffer:  # type: ignore
-        df = pd.read_csv(text_buffer, index_col=index_col)
+        df = pd.read_csv(text_buffer, index_col=index_col)  # type:ignore
     return df
 
 
 @Converter.register(".xlsx", pd.DataFrame)
 def xlsx_to_dataframe(buffer: BufferedIOBase) -> pd.DataFrame:
     with buffer:
-        return pd.read_excel(buffer)
+        return pd.read_excel(buffer)  # type:ignore
 
 
-@Converter.register(sql_protocols, None)
+@Converter.register_uri_handler(sql_protocols)
 def sql_download(uri: str) -> pd.DataFrame:
     """Copy data from sql database"""
     query = parse_qs(urlsplit(uri).query)
@@ -213,19 +231,19 @@ def sql_download(uri: str) -> pd.DataFrame:
     if not sql_query:
         raise ValueError("Missing sql query")
     sql_query = sql_query[0]
-    df = pd.read_sql(sql_query, uri)
+    df = pd.read_sql(sql_query, uri)  # type:ignore
     return df
 
 
 @Converter.autoregister
-def get_handler(url: str) -> Callable:
+def get_handler(url: str) -> Callable[..., Any]:
     scheme = url.split(":")[0]
     return Converter.get(f"{scheme}:", None)
 
 
 @Converter.register(pd.DataFrame, MetadataDict)
-def inspect_df(df: pd.DataFrame):
-    index_col = [c if c is not None else 0 for c in df.index.names]
+def inspect_df(df: pd.DataFrame) -> MetadataDict:
+    index_col: list[str] = [c if c is not None else 0 for c in df.index.names]
 
     return {
         "columns": df.columns.tolist(),
@@ -237,7 +255,7 @@ def inspect_df(df: pd.DataFrame):
 
 
 @Converter.register(pd.DataFrame, ".csv")
-def df_to_csv(df: pd.DataFrame, encoding="utf-8", index=True):
+def df_to_csv(df: pd.DataFrame, encoding: str = "utf-8", index: bool = True):
     buf = BytesIO()
     # TODO: if index = True but has no names: generate names,
     # otherwise they will be renamed when loading (e.g. Unnamed: 0)

@@ -3,7 +3,7 @@
 import unittest
 from typing import Callable
 
-from datatools import Converter
+from datatools.converter import Converter, UriHandlerType
 
 
 class TestDatatoolsConverter(unittest.TestCase):
@@ -20,9 +20,10 @@ class TestDatatoolsConverter(unittest.TestCase):
         self.assertEqual(Converter.get(str, int)("1"), 1)
 
     def test_datatools_converter_handlers(self):
-        url = "http://example.com"
-        handler = Converter.convert_to(url, Callable)
-        self.assertTrue(isinstance(handler, Callable))
+        # url = "http://example.com"
+        scheme = "http:"
+        handler = Converter.get(scheme, UriHandlerType)
+        self.assertTrue(isinstance(handler, Callable))  # type: ignore
 
     def test_datatools_converter_keep_signature(self):
         def fun(a: str) -> float:

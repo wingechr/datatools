@@ -92,7 +92,7 @@ class Storage:
         resource.write(data)
         return resource
 
-    def list(self, **filters) -> Iterable["Resource"]:
+    def list(self, **filters: Any) -> Iterable["Resource"]:
         """Iterate over resources in storage (optionally implemented filters)
 
         Parameters
@@ -184,7 +184,7 @@ class Storage:
             if filepath.exists():
                 filepath.unlink()
 
-    def _metadata_set(self, name: ResourceName, **key_vals) -> None:
+    def _metadata_set(self, name: ResourceName, **key_vals: Any) -> None:
         """Set (mutliple) metadata entries for resource.
 
         Parameters
@@ -256,7 +256,7 @@ class Storage:
         logging.debug("opening wb: %s", filepath)
         return open(filepath, "wb")
 
-    def __metadata_read(self, filepath_meta: Path) -> dict:
+    def __metadata_read(self, filepath_meta: Path) -> dict[str, Any]:
         if not filepath_meta.exists():
             return {}
         with filepath_meta.open(encoding="utf-8") as file:
@@ -278,7 +278,7 @@ class Resource:
         bool
             True if data for resource exists.
         """
-        return self.storage._has_data(self.name)
+        return self.storage._has_data(self.name)  # type:ignore (use internal method)
 
     def open(self) -> IOBase:
         """Open binary data stream for resource.
@@ -288,7 +288,7 @@ class Resource:
         IOBase
             Binary data stream
         """
-        return self.storage._open(self.name)
+        return self.storage._open(self.name)  # type:ignore (use internal method)
 
     def write(self, data: IOBase) -> None:
         """Write resource data.
@@ -299,11 +299,11 @@ class Resource:
             Binary data stream
 
         """
-        return self.storage._write(self.name, data)
+        return self.storage._write(self.name, data)  # type:ignore (use internal method)
 
     def delete(self) -> None:
         """Delete resource's data (and metadata)."""
-        return self.storage._delete(self.name)
+        return self.storage._delete(self.name)  # type:ignore (use internal method)
 
     @cached_property
     def metadata(self) -> "Metadata":
@@ -320,7 +320,7 @@ class Resource:
             str, self.metadata.get(METADATA_FILETYPE)
         ) or get_filetype_from_filename(self.name)
 
-    def get_loader(self, type_to: Type) -> Callable:
+    def get_loader(self, type_to: Type) -> Callable[..., Any]:
         filetype = self._get_filetype()
         convert = Converter.get(type_from=filetype, type_to=type_to)
 
@@ -334,7 +334,7 @@ class Resource:
             if v is not None
         }
 
-        def loader(**kwargs):
+        def loader(**kwargs: Any):
             # user kwargs have higher priority than metadata
             kwargs = optional_kwargs | kwargs
 
@@ -343,7 +343,7 @@ class Resource:
 
         return loader
 
-    def get_dumper(self, type_from: Type) -> Callable:
+    def get_dumper(self, type_from: Type) -> Callable[..., Any]:
         filetype = self._get_filetype()
         # get converter if type_from is not byte like
         # TODO:
@@ -367,7 +367,7 @@ class Resource:
             if v is not None
         }
 
-        def writer(data, metadata=None, **kwargs):
+        def writer(data: Any, metadata: Optional[dict[str, Any]] = None, **kwargs: Any):
             # user kwargs have higher priority than metadata
             kwargs = optional_kwargs | kwargs
             metadata = (metadata or {}) | kwargs
@@ -384,13 +384,15 @@ class Resource:
 
         return writer
 
-    def load(self, datatype=None, **kwargs) -> Any:
+    def load(self, datatype: Type = None, **kwargs: Any) -> Any:
         datatype = datatype or cast(str, self.metadata.get(METADATA_DATATYPE))
         loader = self.get_loader(type_to=datatype)
         data = loader(**kwargs)
         return data
 
-    def dump(self, data: Any, metadata: Optional[dict] = None, **kwargs) -> None:
+    def dump(
+        self, data: Any, metadata: Optional[dict[str, Any]] = None, **kwargs: Any
+    ) -> None:
         datatype = cast(str, self.metadata.get(METADATA_DATATYPE) or type(data))
         writer = self.get_dumper(type_from=datatype)
         # update metadata
@@ -419,9 +421,11 @@ class Metadata:
         MetadataValue
             metadata value
         """
-        return self.resource.storage._metadata_get(self.resource.name, key)
+        return self.resource.storage._metadata_get(  # type:ignore (use internal method)
+            self.resource.name, key
+        )
 
-    def set(self, **key_vals) -> None:
+    def set(self, **key_vals: Any) -> None:
         """Set (mutliple) metadata entries for resource.
 
         Parameters
@@ -429,4 +433,6 @@ class Metadata:
         **key_vals : dict
             key value pars of metadata
         """
-        return self.resource.storage._metadata_set(self.resource.name, **key_vals)
+        return self.resource.storage._metadata_set(  # type:ignore (use internal method)
+            self.resource.name, **key_vals
+        )

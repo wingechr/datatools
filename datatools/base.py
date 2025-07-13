@@ -1,7 +1,7 @@
 import os
 from io import DEFAULT_BUFFER_SIZE as _DEFAULT_BUFFER_SIZE
 from pathlib import Path
-from typing import Any, Callable, Dict, Union
+from typing import Any, Callable, Dict, Union, cast
 
 import appdirs
 
@@ -13,6 +13,8 @@ ParameterKey = Union[None, int, str]
 ParamterTypes = dict[str, Type]
 OptionalStr = Union[str, None]
 StrPath = Union[Path, str]
+UriHandlerType = None
+
 
 FUNCTION_URI_PREFIX = "function://"
 PROCESS_URI_PREFIX = "process://"
@@ -22,13 +24,19 @@ MEDIA_TYPE_METADATA_PATH = "mediaType"
 HASHED_DATA_PATH_PREFIX = "hash"
 HASH_METHODS = ["md5", "sha256"]
 DEFAULT_HASH_METHOD: str = HASH_METHODS[0]
-GLOBAL_LOCATION = os.path.join(
-    appdirs.user_data_dir(
+
+user_data_dir = cast(
+    str,
+    appdirs.user_data_dir(  # type:ignore
         appname="datatools", appauthor=None, version=None, roaming=False
     ),
-    "data",
 )
 DEFAULT_LOCAL_LOCATION = "__data__"
+GLOBAL_LOCATION = os.path.join(
+    user_data_dir,
+    DEFAULT_LOCAL_LOCATION,
+)
+
 DEFAULT_BUFFER_SIZE = _DEFAULT_BUFFER_SIZE  # default is 1024 * 8, wsgi uses 1024 * 16
 DATETIMETZ_FMT = "%Y-%m-%dT%H:%M:%S%z"
 DATE_FMT = "%Y-%m-%d"

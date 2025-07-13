@@ -12,6 +12,7 @@ from datatools.base import (
     ParamterTypes,
     ProcessException,
     Type,
+    UriHandlerType,
 )
 from datatools.converter import Converter
 from datatools.storage import Resource, Storage
@@ -26,6 +27,7 @@ from datatools.utils import (
     get_git_root,
     get_now,
     get_suffix,
+    get_uri_scheme,
     get_user_w_host,
     get_value_type,
 )
@@ -33,14 +35,14 @@ from datatools.utils import (
 __all__ = ["Function"]
 
 
-def constant_as_function(value: Any) -> Callable:
+def constant_as_function(value: Any) -> Callable[..., Any]:
     def fun():
         return value
 
     return fun
 
 
-def get_function_uri(function: Callable) -> str:
+def get_function_uri(function: Callable[..., Any]) -> str:
     # get git info
     filepath = get_function_filepath(function)
     git_root = get_git_root(filepath)
@@ -135,8 +137,10 @@ class Function:
 
 class Input:
 
-    def __init__(self, read_input: Callable, type_to: Type, source_uri_or_literal: str):
-        self.read_input: Callable = read_input
+    def __init__(
+        self, read_input: Callable[..., Any], type_to: Type, source_uri_or_literal: str
+    ):
+        self.read_input: Callable[..., Any] = read_input
         self.type_to: Type = type_to
         self.source_uri_or_literal: str = source_uri_or_literal
 
@@ -190,7 +194,7 @@ class Output:
     def __init__(
         self,
         uri: str,
-        handle_output_data_metadata: Callable,
+        handle_output_data_metadata: Callable[..., Any],
         type_from: Type,
         result_object: Any = None,
     ):
@@ -345,7 +349,8 @@ class Process:
 
     @classmethod
     def from_uri(cls, uri: str) -> "Process":
-        handler = Converter.convert_to(uri, Callable)
+        scheme = get_uri_scheme(uri)
+        handler = Converter.get(scheme, UriHandlerType)
         function = Function(function=handler)
         process = function.process(uri)
         return process

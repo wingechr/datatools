@@ -1,9 +1,7 @@
-import atexit
 import base64
 import csv
 import datetime
 import functools
-import hashlib
 import importlib
 import importlib.util
 import inspect
@@ -18,10 +16,9 @@ import stat
 import subprocess
 import sys
 import time
-from contextlib import ExitStack as _ExitStack
-from io import BufferedReader, IOBase
+from io import BufferedReader
 from pathlib import Path
-from typing import Any, Callable, Iterable, List, Tuple, Union, get_args
+from typing import Any, Callable, Iterable, List, Optional, Tuple, Union, get_args
 from urllib.parse import quote, unquote, unquote_plus, urlsplit
 
 import chardet
@@ -33,6 +30,8 @@ import sqlalchemy as sa
 import sqlparse
 import tzlocal
 import unidecode
+from jsonpath_ng import jsonpath
+from pyodbc import Cursor
 
 from datatools.base import (
     ANONYMOUS_USER,
@@ -40,7 +39,6 @@ from datatools.base import (
     DATETIMETZ_FMT,
     DEFAULT_BUFFER_SIZE,
     FILEMOD_WRITE,
-    HASH_METHODS,
     LOCALHOST,
     PARAM_SQL_QUERY,
     TIME_FMT,
@@ -50,7 +48,7 @@ from datatools.base import (
 )
 
 
-def cache(func: Callable) -> Callable:
+def cache(func: Callable[..., Any]) -> Callable[..., Any]:
     """Update cache decorator that preserves metadata.
 
     Parameters
@@ -98,8 +96,8 @@ def get_filetype_from_filename(filename: Union[Path, str]) -> Type:
 def get_args_kwargs_from_dict(
     data: dict[ParameterKey, Any],
 ) -> tuple[list[Any], dict[str, Any]]:
-    args_d = {}
-    kwargs = {}
+    args_d: dict[int, Any] = {}
+    kwargs: dict[str, Any] = {}
     if None in data:  # primitive: must be the only one
         args = [data[None]]
     else:
@@ -126,15 +124,15 @@ def get_value_type(dtype: Type) -> Type:
     return get_args(dtype)[-1]
 
 
-def get_function_datatype(function: Callable) -> Type:
+def get_function_datatype(function: Callable[..., Any]) -> Type:
     sig = inspect.signature(function)
     return_type = sig.return_annotation
-    if return_type == inspect._empty:
+    if not return_type:
         return_type = None
     return return_type
 
 
-def get_function_parameters_datatypes(function: Callable) -> dict[str, Any]:
+def get_function_parameters_datatypes(function: Callable[..., Any]) -> dict[str, Any]:
     sig = inspect.signature(function)
     # hints = get_type_hints(function)  # does not work with my decorated classes
     # parameter_types = {
@@ -145,7 +143,7 @@ def get_function_parameters_datatypes(function: Callable) -> dict[str, Any]:
 
 
 def get_keyword_only_parameters_types(
-    function: Callable, min_idx: int = 0
+    function: Callable[..., Any], min_idx: int = 0
 ) -> list[str]:
     parameters = inspect.signature(function).parameters
     return [
@@ -157,7 +155,7 @@ def get_keyword_only_parameters_types(
     ]
 
 
-def is_type_class(x) -> bool:
+def is_type_class(x: Any) -> bool:
     """Check if x is a type."""
     # return isinstance(x, type)
     if inspect.isclass(x):
@@ -180,7 +178,7 @@ def isna(x: Any) -> bool:
     return False
 
 
-def json_serialize(x):
+def json_serialize(x: Any) -> Any:
     if isinstance(x, datetime.datetime):
         return x.strftime(DATETIMETZ_FMT)
     elif isinstance(x, datetime.date):
@@ -191,47 +189,48 @@ def json_serialize(x):
         return None
     elif isinstance(x, np.bool_):
         return bool(x)
-    elif np.issubdtype(type(x), np.integer):
+    elif np.issubdtype(type(x), np.integer):  # type:ignore
         return int(x)
-    elif np.issubdtype(type(x), np.floating):
+    elif np.issubdtype(type(x), np.floating):  # type:ignore
         return float(x)
     elif is_type_class(x):
         return get_type_name(x)
-    elif np.issubdtype(type(x), bytes):
+    elif np.issubdtype(type(x), bytes):  # type:ignore
         # bytes to str:
         return base64.b64encode(x).decode("utf-8")
     else:
         raise NotImplementedError(f"{x.__class__}: {x}")
 
 
-def jsonpath_update(data: dict, key: str, val: Any) -> None:
-    key_pattern = jsonpath_ng.parse(key)
+def jsonpath_update(data: dict[str, Any], key: str, val: Any) -> None:
+    key_pattern: jsonpath.Fields = jsonpath_ng.parse(key)  # type: ignore
     # NOTE: for some reason, update_or_create in jsonpath_ng  does not
     # work with types that cannot be serialized to JSON
     try:
         val = json_serialize(val)
     except NotImplementedError:
         pass
-    key_pattern.update_or_create(data, val)
+    key_pattern.update_or_create(data, val)  # type: ignore
 
 
-def jsonpath_get(data: dict, key: str) -> Any:
-    key_pattern = jsonpath_ng.parse(key)
-    match = key_pattern.find(data)
-    result = [x.value for x in match]
+def jsonpath_get(data: dict[Any, Any], key: str) -> Union[Any, list[Any]]:
+    key_pattern: jsonpath.Fields = jsonpath_ng.parse(key)  # type: ignore
+    match: list[Any] = key_pattern.find(data)  # type: ignore
+    values: list[Any] = [x.value for x in match]  # type: ignore
     # TODO: we always get a list (multiple matches),
     # but most of the time, we want only one
-    if len(result) == 0:
+    if len(values) == 0:
         result = None
-    elif len(result) == 1:
-        result = result[0]
+    elif len(values) == 1:
+        result = values[0]
     else:
         logging.info("multiple results in metadata found for %s", key)
+        result = values
 
     return result
 
 
-def import_module_from_path(name, filepath):
+def import_module_from_path(name: str, filepath: StrPath):
     spec = importlib.util.spec_from_file_location(name, filepath)
     if spec is None or spec.loader is None:
         raise ImportError(f"Cannot load module '{name}' from '{filepath}'")
@@ -241,7 +240,7 @@ def import_module_from_path(name, filepath):
     return module
 
 
-def copy_signature(self: object, other: Callable) -> None:
+def copy_signature(self: object, other: Callable[..., Any]) -> None:
 
     setattr(self, "__signature__", inspect.signature(other))
     setattr(self, "__name__", get_function_name(other))
@@ -259,30 +258,8 @@ def passthrough(x: Any) -> Any:
 # ========================================================================================
 
 
-def get_pandas_version() -> tuple:
+def get_pandas_version() -> tuple[int, ...]:
     return tuple(int(x) for x in pd.__version__.split("."))
-
-
-class ExitStack(_ExitStack):
-    __singleton_instance = None
-
-    def __new__(cls, *args, **kwargs):
-        if not cls.__singleton_instance:
-            cls.__singleton_instance = super().__new__(cls, *args, **kwargs)
-
-            # register __exit__ on normal exit
-            atexit.register(cls.__singleton_instance.__exit__, None, None, None)
-
-            # register on unhandled Exception exit
-            sys.excepthook = cls.__singleton_instance.__exit__
-
-        return cls.__singleton_instance
-
-    def __exit__(self, exc_cls, exc_inst, exc_trace):
-        # do regular cleanup
-        super().__exit__(exc_cls, exc_inst, exc_trace)
-        if exc_inst:
-            raise exc_inst
 
 
 @cache
@@ -296,7 +273,7 @@ def normalize_sql_query(query: str) -> str:
     Returns:
         str: The prettified SQL query.
     """
-    query = sqlparse.format(
+    query = sqlparse.format(  # type:ignore
         query,
         reindent=False,
         keyword_case="upper",
@@ -319,14 +296,14 @@ def get_free_port() -> int:
     return port
 
 
-def wait_for_server(url, timeout_s=30) -> None:
+def wait_for_server(url: str, timeout_s: Optional[int] = 30) -> None:
     """Wait for server to be responsive"""
     wait_s = 0.5
 
     time_start = time.time()
     while True:
         try:
-            requests.head(url)
+            requests.head(url)  # type: ignore
             logging.debug("Server is online: %s", url)
             return
         except requests.exceptions.ConnectionError:
@@ -411,7 +388,7 @@ def get_resource_path_name(path: str) -> str:
     return path
 
 
-def get_query_arg(kwargs: dict, key: str, default: str = "") -> str:
+def get_query_arg(kwargs: dict[str, list[str]], key: str, default: str = "") -> str:
     """query args only come as lists, we want single value"""
     values = kwargs.get(key)
     if not values:
@@ -554,7 +531,7 @@ def uri_to_filepath_abs(uri: str) -> str:
     return filepath_abs
 
 
-def remove_auth_from_uri_or_path(uri_or_path):
+def remove_auth_from_uri_or_path(uri_or_path: str) -> str:
     """remove username:password@ from uri"""
     if not is_uri(uri_or_path):
         return uri_or_path
@@ -585,7 +562,7 @@ def remove_port_from_url_netloc(url_netloc: str) -> str:
     return re.sub(":[0-9]+$", "", url_netloc)
 
 
-def parse_cli_metadata(metadata_key_vals: List[str]) -> dict:
+def parse_cli_metadata(metadata_key_vals: List[str]) -> dict[str, Any]:
     """cli: list of key=value"""
     metadata = {}
     for key_value in metadata_key_vals:
@@ -602,7 +579,7 @@ def parse_cli_metadata(metadata_key_vals: List[str]) -> dict:
     return metadata
 
 
-def parse_content_type(ctype: str) -> dict:
+def parse_content_type(ctype: str) -> dict[str, Any]:
     result = {}
     parts = [x.strip() for x in ctype.split(";")]
     result["mediatype"] = parts[0]
@@ -619,7 +596,9 @@ def parse_content_type(ctype: str) -> dict:
     return result
 
 
-def as_byte_iterator(data: Union[bytes, Iterable, BufferedReader]) -> Iterable[bytes]:
+def as_byte_iterator(
+    data: Union[bytes, Iterable[bytes], BufferedReader, Any],
+) -> Iterable[bytes]:
     if isinstance(data, bytes):
         yield data
     elif isinstance(data, BufferedReader):
@@ -636,7 +615,7 @@ def as_byte_iterator(data: Union[bytes, Iterable, BufferedReader]) -> Iterable[b
     elif isinstance(data, Iterable):
         yield from data  # type: ignore
     else:
-        raise NotImplementedError(type(data))
+        raise NotImplementedError(type(data))  # type: ignore
 
 
 def detect_encoding(sample_data: bytes) -> str:
@@ -646,7 +625,7 @@ def detect_encoding(sample_data: bytes) -> str:
     return str(result["encoding"])
 
 
-def detect_csv_dialect(sample_data: str) -> dict:
+def detect_csv_dialect(sample_data: str) -> dict[str, Any]:
     dialect = csv.Sniffer().sniff(sample_data)
     dialect_dict = dict(
         (k, v)
@@ -664,8 +643,8 @@ def detect_csv_dialect(sample_data: str) -> dict:
     return dialect_dict
 
 
-def get_sql_table_schema(cursor):
-    fields = [
+def get_sql_table_schema(cursor: Cursor) -> dict[str, Any]:
+    fields: list[dict[str, Any]] = [
         {"name": name, "data_type": data_type, "is_nullable": is_nullable}
         for (
             name,
@@ -680,8 +659,8 @@ def get_sql_table_schema(cursor):
     return {"fields": fields}
 
 
-def get_df_table_schema(df: pd.DataFrame):
-    fields = []
+def get_df_table_schema(df: pd.DataFrame) -> dict[str, Any]:
+    fields: list[dict[str, Any]] = []
     for cname in df.columns:
         fields.append(
             {
@@ -721,7 +700,7 @@ def get_suffix(path: str) -> str:
     return re.sub("^[^.]*", "", path)
 
 
-def df_to_values(df: pd.DataFrame) -> list:
+def df_to_values(df: pd.DataFrame) -> list[Any]:
     """get values from DataFrame, replace nans with None
 
     Parameters
@@ -734,9 +713,9 @@ def df_to_values(df: pd.DataFrame) -> list:
     list
         list of dicts
     """
-    df = df.astype(object)  # None values need object type
-    df = df.where(~df.isna(), other=None)
-    data = df.to_dict(orient="records")
+    df = df.astype(object)  # None values need object type # type:ignore
+    df = df.where(~df.isna(), other=None)  # type:ignore
+    data = df.to_dict(orient="records")  # type:ignore
     return data
 
 
@@ -759,74 +738,12 @@ def sa_create_engine(connection_string: str) -> sa.Engine:
     # on sql server: special argument, otherwise reflect does not work
     if connection_string.startswith("mssql+"):
         kwargs["use_setinputsizes"] = False
-    engine = sa.create_engine(connection_string, echo=False, **kwargs)
+    engine = sa.create_engine(connection_string, echo=False, **kwargs)  # type:ignore
     return engine
 
 
-def get_connection_string_uri_mssql_pyodbc(server, database="master"):
+def get_connection_string_uri_mssql_pyodbc(server: str, database: str = "master"):
     return f"mssql+pyodbc://?odbc_connect=driver=sql server;server={server};database={database}"  # noqa
-
-
-class BytesIteratorBuffer(IOBase):
-    def __init__(self, bytes_iter) -> None:
-        self.bytes_iter = bytes_iter
-
-        self.buffer = b""
-        self.bytes = 0
-
-    def read(self, n=None):
-        # read more data
-
-        while True:
-            if n is not None and n <= self.bytes:
-                # if bytesare specified and we have enough data
-                break
-            try:
-                chunk = next(self.bytes_iter)
-            except StopIteration:
-                break
-            self.buffer += chunk
-            self.bytes += len(chunk)
-
-        # how many do we return
-        n = self.bytes if n is None else min(n, self.bytes)
-        # split buffer
-        data = self.buffer[:n]
-        self.buffer = self.buffer[n:]
-        return data
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args):
-        pass
-
-
-class ByteBufferWrapper:
-    def __init__(self, buffer):
-        self.buffer = buffer
-
-        self.bytes = 0
-        self.hashers = {}
-
-    def __enter__(self):
-        self.buffer.__enter__()
-        for method in HASH_METHODS:
-            self.hashers[method] = getattr(hashlib, method)()
-
-        return self
-
-    def __exit__(self, *args):
-        self.buffer.__exit__(*args)
-
-    def read(self, n=None):
-        chunk = self.buffer.read(n)
-
-        self.bytes += len(chunk)
-        for hasher in self.hashers.values():
-            hasher.update(chunk)
-
-        return chunk
 
 
 def get_default_media_data_type_by_name(name: str) -> Tuple[str, Type]:
@@ -850,11 +767,11 @@ def get_default_suffix(media_type: str) -> str:
 
 
 @cache  # should not change during run
-def get_git_info(repo_path: StrPath) -> dict:
+def get_git_info(repo_path: StrPath) -> dict[str, Any]:
     """get git branch,commit and is clean status
     from a local git repository, given as a path"""
 
-    def run_git_command(command, cwd):
+    def run_git_command(command: list[str], cwd: StrPath):
         result = subprocess.run(
             command, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
@@ -887,15 +804,15 @@ def get_git_info(repo_path: StrPath) -> dict:
     }
 
 
-def get_function_description(function: Callable) -> Union[str, None]:
+def get_function_description(function: Callable[..., Any]) -> Union[str, None]:
     return function.__doc__
 
 
-def get_function_name(function: Callable) -> Union[str, None]:
+def get_function_name(function: Callable[..., Any]) -> Union[str, None]:
     return function.__name__
 
 
-def get_module_version(func: Callable) -> Union[str, None]:
+def get_module_version(func: Callable[..., Any]) -> Union[str, None]:
     # get module version (or parent module version)
     version = None
     try:
@@ -914,7 +831,7 @@ def get_module_version(func: Callable) -> Union[str, None]:
         pass
 
 
-def get_function_filepath(function: Callable) -> str:
+def get_function_filepath(function: Callable[..., Any]) -> str:
     try:
         return getattr(function, "__file__")
     except AttributeError:
@@ -928,7 +845,7 @@ def get_git_root(filepath: StrPath) -> Path:
 def rmtree_readonly(path: str) -> None:
     """Delete recursively (inckl. readonly)"""
 
-    def delete_rw(action, name, exc):
+    def delete_rw(action: Any, name: str, exc: Any):
         """action if shutil rm fails"""
         os.chmod(name, stat.S_IWRITE)
         os.remove(name)
@@ -940,7 +857,7 @@ def is_callable(obj: Any) -> bool:
     return isinstance(obj, Callable)
 
 
-def get_sqlite_connection_string(location=None) -> str:
+def get_sqlite_connection_string(location: Optional[str] = None) -> str:
     if location is None or location == ":memory:":
         result = "sqlite:///:memory:"
     else:
@@ -970,3 +887,7 @@ def get_sqlite_query_uri(
     return get_sql_uri(
         connection_string_uri=cs, sql_query=sql_query or "", fragment_name=fragment_name
     )
+
+
+def get_uri_scheme(uri: str) -> str:
+    return uri.split(":")[0] + ":"
