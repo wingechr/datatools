@@ -421,20 +421,24 @@ def get_query_arg(kwargs: dict, key: str, default: str = "") -> str:
     return unquote_plus(value)
 
 
+@cache
 def get_hostname() -> str:
     return socket.gethostname()
 
 
+@cache
 def get_fqhostname() -> str:
     """fully qualified hostname (with domain)"""
     return socket.getfqdn()
 
 
+@cache
 def get_username() -> str:
     # getpass.getuser() does not always work
     return os.environ.get("USERNAME") or os.environ.get("USER") or ANONYMOUS_USER
 
 
+@cache
 def get_user_w_host() -> str:
     return f"{get_username()}@{get_fqhostname()}"
 
@@ -458,11 +462,13 @@ def get_now_str() -> str:
     return now_str
 
 
+@cache
 def platform_is_windows() -> bool:
     # os.name: 'posix', 'nt', 'java'
     return os.name == "nt"
 
 
+@cache
 def platform_is_unix() -> bool:
     return not platform_is_windows()
 
@@ -946,7 +952,13 @@ def get_sqlite_connection_string(location=None) -> str:
 
 
 def filepath_from_uri(file_uri: str) -> Path:
-    return Path(file_uri.replace("file:///", ""))
+    # TODO: handle windows UNC paths
+    parts = urlsplit(file_uri)
+    path = parts.path
+    # in windows (with drive name): drop leading path
+    if re.match("^/[^/]+:", path):
+        path = path.lstrip("/")
+    return Path(path)
 
 
 def get_sqlite_query_uri(

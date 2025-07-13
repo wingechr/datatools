@@ -1,4 +1,3 @@
-import datetime
 from functools import cached_property
 from pathlib import Path
 from typing import Any, Callable, Optional, Union, cast
@@ -23,6 +22,8 @@ from datatools.utils import (
     get_function_parameters_datatypes,
     get_git_info,
     get_git_root,
+    get_now,
+    get_user_w_host,
     get_value_type,
 )
 
@@ -298,7 +299,7 @@ class Process:
         result = self.function(*args, **kwargs)
 
         # create process metadata # TODO
-        dynmic_metadata = {"datetime": datetime.datetime.now()}
+        dynmic_metadata = {"datetime": get_now(), "user": get_user_w_host()}
         metadata = self.metadata | dynmic_metadata
 
         results = {}
@@ -325,7 +326,7 @@ class Process:
 
         # path = uri_to_data_path(uri)
         # suffix = get_suffix(path)
-        # datatype = get_function_filepath(handler)
+        #
         # raise Exception(datatype, suffix)
         # we need to determine a file type (from suffix)
 

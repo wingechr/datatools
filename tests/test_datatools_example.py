@@ -1,5 +1,3 @@
-# coding: utf-8
-
 import unittest
 from functools import partial
 from http.server import HTTPServer, SimpleHTTPRequestHandler
@@ -9,9 +7,15 @@ from threading import Thread
 
 import pandas as pd
 
+from datatools.base import PARAM_SQL_QUERY
 from datatools.process import Process
 from datatools.storage import Storage
-from datatools.utils import filepath_abs_to_uri, get_free_port, import_module_from_path
+from datatools.utils import (
+    filepath_abs_to_uri,
+    get_free_port,
+    get_hostname,
+    import_module_from_path,
+)
 
 
 class TestDatatoolsExample(unittest.TestCase):
@@ -30,7 +34,7 @@ class TestDatatoolsExample(unittest.TestCase):
         self.df_test.to_excel(test_csv_path.replace(".csv", ".xlsx"))
 
         # add webserver that will serve tempdir
-        host = "localhost"
+        host = "localhost"  # get_hostname()  # "localhost"
         port = get_free_port()
         handler_class = partial(SimpleHTTPRequestHandler, directory=self.tempdir.name)
         self.test_uri_http = f"http://{host}:{port}/test.xlsx"
@@ -40,7 +44,7 @@ class TestDatatoolsExample(unittest.TestCase):
 
         # add database
         db_path = Path(self.tempdir.name + "/test.sqlite3").as_posix()
-        self.test_uri_sql = f"sqlite:///{db_path}"  # host must be empty
+        self.test_uri_sql = f"sqlite:///{db_path}?{PARAM_SQL_QUERY}=select * from test"
         self.df_test.to_sql("test", self.test_uri_sql)
 
     def tearDown(self):
@@ -49,17 +53,20 @@ class TestDatatoolsExample(unittest.TestCase):
 
     def test_datatools_example(self):
         # create project storage
-        storage = Storage(self.tempdir.name + "__data__")
-        print(storage)
+        storage = Storage(self.tempdir.name + "/__data__")
 
-        # auto import remote data
-        for uri in [self.test_uri_file, self.test_uri_http, self.test_uri_sql]:
+        # auto import remote data from file, database, website
+        # into storage
+        for uri, name in [
+            (self.test_uri_file, "extern/test.csv"),
+            (self.test_uri_http, "extern/test.xlsx"),
+            (self.test_uri_sql, "extern/test.json"),
+        ]:
+            resource = storage.resource(name)
             process = Process.from_uri(uri)
-            import json
+            process(resource)
 
-            from datatools.utils import json_serialize
-
-            print(json.dumps(process.metadata, indent=2, default=json_serialize))
+            print(resource.get_loader(pd.DataFrame)())
 
 
 class TestDatatoolsDocs(unittest.TestCase):

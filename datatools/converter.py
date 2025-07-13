@@ -6,11 +6,12 @@ import pickle
 from io import BufferedIOBase, BytesIO, TextIOWrapper
 from itertools import product
 from typing import Any, Callable, ClassVar, Union
+from urllib.parse import parse_qs, urlsplit
 
 import pandas as pd
 import requests
 
-from datatools.base import OptionalStr, Type
+from datatools.base import PARAM_SQL_QUERY, OptionalStr, Type
 from datatools.utils import (
     copy_signature,
     filepath_from_uri,
@@ -170,10 +171,35 @@ def filecopy(url: str) -> BufferedIOBase:
     return path.open("rb")
 
 
+@Converter.register(pd.DataFrame, ".json")
+def dataframe_to_json(df: pd.DataFrame) -> BufferedIOBase:
+    # buf = BytesIO()
+    data = df.to_dict(orient="records")
+    return json_dump(data)
+
+
+@Converter.register(".json", pd.DataFrame)
+def json_to_dataframe(buffer: BufferedIOBase) -> pd.DataFrame:
+    return pd.read_json(buffer)
+
+
+@Converter.register(".csv", pd.DataFrame)
+def csv_to_dataframe(buffer: BufferedIOBase) -> pd.DataFrame:
+    return pd.read_csv(buffer)
+
+
+@Converter.register(".xlsx", pd.DataFrame)
+def xlsx_to_dataframe(buffer: BufferedIOBase) -> pd.DataFrame:
+    return pd.read_excel(buffer)
+
+
 @Converter.register(sql_protocols, None)
-def sql_download(url: str) -> BufferedIOBase:
+def sql_download(uri: str) -> pd.DataFrame:
     """Copy data from sql database"""
-    raise NotImplementedError()
+    query = parse_qs(urlsplit(uri).query)
+    sql_query = query.get(PARAM_SQL_QUERY)[0]
+    df = pd.read_sql(sql_query, uri)
+    return df
 
 
 @Converter.autoregister

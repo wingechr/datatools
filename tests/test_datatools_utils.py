@@ -5,6 +5,7 @@ from typing import Callable, Union
 
 from datatools import Converter
 from datatools.utils import (
+    filepath_from_uri,
     get_function_parameters_datatypes,
     get_keyword_only_parameters_types,
     get_resource_path_name,
@@ -67,3 +68,9 @@ class TestDatatoolsUtils(unittest.TestCase):
     def test_datatools_utils_get_resource_path_name(self):
         for name, valid_name in [("A", "a")]:
             self.assertEqual(get_resource_path_name(name), valid_name)
+
+    def test_datatools_utils_filepath_from_uri(self):
+        self.assertEqual(filepath_from_uri("file:///c:/path").as_posix(), "c:/path")
+        self.assertEqual(filepath_from_uri("file://host/c:/path").as_posix(), "c:/path")
+        self.assertEqual(filepath_from_uri("file:///path").as_posix(), "/path")
+        self.assertEqual(filepath_from_uri("file://host/path").as_posix(), "/path")

@@ -166,6 +166,11 @@ class Storage:
             for chunk in data:
                 file.write(chunk)
 
+            try:
+                data.close()
+            except Exception:
+                pass
+
     def _delete(self, name: ResourceName) -> None:
         """Delete resource's data (and metadata).
 
