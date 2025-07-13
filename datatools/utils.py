@@ -716,13 +716,8 @@ def get_sql_uri(
 
 
 def get_suffix(path: str) -> str:
-    suffix = ""
-    while True:
-        path, ext = os.path.splitext(path)
-        if not ext:
-            break
-        suffix = ext + suffix
-    return suffix
+    path = re.sub("[^a-z0-9-.]+", "/", path).split("/")[-1]
+    return re.sub("^[^.]*", "", path)
 
 
 def df_to_values(df: pd.DataFrame) -> list:

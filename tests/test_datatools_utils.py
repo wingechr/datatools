@@ -9,6 +9,7 @@ from datatools.utils import (
     get_function_parameters_datatypes,
     get_keyword_only_parameters_types,
     get_resource_path_name,
+    get_suffix,
     is_type_class,
     jsonpath_get,
     jsonpath_update,
@@ -74,3 +75,9 @@ class TestDatatoolsUtils(unittest.TestCase):
         self.assertEqual(filepath_from_uri("file://host/c:/path").as_posix(), "c:/path")
         self.assertEqual(filepath_from_uri("file:///path").as_posix(), "/path")
         self.assertEqual(filepath_from_uri("file://host/path").as_posix(), "/path")
+
+    def test_get_suffix(self):
+        self.assertEqual(get_suffix("file.suffix"), ".suffix")
+        self.assertEqual(get_suffix("path.path/file.suffix"), ".suffix")
+        self.assertEqual(get_suffix("path.path/file.x.suffix"), ".x.suffix")
+        self.assertEqual(get_suffix("path.path#file.suffix"), ".suffix")

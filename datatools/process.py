@@ -1,3 +1,4 @@
+import hashlib
 from functools import cached_property
 from pathlib import Path
 from typing import Any, Callable, Optional, Union, cast
@@ -23,6 +24,7 @@ from datatools.utils import (
     get_git_info,
     get_git_root,
     get_now,
+    get_suffix,
     get_user_w_host,
     get_value_type,
 )
@@ -180,7 +182,6 @@ class Input:
 
 
 class Output:
-
     def __init__(
         self,
         uri: str,
@@ -199,7 +200,14 @@ class Output:
         return self.result_object
 
     @classmethod
-    def wrap(cls, output_uri: str, output: Any, type_from: Type = None) -> "Output":
+    def wrap(
+        cls,
+        process: "Process",
+        key: ParameterKey,
+        output_uri: str,
+        output: Any,
+        type_from: Type = None,
+    ) -> "Output":
         if not isinstance(output, Output):
             result_object = None
             if isinstance(output, Resource):
@@ -210,7 +218,14 @@ class Output:
                 # NOTE: we need to determine file type / extension.
                 # until we find a better solution, we use ths storages default
                 storage = output
-                name = f"{output_uri}{storage.default_filetype}"
+                # generate a unique (file)-name automatically
+                process_uri_hash = hashlib.md5(process.uri.encode()).hexdigest()
+                suffix = get_suffix(process.uri) or storage.default_filetype
+
+                # TODO: maybe get process_uri hash, not output uri hash
+                p_key = "" if key is None else "/key"
+
+                name = f"process/{process_uri_hash}/output{p_key}{suffix}"
                 resource = output.resource(name=name)
                 handle_output_data_metadata = resource.get_dumper(type_from=type_from)
                 result_object = resource
@@ -282,7 +297,9 @@ class Process:
 
         outputs = {
             key: Output.wrap(
-                output_uri=f"{self.uri}/output/{key}",
+                process=self,
+                key=key,
+                output_uri=f"{self.uri}#output" + ("" if key is None else f"/{key}"),
                 output=output,
                 type_from=type_from,
             )
@@ -323,13 +340,6 @@ class Process:
         handler = Converter.convert_to(uri, Callable)
         function = Function(function=handler)
         process = function.process(uri)
-
-        # path = uri_to_data_path(uri)
-        # suffix = get_suffix(path)
-        #
-        # raise Exception(datatype, suffix)
-        # we need to determine a file type (from suffix)
-
         return process
 
     @cached_property
@@ -343,7 +353,7 @@ class Process:
                 input.metadata
                 | {
                     "role": self.function.get_parameter_name(key),
-                    "@id": f"{self.uri}/input/{key}",
+                    "@id": f"{self.uri}#input" + ("" if key is None else f"/{key}"),
                     "@type": "input",
                 }
                 for key, input in self.inputs.items()

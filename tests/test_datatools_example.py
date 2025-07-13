@@ -4,12 +4,13 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Thread
+from typing import cast
 
 import pandas as pd
 
 from datatools.base import PARAM_SQL_QUERY
 from datatools.process import Process
-from datatools.storage import Storage
+from datatools.storage import Resource, Storage
 from datatools.utils import (
     filepath_abs_to_uri,
     get_free_port,
@@ -34,7 +35,7 @@ class TestDatatoolsExample(unittest.TestCase):
         self.df_test.to_excel(test_csv_path.replace(".csv", ".xlsx"))
 
         # add webserver that will serve tempdir
-        host = "localhost"  # get_hostname()  # "localhost"
+        host = get_hostname()
         port = get_free_port()
         handler_class = partial(SimpleHTTPRequestHandler, directory=self.tempdir.name)
         self.test_uri_http = f"http://{host}:{port}/test.xlsx"
@@ -43,8 +44,12 @@ class TestDatatoolsExample(unittest.TestCase):
         server_thread.start()
 
         # add database
+
         db_path = Path(self.tempdir.name + "/test.sqlite3").as_posix()
-        self.test_uri_sql = f"sqlite:///{db_path}?{PARAM_SQL_QUERY}=select * from test"
+        # add test.json fragment to indicate output filename
+        self.test_uri_sql = (
+            f"sqlite:///{db_path}?{PARAM_SQL_QUERY}=select * from test#test.json"
+        )
         self.df_test.to_sql("test", self.test_uri_sql)
 
     def tearDown(self):
@@ -64,9 +69,16 @@ class TestDatatoolsExample(unittest.TestCase):
         ]:
             resource = storage.resource(name)
             process = Process.from_uri(uri)
-            process(resource)
 
-            print(resource.get_loader(pd.DataFrame)())
+            process(resource)
+            df = resource.load(datatype=pd.DataFrame)
+            self.assertTrue(isinstance(df, pd.DataFrame))
+
+            # alternatively: dump directly into storage
+            resource = cast(Resource, process(storage))
+            print(resource.name)
+            df = resource.load(datatype=pd.DataFrame)
+            self.assertTrue(isinstance(df, pd.DataFrame))
 
 
 class TestDatatoolsDocs(unittest.TestCase):

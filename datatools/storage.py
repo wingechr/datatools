@@ -383,8 +383,8 @@ class Resource:
 
         return writer
 
-    def load(self, **kwargs) -> Any:
-        datatype = cast(str, self.metadata.get(METADATA_DATATYPE))
+    def load(self, datatype=None, **kwargs) -> Any:
+        datatype = datatype or cast(str, self.metadata.get(METADATA_DATATYPE))
         loader = self.get_loader(type_to=datatype)
         data = loader(**kwargs)
         return data
