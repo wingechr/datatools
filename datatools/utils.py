@@ -564,7 +564,7 @@ def remove_port_from_url_netloc(url_netloc: str) -> str:
 
 def parse_cli_metadata(metadata_key_vals: List[str]) -> dict[str, Any]:
     """cli: list of key=value"""
-    metadata = {}
+    metadata: dict[str, Any] = {}
     for key_value in metadata_key_vals:
         parts = key_value.split("=")
         key = parts[0]
@@ -580,7 +580,7 @@ def parse_cli_metadata(metadata_key_vals: List[str]) -> dict[str, Any]:
 
 
 def parse_content_type(ctype: str) -> dict[str, Any]:
-    result = {}
+    result: dict[str, Any] = {}
     parts = [x.strip() for x in ctype.split(";")]
     result["mediatype"] = parts[0]
     for key_value in parts[1:]:

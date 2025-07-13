@@ -111,7 +111,7 @@ class Converter:
         if type_from is None:
             # get converter after function returned result
             def decorator(function: Callable[..., Any]) -> Callable[..., Any]:
-                def decorated_function(*args, **kwargs):
+                def decorated_function(*args: Any, **kwargs: Any):
                     result = function(*args, **kwargs)
                     type_from = get_type_name(type(result))
                     converter = Converter.get(type_from, type_to)
@@ -141,15 +141,17 @@ class Converter:
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return self.function(*args, **kwargs)
 
-    def __get__(self, instance: Any, owner: Any):
-        # Support instance methods
-        return self.__class__(self.function.__get__(instance, owner))
+    # def __get__(self, instance: Any, owner: Any):
+    #    # Support instance methods
+    #    return self.__class__(self.function.__get__(instance, owner))
 
 
 # register some default converters
 
-json_types: list[Type] = [get_type_name(x) for x in [list, dict]]
-pickle_types: list[Type] = [get_type_name(x) for x in [list, dict, pd.DataFrame]]
+json_types: list[Type] = [get_type_name(x) for x in [list, dict]]  # type:ignore
+pickle_types: list[Type] = [
+    get_type_name(x) for x in [list, dict, pd.DataFrame]  # type:ignore
+]
 sql_protocols: list[Type] = ["sqlite:"]
 
 
@@ -181,9 +183,9 @@ def pickle_load(buffer: BufferedIOBase) -> object:
 @Converter.register_uri_handler(["https:", "http:"])
 def download(url: str, headers: Union[dict[Any, Any], None] = None) -> BufferedIOBase:
     """Download content from a URL and return it as a BufferedIOBase object."""
-    response = requests.get(url, headers=headers)
-    response.raise_for_status()  # Raise an error for bad responses
-    return BytesIO(response.content)
+    response: requests.Response = requests.get(url, headers=headers)  # type:ignore
+    response.raise_for_status()  # Raise an error for bad responses # type:ignore
+    return BytesIO(response.content)  # type:ignore
 
 
 @Converter.register_uri_handler("file:")
@@ -242,8 +244,10 @@ def get_handler(url: str) -> Callable[..., Any]:
 
 
 @Converter.register(pd.DataFrame, MetadataDict)
-def inspect_df(df: pd.DataFrame) -> MetadataDict:
-    index_col: list[str] = [c if c is not None else 0 for c in df.index.names]
+def inspect_df(df: pd.DataFrame) -> dict[str, Any]:
+    index_col: list[ParameterKey] = [
+        c if c is not None else 0 for c in df.index.names  # type:ignore
+    ]
 
     return {
         "columns": df.columns.tolist(),

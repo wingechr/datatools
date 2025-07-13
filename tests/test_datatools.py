@@ -3,7 +3,7 @@ from functools import partial
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from threading import Thread
-from typing import cast
+from typing import Any, cast
 
 import pandas as pd
 
@@ -14,7 +14,6 @@ from datatools.utils import (
     filepath_abs_to_uri,
     get_free_port,
     get_hostname,
-    get_uri_scheme,
     import_module_from_path,
 )
 
@@ -22,7 +21,7 @@ from . import TestDatatoolsTempdir
 
 
 class HTTPRequestHandler(SimpleHTTPRequestHandler):
-    def log_request(self, *args, **kwargs) -> None:
+    def log_request(self, *args: Any, **kwargs: Any) -> None:
         # dont log requests im tests
         pass
 
@@ -39,7 +38,7 @@ class TestDatatoolsExample(TestDatatoolsTempdir):
         test_csv_path = self.tempdir.name + "/test.csv"
         self.test_uri_file = filepath_abs_to_uri(Path(test_csv_path).absolute())
         self.df_test.to_csv(test_csv_path)
-        self.df_test.to_excel(test_csv_path.replace(".csv", ".xlsx"))
+        self.df_test.to_excel(test_csv_path.replace(".csv", ".xlsx"))  # type:ignore
 
         # add webserver that will serve tempdir
         host = get_hostname()
@@ -94,7 +93,7 @@ class TestDatatoolsProcessStorage(TestDatatoolsTempdir):
 
         res_inp.dump([1, 2, 3])
 
-        def function(data: list, factor: int) -> list:
+        def function(data: list[int], factor: int) -> list[int]:
             return data * factor
 
         func = Function(function=function)
@@ -113,15 +112,15 @@ class TestDatatoolsProcessStorage(TestDatatoolsTempdir):
         res_inp = storage.resource("input.json")
         res_inp.dump([1, 2, 3])
 
-        def function(data: list, factor: int) -> list:
+        def function(data: list[int], factor: int) -> list[int]:
             return data * factor
 
         function = Function(function=function)
         process = function.process(res_inp, 10)
 
-        res_outp = cast(Resource, process(storage))
+        res_outp = process(storage)
         self.assertTrue(isinstance(res_outp, Resource))
-        self.assertTrue(res_outp.exist())
+        self.assertTrue(cast(Resource, res_outp).exist())
 
     def test_datatools_proceess_uri(self):
         storage = Storage(self.tempdir.name)
@@ -129,9 +128,9 @@ class TestDatatoolsProcessStorage(TestDatatoolsTempdir):
         uri = "http://example.com#/index.html"
         process = Process.from_uri(uri)
 
-        res_outp = cast(Resource, process(storage))
+        res_outp = process(storage)
         self.assertTrue(isinstance(res_outp, Resource))
-        self.assertTrue(res_outp.exist())
+        self.assertTrue(cast(Resource, res_outp).exist())
 
 
 class TestDatatoolsDocs(unittest.TestCase):

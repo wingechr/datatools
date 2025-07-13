@@ -1,5 +1,5 @@
 import unittest
-from typing import Callable, Union
+from typing import Any, Callable, Union
 
 from datatools.utils import (
     filepath_from_uri,
@@ -14,7 +14,7 @@ from datatools.utils import (
 
 class TestDatatoolsUtils(unittest.TestCase):
     def test_datatools_utils_jsonpath(self):
-        data = {
+        data: dict[str, Any] = {
             "key1": "value1",
             "key2": [
                 {"key3": "value3", "key4": "value4"},
@@ -33,12 +33,12 @@ class TestDatatoolsUtils(unittest.TestCase):
 
     def test_datatools_utils_get_parameters(self):
         def fun(
-            a1,  # kind=POSITIONAL_OR_KEYWORD
-            a2,  # kind=POSITIONAL_OR_KEYWORD
+            a1: Any,  # kind=POSITIONAL_OR_KEYWORD
+            a2: Any,  # kind=POSITIONAL_OR_KEYWORD
             *args: str,  # kind=VAR_POSITIONAL
             k1: Union[int, None] = None,  # kind=KEYWORD_ONLY
             k2: Union[str, None] = None,  # kind=KEYWORD_ONLY
-            **kwargs: dict,  # kind=VAR_KEYWORD
+            **kwargs: Any,  # kind=VAR_KEYWORD
         ):
             pass
 

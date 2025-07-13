@@ -1,4 +1,5 @@
 import unittest
+from typing import Any
 
 from datatools.process import Function
 
@@ -9,13 +10,13 @@ class TestDatatoolsProcess(unittest.TestCase):
 
         output = {}
 
-        def get_store_output(key):
-            def store_output(value, _metadata):
+        def get_store_output(key: Any) -> Any:
+            def store_output(value: Any, _metadata: Any) -> None:
                 output[key] = value
 
             return store_output
 
-        def get_get_int_input(value):
+        def get_get_int_input(value: Any) -> Any:
             def get_input():
                 return value
 

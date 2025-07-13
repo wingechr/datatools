@@ -58,7 +58,7 @@ class Function:
 
     def __init__(
         self,
-        function: Callable,
+        function: Callable[..., Any],
         uri: Optional[str] = None,
         name: Optional[str] = None,
         description: Optional[str] = None,
@@ -66,7 +66,7 @@ class Function:
         result_type: Optional[Type] = None,
     ):
 
-        self.function: Callable = function
+        self.function: Callable[..., Any] = function
         self.uri: str = uri or get_function_uri(function)
         self.name: str = name or self.function.__name__
         self.description: Optional[str] = description or get_function_description(
@@ -80,13 +80,13 @@ class Function:
         # set signature to underlying function (@pproperty is not working here)
         copy_signature(self, self.function)
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args: Any, **kwargs: Any):
         """Call the underlying function."""
         return self.function(*args, **kwargs)
 
     @classmethod
-    def wrap(cls) -> Callable[[Callable], "Function"]:
-        def decorator(function) -> Function:
+    def wrap(cls) -> Callable[[Callable[..., Any]], "Function"]:
+        def decorator(function: Callable[..., Any]) -> Function:
             if isinstance(function, Function):
                 return function
             return Function(function=function)
@@ -104,7 +104,7 @@ class Function:
         if isinstance(key, int):
             parameters_types = list(self.parameters_types or {})
             key = parameters_types[key]
-        return cast(str, key)
+        return key
 
     def process(self, *input_args: Any, **input_kwargs: Any) -> "Process":
         # combine args / kwargs
@@ -164,7 +164,7 @@ class Input:
 
             else:
                 # generic callable
-                read_input = input
+                read_input = cast(Callable[..., Any], input)
                 source_uri_or_literal = ""  # TODO
             if type_to is None:
                 raise TypeError(
@@ -241,7 +241,7 @@ class Output:
                 handle_output_data_metadata = resource.get_dumper(type_from=type_from)
                 result_object = resource
             elif isinstance(output, Callable):
-                handle_output_data_metadata = output
+                handle_output_data_metadata = cast(Callable[..., Any], output)
             else:
                 raise TypeError(output)
 
@@ -278,7 +278,7 @@ class Process:
         function: Function,
         inputs: dict[ParameterKey, Input],
         uri: Optional[str] = None,
-        context: Optional[MetadataDict] = None,
+        context: Optional[dict[str, Any]] = None,
     ):
         self.function = function
         self.inputs = inputs
@@ -286,9 +286,11 @@ class Process:
             function,
             inputs,
         )
-        self.context: MetadataDict = MetadataDict(context or {})
+        self.context: dict[str, Any] = context or {}
 
-    def __call__(self, *output_args, **output_kwargs) -> Union[dict, Any]:
+    def __call__(
+        self, *output_args: Any, **output_kwargs: Any
+    ) -> Union[dict[ParameterKey, Any], Any]:
         """Run the process."""
 
         # first: prepare outputs
@@ -327,12 +329,15 @@ class Process:
         result = self.function(*args, **kwargs)
 
         # create process metadata # TODO
-        dynmic_metadata = {"datetime": get_now(), "user": get_user_w_host()}
+        dynmic_metadata: dict[str, Any] = {
+            "datetime": get_now(),
+            "user": get_user_w_host(),
+        }
         metadata = self.metadata | dynmic_metadata
 
         results = {}
         for key, output in outputs.items():
-            metadata = {
+            metadata: dict[str, Any] = {
                 "@id": output.uri,
                 "@type": "Data",
                 "createdBy": metadata,
@@ -343,7 +348,7 @@ class Process:
             results[key] = output(partial_result, metadata)
 
         if None in output_args_kwargs:
-            results = results[None]
+            results: Any = results[None]
 
         return results
 
@@ -372,6 +377,6 @@ class Process:
                     }
                     for key, input in self.inputs.items()
                 ],
+                **self.context,
             }
-            | (self.context or {})
         )
