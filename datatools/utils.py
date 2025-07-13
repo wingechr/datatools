@@ -244,8 +244,8 @@ def import_module_from_path(name, filepath):
 def copy_signature(self: object, other: Callable) -> None:
 
     object.__setattr__(self, "__signature__", inspect.signature(other))
-    object.__setattr__(self, "__name__", other.__name__)
-    object.__setattr__(self, "__doc__", other.__doc__)
+    object.__setattr__(self, "__name__", get_function_name(other))
+    object.__setattr__(self, "__doc__", get_function_description(other))
     object.__setattr__(self, "__file__", get_function_filepath(other))
 
 
@@ -888,6 +888,10 @@ def get_git_info(repo_path: StrPath) -> dict:
 
 def get_function_description(function: Callable) -> Union[str, None]:
     return function.__doc__
+
+
+def get_function_name(function: Callable) -> Union[str, None]:
+    return function.__name__
 
 
 def get_module_version(func: Callable) -> Union[str, None]:

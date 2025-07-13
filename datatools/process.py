@@ -6,7 +6,7 @@ from typing import Any, Callable, Optional, Union, cast
 from datatools.base import (
     FUNCTION_URI_PREFIX,
     PROCESS_URI_PREFIX,
-    Metadata,
+    MetadataDict,
     ParameterKey,
     ParamterTypes,
     ProcessException,
@@ -118,16 +118,18 @@ class Function:
         return Process(function=self, inputs=inputs)
 
     @cached_property
-    def metadata(self) -> Metadata:
+    def metadata(self) -> MetadataDict:
         """Metadata about the function."""
-        return {
-            "@id": self.uri,
-            "@type": "Function",
-            "name": self.name,
-            "description": self.description,
-            # "parameters_types": self.parameters_types,
-            "datatype": self.result_type,
-        }
+        return MetadataDict(
+            {
+                "@id": self.uri,
+                "@type": "Function",
+                "name": self.name,
+                "description": self.description,
+                # "parameters_types": self.parameters_types,
+                "datatype": self.result_type,
+            }
+        )
 
 
 class Input:
@@ -173,12 +175,14 @@ class Input:
         return input
 
     @cached_property
-    def metadata(self) -> Metadata:
+    def metadata(self) -> MetadataDict:
         """Metadata about the function."""
-        return {
-            "source": self.source_uri_or_literal,
-            "datatype": self.type_to,
-        }
+        return MetadataDict(
+            {
+                "source": self.source_uri_or_literal,
+                "datatype": self.type_to,
+            }
+        )
 
 
 class Output:
@@ -267,7 +271,7 @@ class Process:
         function: Function,
         inputs: dict[ParameterKey, Input],
         uri: Optional[str] = None,
-        context: Optional[Metadata] = None,
+        context: Optional[MetadataDict] = None,
     ):
         self.function = function
         self.inputs = inputs
@@ -275,7 +279,7 @@ class Process:
             function,
             inputs,
         )
-        self.context: Metadata = context or {}
+        self.context: MetadataDict = MetadataDict(context or {})
 
     def __call__(self, *output_args, **output_kwargs) -> Union[dict, Any]:
         """Run the process."""
@@ -343,19 +347,22 @@ class Process:
         return process
 
     @cached_property
-    def metadata(self) -> Metadata:
+    def metadata(self) -> MetadataDict:
         """Metadata about the function."""
-        return {
-            "@id": self.uri,
-            "@type": "Process",
-            "function": self.function.metadata,
-            "input": [
-                input.metadata
-                | {
-                    "role": self.function.get_parameter_name(key),
-                    "@id": f"{self.uri}#input" + ("" if key is None else f"/{key}"),
-                    "@type": "input",
-                }
-                for key, input in self.inputs.items()
-            ],
-        } | (self.context or {})
+        return MetadataDict(
+            {
+                "@id": self.uri,
+                "@type": "Process",
+                "function": self.function.metadata,
+                "input": [
+                    input.metadata
+                    | {
+                        "role": self.function.get_parameter_name(key),
+                        "@id": f"{self.uri}#input" + ("" if key is None else f"/{key}"),
+                        "@type": "input",
+                    }
+                    for key, input in self.inputs.items()
+                ],
+            }
+            | (self.context or {})
+        )

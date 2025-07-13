@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 
 import pandas as pd
 
-from datatools import Converter, Metadata, Storage
+from datatools import Storage
 
 
 class TestDatatoolsStorage(unittest.TestCase):
@@ -75,37 +75,12 @@ class TestDatatoolsStorage(unittest.TestCase):
         res.metadata.set(datatype=pd.DataFrame)
         data = pd.DataFrame([{"a": 1, "b": 2}, {"a": 3, "b": 4}])
 
-        @Converter.register(pd.DataFrame, ".csv")
-        def df_to_csv(df: pd.DataFrame, encoding="utf-8", index=True):
-            buf = BytesIO()
-            # TODO: if index = True but has no names: generate names,
-            # otherwise they will be renamed when loading (e.g. Unnamed: 0)
-            df.to_csv(buf, encoding=encoding, index=index)
-            buf.seek(0)
-            return buf
-
-        @Converter.register(".csv", pd.DataFrame)
-        def csv_to_df(buf: BytesIO, encoding="utf-8", index_col=None):
-            if isinstance(index_col, list):
-                # if unnamed: replace with numerical index
-                index_col = [c or i for i, c in enumerate(index_col)]
-
-            df = pd.read_csv(buf, encoding=encoding, index_col=index_col)
-
-            return df
-
-        @Converter.register(pd.DataFrame, Metadata)
-        def inspect_df(df: pd.DataFrame, encoding="utf-8"):
-            return {
-                "columns": df.columns.tolist(),
-                # "dtypes": df.dtypes.to_dict(),
-                "shape": df.shape,
-                # index_col: important for loader
-                "index_col": df.index.names,
-            }
-
         # writing converter
         res.dump(data, metadata={}, encoding="utf-16")
 
-        result = res.load()
-        pd.testing.assert_frame_equal(data, result)
+        # test that metadata should also include encoding
+        self.assertEqual(res.metadata.get("encoding"), "utf-16")
+
+        df = res.load()
+
+        pd.testing.assert_frame_equal(data, df)

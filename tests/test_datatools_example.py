@@ -19,6 +19,12 @@ from datatools.utils import (
 )
 
 
+class HTTPRequestHandler(SimpleHTTPRequestHandler):
+    def log_request(self, *args, **kwargs) -> None:
+        # dont log requests im tests
+        pass
+
+
 class TestDatatoolsExample(unittest.TestCase):
 
     def setUp(self):
@@ -37,7 +43,7 @@ class TestDatatoolsExample(unittest.TestCase):
         # add webserver that will serve tempdir
         host = get_hostname()
         port = get_free_port()
-        handler_class = partial(SimpleHTTPRequestHandler, directory=self.tempdir.name)
+        handler_class = partial(HTTPRequestHandler, directory=self.tempdir.name)
         self.test_uri_http = f"http://{host}:{port}/test.xlsx"
         httpd = HTTPServer((host, port), handler_class)
         server_thread = Thread(target=httpd.serve_forever, daemon=True)
@@ -76,7 +82,6 @@ class TestDatatoolsExample(unittest.TestCase):
 
             # alternatively: dump directly into storage
             resource = cast(Resource, process(storage))
-            print(resource.name)
             df = resource.load(datatype=pd.DataFrame)
             self.assertTrue(isinstance(df, pd.DataFrame))
 

@@ -12,6 +12,7 @@ from typing import Callable, Iterable, Literal, Optional, Union, cast
 
 from datatools.base import (
     Any,
+    MetadataDict,
     MetadataKey,
     MetadataValue,
     ResourceName,
@@ -352,7 +353,7 @@ class Resource:
             convert = Converter.get(type_from=type_from, type_to=filetype)
 
         try:
-            get_metadata = Converter.get(type_from=type_from, type_to=Metadata)
+            get_metadata = Converter.get(type_from=type_from, type_to=MetadataDict)
         except KeyError:
             get_metadata = None
 

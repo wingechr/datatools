@@ -11,11 +11,12 @@ from urllib.parse import parse_qs, urlsplit
 import pandas as pd
 import requests
 
-from datatools.base import PARAM_SQL_QUERY, OptionalStr, Type
+from datatools.base import PARAM_SQL_QUERY, MetadataDict, OptionalStr, Type
 from datatools.utils import (
     copy_signature,
     filepath_from_uri,
     get_function_datatype,
+    get_function_name,
     get_function_parameters_datatypes,
     get_type_name,
     json_serialize,
@@ -67,7 +68,12 @@ class Converter:
             converter = Converter(function=function)
             for tf_tt in product(types_from, types_to):
                 if tf_tt in cls._converters:
-                    logging.warning("Overwriting exising Converter %s, %s", *tf_tt)
+                    logging.warning(
+                        "Overwriting exising Converter %s, %s (%s, %s)",
+                        *tf_tt,
+                        get_function_name(cls._converters[tf_tt]),
+                        get_function_name(converter),
+                    )
                 else:
                     logging.debug("Registering Converter %s, %s", *tf_tt)
                 cls._converters[tf_tt] = converter
@@ -179,25 +185,34 @@ def dataframe_to_json(df: pd.DataFrame) -> BufferedIOBase:
 
 
 @Converter.register(".json", pd.DataFrame)
-def json_to_dataframe(buffer: BufferedIOBase) -> pd.DataFrame:
-    return pd.read_json(buffer)
+def json_to_dataframe(buffer: BufferedIOBase, encoding: str = "utf-8") -> pd.DataFrame:
+    with TextIOWrapper(buffer, encoding=encoding) as text_buffer:  # type: ignore
+        return pd.read_json(text_buffer)
 
 
 @Converter.register(".csv", pd.DataFrame)
-def csv_to_dataframe(buffer: BufferedIOBase) -> pd.DataFrame:
-    return pd.read_csv(buffer)
+def csv_to_dataframe(
+    buffer: BufferedIOBase, encoding: str = "utf-8", index_col=None
+) -> pd.DataFrame:
+    with TextIOWrapper(buffer, encoding=encoding) as text_buffer:  # type: ignore
+        df = pd.read_csv(text_buffer, index_col=index_col)
+    return df
 
 
 @Converter.register(".xlsx", pd.DataFrame)
 def xlsx_to_dataframe(buffer: BufferedIOBase) -> pd.DataFrame:
-    return pd.read_excel(buffer)
+    with buffer:
+        return pd.read_excel(buffer)
 
 
 @Converter.register(sql_protocols, None)
 def sql_download(uri: str) -> pd.DataFrame:
     """Copy data from sql database"""
     query = parse_qs(urlsplit(uri).query)
-    sql_query = query.get(PARAM_SQL_QUERY)[0]
+    sql_query = query.get(PARAM_SQL_QUERY)
+    if not sql_query:
+        raise ValueError("Missing sql query")
+    sql_query = sql_query[0]
     df = pd.read_sql(sql_query, uri)
     return df
 
@@ -206,3 +221,26 @@ def sql_download(uri: str) -> pd.DataFrame:
 def get_handler(url: str) -> Callable:
     scheme = url.split(":")[0]
     return Converter.get(f"{scheme}:", None)
+
+
+@Converter.register(pd.DataFrame, MetadataDict)
+def inspect_df(df: pd.DataFrame):
+    index_col = [c if c is not None else 0 for c in df.index.names]
+
+    return {
+        "columns": df.columns.tolist(),
+        # "dtypes": df.dtypes.to_dict(),
+        "shape": df.shape,
+        # index_col: important for loader
+        "index_col": index_col,
+    }
+
+
+@Converter.register(pd.DataFrame, ".csv")
+def df_to_csv(df: pd.DataFrame, encoding="utf-8", index=True):
+    buf = BytesIO()
+    # TODO: if index = True but has no names: generate names,
+    # otherwise they will be renamed when loading (e.g. Unnamed: 0)
+    df.to_csv(buf, encoding=encoding, index=index)
+    buf.seek(0)
+    return buf

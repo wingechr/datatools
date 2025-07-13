@@ -1,17 +1,14 @@
 import os
 from io import DEFAULT_BUFFER_SIZE as _DEFAULT_BUFFER_SIZE
 from pathlib import Path
-from typing import Any, Callable, Union
-from urllib.parse import ParseResult
+from typing import Any, Callable, Dict, Union
 
 import appdirs
 
-Url = ParseResult
 Type = Union[type, str, None, type(Callable)]
 ResourceName = str
 MetadataKey = str
 MetadataValue = Any
-Metadata = dict[str, Any]
 ParameterKey = Union[None, int, str]
 ParamterTypes = dict[str, Type]
 OptionalStr = Union[str, None]
@@ -42,6 +39,10 @@ ANONYMOUS_USER = "Anonymous"
 LOCALHOST = "localhost"
 STORAGE_SCHEME = "data"
 RESOURCE_URI_PREFIX = f"{STORAGE_SCHEME}:///"
+
+
+class MetadataDict(Dict):
+    pass
 
 
 class DatatoolsException(Exception):
