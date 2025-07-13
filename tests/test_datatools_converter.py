@@ -1,19 +1,12 @@
 # coding: utf-8
 
 import unittest
-from tempfile import TemporaryDirectory
 from typing import Callable
 
 from datatools import Converter
 
 
 class TestDatatoolsConverter(unittest.TestCase):
-    def setUp(self):
-        self.tempdir = TemporaryDirectory()
-
-    def tearDown(self):
-        self.tempdir.cleanup()
-
     def test_datatools_converter_basics(self):
 
         @Converter.register(str, int)
@@ -30,3 +23,12 @@ class TestDatatoolsConverter(unittest.TestCase):
         url = "http://example.com"
         handler = Converter.convert_to(url, Callable)
         self.assertTrue(isinstance(handler, Callable))
+
+    def test_datatools_converter_keep_signature(self):
+        def fun(a: str) -> float:
+            return float(a)
+
+        fun2 = Converter.autoregister(fun)
+
+        # check if it also works after we decorate it as Converter
+        self.assertEqual(fun.__annotations__, fun2.__annotations__)

@@ -28,9 +28,8 @@ GLOBAL_LOCATION = os.path.join(
     "data",
 )
 DEFAULT_LOCAL_LOCATION = "__data__"
-# default is 1024 * 8
-# wsgi often uses 1024 * 16
-DEFAULT_BUFFER_SIZE = _DEFAULT_BUFFER_SIZE
+
+DEFAULT_BUFFER_SIZE = _DEFAULT_BUFFER_SIZE  # default is 1024 * 8, wsgi uses 1024 * 16
 DATETIMETZ_FMT = "%Y-%m-%dT%H:%M:%S%z"
 DATE_FMT = "%Y-%m-%d"
 TIME_FMT = "%H:%M:%S"

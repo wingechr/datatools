@@ -1,5 +1,3 @@
-# coding: utf-8
-
 import os
 import unittest
 from io import BytesIO
@@ -7,7 +5,7 @@ from tempfile import TemporaryDirectory
 
 import pandas as pd
 
-from datatools import Storage
+from datatools.storage import Storage
 
 
 class TestDatatoolsStorage(unittest.TestCase):

@@ -9,7 +9,7 @@ from typing import cast
 import pandas as pd
 
 from datatools.base import PARAM_SQL_QUERY
-from datatools.process import Process
+from datatools.process import Function, Process
 from datatools.storage import Resource, Storage
 from datatools.utils import (
     filepath_abs_to_uri,
@@ -86,6 +86,66 @@ class TestDatatoolsExample(unittest.TestCase):
             self.assertTrue(isinstance(df, pd.DataFrame))
 
 
+class TestDatatoolsProcessStorage(unittest.TestCase):
+    def setUp(self):
+        self.tempdir = TemporaryDirectory()
+
+    def tearDown(self):
+        self.tempdir.cleanup()
+
+    def test_datatools_proceess_resource(self):
+
+        storage = Storage(self.tempdir.name)
+
+        res_inp = storage.resource("input.json")
+        res_outp = storage.resource("output.json")
+
+        res_inp.dump([1, 2, 3])
+
+        def function(data: list, factor: int) -> list:
+            return data * factor
+
+        func = Function(function=function)
+        proc = func.process(res_inp, 10)
+
+        self.assertFalse(res_outp.exist())
+        proc(res_outp)
+        self.assertTrue(res_outp.exist())
+        # cannot run process again, because resource already exists
+        self.assertRaises(Exception, proc, res_outp)
+
+    def test_datatools_proceess_storage(self):
+
+        storage = Storage(self.tempdir.name)
+
+        res_inp = storage.resource("input.json")
+        res_inp.dump([1, 2, 3])
+
+        def function(data: list, factor: int) -> list:
+            return data * factor
+
+        function = Function(function=function)
+        process = function.process(res_inp, 10)
+
+        # use Storage as output: auto generate resource name from output uri
+        # TODO: does not work yet because converter detection requires
+        # knowledge of filetype
+
+        res_outp = cast(Resource, process(storage))
+        self.assertTrue(isinstance(res_outp, Resource))
+        self.assertTrue(res_outp.exist())
+
+    def test_datatools_proceess_uri(self):
+        storage = Storage(self.tempdir.name)
+
+        uri = "http://example.com#/index.html"
+        process = Process.from_uri(uri)
+
+        res_outp = cast(Resource, process(storage))
+        self.assertTrue(isinstance(res_outp, Resource))
+        self.assertTrue(res_outp.exist())
+
+
 class TestDatatoolsDocs(unittest.TestCase):
-    def test_datatools_example_docs(self):
+    def test_datatools_docs(self):
         import_module_from_path("example", "docs/example.py")

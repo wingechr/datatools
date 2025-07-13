@@ -13,6 +13,7 @@ dependencies = [
     "jsonpath-ng>=1.7.0",
     "openpyxl>=3.1.5",
     "pandas>=2",
+    "rdflib>=7.1.4",
     "requests>=2",
     "sqlalchemy>=2.0.41",
     "sqlparse>=0.5.3",

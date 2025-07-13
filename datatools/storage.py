@@ -19,7 +19,7 @@ from datatools.base import (
     StorageException,
     Type,
 )
-from datatools.process import Converter
+from datatools.converter import Converter
 from datatools.utils import (
     cache,
     get_filetype_from_filename,

@@ -247,6 +247,7 @@ def copy_signature(self: object, other: Callable) -> None:
     object.__setattr__(self, "__name__", get_function_name(other))
     object.__setattr__(self, "__doc__", get_function_description(other))
     object.__setattr__(self, "__file__", get_function_filepath(other))
+    object.__setattr__(self, "__annotations__", other.__annotations__)
 
 
 def passthrough(x: Any) -> Any:

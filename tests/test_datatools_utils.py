@@ -1,12 +1,8 @@
-# coding: utf-8
-
 import unittest
 from typing import Callable, Union
 
-from datatools import Converter
 from datatools.utils import (
     filepath_from_uri,
-    get_function_parameters_datatypes,
     get_keyword_only_parameters_types,
     get_resource_path_name,
     get_suffix,
@@ -48,18 +44,7 @@ class TestDatatoolsUtils(unittest.TestCase):
 
         self.assertEqual(get_keyword_only_parameters_types(fun, min_idx=4), ["k2"])
 
-    def test_get_parameters_types(self):
-        def fun(a: str) -> float:
-            return float(a)
-
-        self.assertEqual(get_function_parameters_datatypes(fun), {"a": str})
-
-        # check if it also works after we decorate it as Converter
-        fun = Converter.autoregister(fun)
-
-        self.assertEqual(get_function_parameters_datatypes(fun), {"a": str})
-
-    def test_is_type(self):
+    def test_datatools_utils_is_type(self):
         self.assertTrue(is_type_class(int))
         self.assertFalse(is_type_class("test"))
         self.assertFalse(is_type_class(None))
@@ -76,7 +61,7 @@ class TestDatatoolsUtils(unittest.TestCase):
         self.assertEqual(filepath_from_uri("file:///path").as_posix(), "/path")
         self.assertEqual(filepath_from_uri("file://host/path").as_posix(), "/path")
 
-    def test_get_suffix(self):
+    def test_datatools_utils_get_suffix(self):
         self.assertEqual(get_suffix("file.suffix"), ".suffix")
         self.assertEqual(get_suffix("path.path/file.suffix"), ".suffix")
         self.assertEqual(get_suffix("path.path/file.x.suffix"), ".x.suffix")
