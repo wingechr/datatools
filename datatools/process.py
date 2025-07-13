@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional, Union, cast
 
 from datatools.base import (
+    DEFAULT_HASH_METHOD,
     FUNCTION_URI_PREFIX,
     PROCESS_URI_PREFIX,
     MetadataDict,
@@ -82,7 +83,7 @@ class Function:
         return self.function(*args, **kwargs)
 
     @classmethod
-    def wrap(cls) -> Callable:
+    def wrap(cls) -> Callable[[Callable], "Function"]:
         def decorator(function) -> Function:
             if isinstance(function, Function):
                 return function
@@ -223,7 +224,9 @@ class Output:
                 # until we find a better solution, we use ths storages default
                 storage = output
                 # generate a unique (file)-name automatically
-                process_uri_hash = hashlib.md5(process.uri.encode()).hexdigest()
+                process_uri_hash = getattr(hashlib, DEFAULT_HASH_METHOD)(
+                    process.uri.encode()
+                ).hexdigest()
                 suffix = get_suffix(process.uri) or storage.default_filetype
 
                 # TODO: maybe get process_uri hash, not output uri hash
@@ -327,6 +330,7 @@ class Process:
         for key, output in outputs.items():
             metadata = {
                 "@id": output.uri,
+                "@type": "Data",
                 "createdBy": metadata,
                 "datatype": output.type_from,
             }
@@ -359,7 +363,7 @@ class Process:
                     | {
                         "role": self.function.get_parameter_name(key),
                         "@id": f"{self.uri}#input" + ("" if key is None else f"/{key}"),
-                        "@type": "input",
+                        "@type": "Data",
                     }
                     for key, input in self.inputs.items()
                 ],

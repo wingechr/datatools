@@ -13,6 +13,7 @@ ParameterKey = Union[None, int, str]
 ParamterTypes = dict[str, Type]
 OptionalStr = Union[str, None]
 StrPath = Union[Path, str]
+
 FUNCTION_URI_PREFIX = "function://"
 PROCESS_URI_PREFIX = "process://"
 PARAM_SQL_QUERY = "q"
@@ -20,7 +21,7 @@ ROOT_METADATA_PATH = "$"  # root
 MEDIA_TYPE_METADATA_PATH = "mediaType"
 HASHED_DATA_PATH_PREFIX = "hash"
 HASH_METHODS = ["md5", "sha256"]
-DEFAULT_HASH_METHOD = HASH_METHODS[0]
+DEFAULT_HASH_METHOD: str = HASH_METHODS[0]
 GLOBAL_LOCATION = os.path.join(
     appdirs.user_data_dir(
         appname="datatools", appauthor=None, version=None, roaming=False
@@ -28,7 +29,6 @@ GLOBAL_LOCATION = os.path.join(
     "data",
 )
 DEFAULT_LOCAL_LOCATION = "__data__"
-
 DEFAULT_BUFFER_SIZE = _DEFAULT_BUFFER_SIZE  # default is 1024 * 8, wsgi uses 1024 * 16
 DATETIMETZ_FMT = "%Y-%m-%dT%H:%M:%S%z"
 DATE_FMT = "%Y-%m-%d"
@@ -40,7 +40,7 @@ STORAGE_SCHEME = "data"
 RESOURCE_URI_PREFIX = f"{STORAGE_SCHEME}:///"
 
 
-class MetadataDict(Dict):
+class MetadataDict(Dict[str, Any]):
     pass
 
 

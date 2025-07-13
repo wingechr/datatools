@@ -67,7 +67,7 @@ def cache(func: Callable) -> Callable:
     result = func
     result = functools.cache(func)
     # none of these work for IDE intellisense:
-    # result = functools.wraps(func)(result)
+    result = functools.wraps(func)(result)
     # copy_signature(result, func)
     return result
 
@@ -243,11 +243,11 @@ def import_module_from_path(name, filepath):
 
 def copy_signature(self: object, other: Callable) -> None:
 
-    object.__setattr__(self, "__signature__", inspect.signature(other))
-    object.__setattr__(self, "__name__", get_function_name(other))
-    object.__setattr__(self, "__doc__", get_function_description(other))
-    object.__setattr__(self, "__file__", get_function_filepath(other))
-    object.__setattr__(self, "__annotations__", other.__annotations__)
+    setattr(self, "__signature__", inspect.signature(other))
+    setattr(self, "__name__", get_function_name(other))
+    setattr(self, "__doc__", get_function_description(other))
+    setattr(self, "__file__", get_function_filepath(other))
+    setattr(self, "__annotations__", other.__annotations__)
 
 
 def passthrough(x: Any) -> Any:
@@ -916,7 +916,7 @@ def get_module_version(func: Callable) -> Union[str, None]:
 
 def get_function_filepath(function: Callable) -> str:
     try:
-        return function.__file__
+        return getattr(function, "__file__")
     except AttributeError:
         return inspect.getfile(function)
 

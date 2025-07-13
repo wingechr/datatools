@@ -1,21 +1,13 @@
-import os
-import unittest
 from io import BytesIO
-from tempfile import TemporaryDirectory
 
 import pandas as pd
 
 from datatools.storage import Storage
 
+from . import TestDatatoolsTempdir
 
-class TestDatatoolsStorage(unittest.TestCase):
-    def setUp(self):
-        self.tempdir = TemporaryDirectory()
-        assert os.path.exists(self.tempdir.name)
 
-    def tearDown(self):
-        self.tempdir.cleanup()
-        assert not os.path.exists(self.tempdir.name)
+class TestDatatoolsStorage(TestDatatoolsTempdir):
 
     def test_datatools_storage_basics(self):
         storage = Storage(location=self.tempdir.name)

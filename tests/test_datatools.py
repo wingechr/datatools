@@ -2,7 +2,6 @@ import unittest
 from functools import partial
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from threading import Thread
 from typing import cast
 
@@ -18,6 +17,8 @@ from datatools.utils import (
     import_module_from_path,
 )
 
+from . import TestDatatoolsTempdir
+
 
 class HTTPRequestHandler(SimpleHTTPRequestHandler):
     def log_request(self, *args, **kwargs) -> None:
@@ -25,11 +26,10 @@ class HTTPRequestHandler(SimpleHTTPRequestHandler):
         pass
 
 
-class TestDatatoolsExample(unittest.TestCase):
+class TestDatatoolsExample(TestDatatoolsTempdir):
 
     def setUp(self):
-        # create temp dir that will be deleted after end of test
-        self.tempdir = TemporaryDirectory()
+        super().setUp()
 
         # test data
         self.df_test = pd.DataFrame([{"key": 1}, {"key": 2}])
@@ -58,10 +58,6 @@ class TestDatatoolsExample(unittest.TestCase):
         )
         self.df_test.to_sql("test", self.test_uri_sql)
 
-    def tearDown(self):
-        self.tempdir.cleanup()
-        # server thread and memory database will be cleaned up automatically
-
     def test_datatools_example(self):
         # create project storage
         storage = Storage(self.tempdir.name + "/__data__")
@@ -86,12 +82,7 @@ class TestDatatoolsExample(unittest.TestCase):
             self.assertTrue(isinstance(df, pd.DataFrame))
 
 
-class TestDatatoolsProcessStorage(unittest.TestCase):
-    def setUp(self):
-        self.tempdir = TemporaryDirectory()
-
-    def tearDown(self):
-        self.tempdir.cleanup()
+class TestDatatoolsProcessStorage(TestDatatoolsTempdir):
 
     def test_datatools_proceess_resource(self):
 
@@ -126,10 +117,6 @@ class TestDatatoolsProcessStorage(unittest.TestCase):
 
         function = Function(function=function)
         process = function.process(res_inp, 10)
-
-        # use Storage as output: auto generate resource name from output uri
-        # TODO: does not work yet because converter detection requires
-        # knowledge of filetype
 
         res_outp = cast(Resource, process(storage))
         self.assertTrue(isinstance(res_outp, Resource))
