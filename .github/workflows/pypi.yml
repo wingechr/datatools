@@ -10,13 +10,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: "3.x"
-      - run: pip install uv
-      - run: uv build
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+      - run: |
+          pip install build
+          python -m build
+      - uses: pypa/gh-action-pypi-publish@release/v1.8.8
         with:
           skip-existing: true
           password: ${{ secrets.PYPI_API_TOKEN }}

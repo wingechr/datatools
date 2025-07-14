@@ -10,15 +10,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: "3.x"
-          cache: "pip" # caching pip dependencies
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
       - run: |
-          pushd docs
-          pip install -r requirements.txt
-          export JUPYTER_PLATFORM_DIRS=1
-          jupyter --paths
+          pip install uv
+          uv sync --group docs
+      - run: |
           mkdocs gh-deploy --force
-          popd
