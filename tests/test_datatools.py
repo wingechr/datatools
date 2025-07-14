@@ -32,7 +32,7 @@ class TestDatatoolsExample(TestDatatoolsTempdir):
         super().setUp()
 
         # test data
-        self.df_test = pd.DataFrame([{"key": 1}, {"key": 2}])
+        self.df_test = pd.DataFrame([{"value": 1}, {"value": 2}])
 
         # create csv file
         test_csv_path = self.tempdir.name + "/test.csv"
@@ -64,22 +64,43 @@ class TestDatatoolsExample(TestDatatoolsTempdir):
 
         # auto import remote data from file, database, website
         # into storage
+        resources = []
+
         for uri, name in [
             (self.test_uri_file, "extern/test.csv"),
             (self.test_uri_http, "extern/test.xlsx"),
             (self.test_uri_sql, "extern/test.json"),
         ]:
-            resource = storage.resource(name)
+            resource1 = storage.resource(name)
             process = Process.from_uri(uri)
 
-            process(resource)
-            df = resource.load(datatype=pd.DataFrame)
-            self.assertTrue(isinstance(df, pd.DataFrame))
+            process(resource1)
+            df1 = resource1.load(datatype=pd.DataFrame)
+            self.assertTrue(isinstance(df1, pd.DataFrame))
 
             # alternatively: dump directly into storage
-            resource = cast(Resource, process(storage))
-            df = resource.load(datatype=pd.DataFrame)
-            self.assertTrue(isinstance(df, pd.DataFrame))
+            resource2 = cast(Resource, process(storage))
+            df2 = resource2.load(datatype=pd.DataFrame)
+            self.assertTrue(isinstance(df2, pd.DataFrame))
+            resources.append(resource2)
+
+            pd.testing.assert_frame_equal(df1, df2)
+
+        # set index_col manually in metadata
+        # so it will be available when opening
+        resources[0].metadata.set(index_col=0)
+        resources[1].metadata.set(index_col=0)
+
+        # now, use resources to create a new one
+        def test_combine_dfs(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
+            return df1 + df2
+
+        process = Function(test_combine_dfs).process(resources[0], resources[1])
+        resource = storage.resource("result/test.xlsx")
+        process(resource)
+
+        df = resource.load()
+        pd.testing.assert_frame_equal(self.df_test * 2, df)
 
 
 class TestDatatoolsProcessStorage(TestDatatoolsTempdir):

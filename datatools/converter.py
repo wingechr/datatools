@@ -218,9 +218,19 @@ def csv_to_dataframe(
 
 
 @Converter.register(".xlsx", pd.DataFrame)
-def xlsx_to_dataframe(buffer: BufferedIOBase) -> pd.DataFrame:
+def xlsx_to_dataframe(
+    buffer: BufferedIOBase, index_col: Optional[list[ParameterKey]] = None
+) -> pd.DataFrame:
     with buffer:
-        return pd.read_excel(buffer)  # type:ignore
+        return pd.read_excel(buffer, index_col=index_col)  # type:ignore
+
+
+@Converter.register(pd.DataFrame, ".xlsx")
+def dataframe_to_xlsx(df: pd.DataFrame) -> BufferedIOBase:
+    buffer = BytesIO()
+    df.to_excel(buffer)
+    buffer.seek(0)
+    return buffer
 
 
 @Converter.register_uri_handler(sql_protocols)
