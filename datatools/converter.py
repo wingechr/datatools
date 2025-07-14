@@ -34,9 +34,7 @@ __all__ = ["Converter"]
 
 
 def clean_type(dtype: Type) -> OptionalStr:
-    if isinstance(dtype, type):
-        return get_type_name(dtype)
-    return dtype
+    return get_type_name(dtype)
 
 
 def get_cleaned_type_list(types: Union[Type, list[Type]]) -> list[OptionalStr]:
