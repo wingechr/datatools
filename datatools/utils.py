@@ -161,7 +161,7 @@ def is_type_class(x: Any) -> bool:
     if inspect.isclass(x):
         return True
     # special case: typping classes are not real classes
-    if type(x).__module__ == "typing":
+    if type(x).__module__ in {"typing", "types"}:
         return True
     return False
 

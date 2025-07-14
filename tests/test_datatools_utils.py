@@ -6,6 +6,7 @@ from datatools.utils import (
     get_keyword_only_parameters_types,
     get_resource_path_name,
     get_suffix,
+    get_type_name,
     is_type_class,
     jsonpath_get,
     jsonpath_update,
@@ -50,6 +51,8 @@ class TestDatatoolsUtils(unittest.TestCase):
         self.assertFalse(is_type_class(None))
         self.assertTrue(is_type_class(Callable))
         self.assertTrue(is_type_class(Union[str, None]))
+        self.assertTrue(is_type_class(list[int]))
+        self.assertTrue(is_type_class(dict[int, int]))
 
     def test_datatools_utils_get_resource_path_name(self):
         for name, valid_name in [("A", "a")]:
@@ -66,3 +69,9 @@ class TestDatatoolsUtils(unittest.TestCase):
         self.assertEqual(get_suffix("path.path/file.suffix"), ".suffix")
         self.assertEqual(get_suffix("path.path/file.x.suffix"), ".x.suffix")
         self.assertEqual(get_suffix("path.path#file.suffix"), ".suffix")
+
+    def test_datatools_utils_get_type_name(self):
+        self.assertEqual(get_type_name(list), "builtins.list")
+        self.assertEqual(get_type_name(list[int]), "builtins.list")
+        self.assertEqual(get_type_name(dict[str, str]), "builtins.dict")
+        self.assertEqual(get_type_name("list"), "list")
