@@ -14,6 +14,6 @@ jobs:
       - uses: actions/setup-python@v5
       - run: |
           pip install uv
-          uv sync --group docs
+          uv venv install --no-default --group docs
       - run: |
-          mkdocs gh-deploy --force
+          uv venv run mkdocs gh-deploy --force
