@@ -3,10 +3,8 @@ name = "wingechr-datatools"
 version = "0.14.0"
 description = "TODO"
 readme = "README.md"
-requires-python = ">=3.9,<3.14"
-authors = [
-  { name="Christian Winger", email="c@wingechr.de" }
-]
+requires-python = ">=3.10,<3.14"
+authors = [{ name = "Christian Winger", email = "c@wingechr.de" }]
 dependencies = [
     "appdirs>=1.4.4",
     "chardet>=5.2.0",
@@ -21,24 +19,39 @@ dependencies = [
     "tzlocal>=5.3.1",
     "unidecode>=1.4.0",
 ]
-[project.urls]
-[tool.setuptools]
-packages = ["datatools"]
-
 [dependency-groups]
 dev = [
     "bumpversion>=0.6.0",
     "pre-commit>=4.2.0",
-    "tox>=4",
     "tox-uv>=1.26.1",
+    "tox>=4",
     "uv>=0.7.19",
     "vulture>=2.14",
+    "poethepoet>=0.38.0",
 ]
 docs = [
     "mdx-truly-sane-lists>=1.3",
     "mistune~=2.0",
     "mkdocs>=1.6",
-    "mkdocs-material", # NOTE problems installing in windows
+    "mkdocs-material",           # NOTE problems installing in windows
     "mkdocstrings-python>=1.16",
     "pymdown-extensions>=10.16",
 ]
+[tool.setuptools.packages.find]
+include = ["datatools"]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project.scripts]
+
+[tool.tox]
+envlist = ["py310", "py313"]
+requires = ["tox-uv>=1.0"]
+
+[tool.tox.testenv]
+commands = ["python -m unittest"]
+
+[tool.poe.tasks.test]
+cmd = "tox"
