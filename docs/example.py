@@ -1,3 +1,6 @@
+"""Example script."""
+
 from datatools import test
 
-assert test()
+if not test():
+    raise Exception()

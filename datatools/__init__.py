@@ -9,7 +9,7 @@ def test():
     """Example:
 
     >>> test()
-    False
+    True
 
     """
     return True
