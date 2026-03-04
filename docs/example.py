@@ -1,1 +1,3 @@
-from datatools import Function, Storage  # noqa: F401
+from datatools import test
+
+assert test()

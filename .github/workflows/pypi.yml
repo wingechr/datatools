@@ -14,7 +14,9 @@ jobs:
       - uses: actions/setup-python@v5
       - run: |
           pip install uv
-          uv build
+          uv sync only-groups=tasks only-groups=build
+      - run: |
+          uv run poe
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           skip-existing: true

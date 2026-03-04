@@ -36,6 +36,7 @@ plugins:
       handlers:
         python:
           # either install package or provide path here
+          # relative to from inside docs/ foldler (example.py)
           paths: ["../datatools"]
           options:
             filters:

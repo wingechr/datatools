@@ -18,6 +18,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: |
-          pip install tox
+          pip install uv
+          uv sync --only-group=poe --only-group=test
       - run: |
-          tox
+          uv run poe test
