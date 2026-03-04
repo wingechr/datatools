@@ -1,6 +1,6 @@
 """Example script."""
 
-from datatools import test
+from datatools import self_check
 
-if not test():
+if not self_check():
     raise Exception()

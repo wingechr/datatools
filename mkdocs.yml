@@ -37,7 +37,7 @@ plugins:
         python:
           # either install package or provide path here
           # relative to from inside docs/ foldler (example.py)
-          paths: ["../datatools"]
+          #paths: ["../datatools"]
           options:
             filters:
               - "!^_[^_]"
@@ -50,3 +50,8 @@ plugins:
             show_signature_annotations: true
   - search:
       lang: en
+
+nav:
+  - index.md
+  - example.md
+  - api.md

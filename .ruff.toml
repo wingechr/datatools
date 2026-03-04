@@ -13,6 +13,7 @@ ignore = [
   "D401", # non-imperative-mood
   "D403", # first-word-uncapitalized
   "D415", # missing-terminal-punctuation
+  "D412", # otherwise docstring tests will be badly formatted - we need empty line
   #"S101", # assert
   "S113", # request-without-timeout
   "S310", # suspicious-url-open-usage

@@ -26,4 +26,4 @@ class TestDocsExample(unittest.TestCase):
 
     def test_main_test(self):
         """Run tets() function from main"""
-        self.assertTrue(datatools.test())
+        self.assertTrue(datatools.self_check())

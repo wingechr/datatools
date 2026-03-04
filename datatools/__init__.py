@@ -5,11 +5,17 @@ __version__ = "0.14.0"
 __all__ = []
 
 
-def test():
-    """Example:
+def self_check():
+    """check that setup is working.
 
-    >>> test()
-    True
+    Example:
+
+        >>> self_check()
+        True
 
     """
     return True
+
+
+# self check on import
+self_check()
