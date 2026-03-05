@@ -6,7 +6,7 @@
 [![test](https://github.com/wingechr/datatools/actions/workflows/test.yml/badge.svg)](https://github.com/wingechr/datatools/actions/workflows/test.yml)
 [![snyk](https://snyk.io/test/github/wingechr/datatools/badge.svg)](https://snyk.io/test/github/wingechr/datatools)
 [![codecov](https://codecov.io/gh/wingechr/datatools/branch/dev/graph/badge.svg)](https://codecov.io/gh/wingechr/datatools)
-[![license](https://img.shields.io/github/license/wingechr/datatools?style=flat&logo=opensourceinitiative&logoColor=white)](https://github.com/wingechr/datatools/blob/main/LICENSE)
+[![license](https://img.shields.io/github/license/wingechr/datatools?style=flat&logo=opensourceinitiative&logoColor=white)](https://github.com/wingechr/datatools/blob/dev/LICENSE)
 
 ## Installation
 
