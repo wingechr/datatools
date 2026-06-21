@@ -96,3 +96,8 @@ def wrap_exception(function: Callable[[], None], debug: bool = True):
         else:
             logging.error(e)
         sys.exit(1)
+
+
+def parse_cmd_vals(arguments: list[str]) -> dict[str, str]:
+    """TODO"""
+    return dict(kv.split("=", 1) for kv in arguments)

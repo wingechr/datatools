@@ -48,19 +48,19 @@ class MetadataStorage(AbstractContextManager):
     """Abstract metadata storage."""
 
     @abstractmethod
-    def _getitem(self, attribtue: MetadataAttribute) -> Iterable[MetadataValue]: ...
+    def _getitem(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]: ...
 
     @abstractmethod
-    def _setitem(self, attribtue: MetadataAttribute, value: MetadataValue) -> None: ...
+    def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None: ...
 
     def _match(self, **filters: MetadataValue) -> bool:
         return all(value in self[attribute] for attribute, value in filters.items())
 
-    def __getitem__(self, attribtue: MetadataAttribute) -> Iterable[MetadataValue]:
-        return self._getitem(attribtue=attribtue)
+    def __getitem__(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
+        return self._getitem(attribute=attribute)
 
-    def __setitem__(self, attribtue: MetadataAttribute, value: MetadataValue) -> None:
-        return self._setitem(attribtue=attribtue, value=value)
+    def __setitem__(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
+        return self._setitem(attribute=attribute, value=value)
 
     def __enter__(self) -> "MetadataStorage":
         return self
@@ -72,7 +72,6 @@ class MetadataStorage(AbstractContextManager):
 class DataStorage(ABC, Generic[Data]):
     """Abstract data storage."""
 
-    @abstractmethod
     def __init__(self, location: Any = None):
         self._location = location
 
@@ -146,3 +145,7 @@ class DataStorage(ABC, Generic[Data]):
 
     def __str__(self) -> str:
         return f"{self.__class__.__name__}({self._location})"
+
+    def info(self) -> dict:
+        """TODO"""
+        return {"Location": str(self._location), "Class": str(self.__class__.__name__)}

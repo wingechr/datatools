@@ -4,7 +4,9 @@ from collections.abc import Iterable
 import logging
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+
+import httpx
 
 from ..utils import TextFile
 from .types import (
@@ -23,15 +25,15 @@ class MemoryMetadataStorage(MetadataStorage):
     def __init__(self, data: dict | None = None):
         self._data = {} if data is None else data
 
-    def _getitem(self, attribtue: MetadataAttribute) -> Iterable[MetadataValue]:
-        value = self._data.get(attribtue)
+    def _getitem(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
+        value = self._data.get(attribute)
         if value is None:
             return []
         else:
             return [value]
 
-    def _setitem(self, attribtue: MetadataAttribute, value: MetadataValue) -> None:
-        self._data[attribtue] = value
+    def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
+        self._data[attribute] = value
 
 
 class JsonFileMetadataStorage(MetadataStorage):
@@ -59,12 +61,12 @@ class JsonFileMetadataStorage(MetadataStorage):
             self._file.dump_json(self._storage._data)
         self._changed = False
 
-    def _getitem(self, attribtue: MetadataAttribute) -> Iterable[MetadataValue]:
-        return self._storage._getitem(attribtue)
+    def _getitem(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
+        return self._storage._getitem(attribute)
 
-    def _setitem(self, attribtue: MetadataAttribute, value: MetadataValue) -> None:
+    def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
         self._changed = True
-        return self._storage._setitem(attribtue, value)
+        return self._storage._setitem(attribute, value)
 
 
 class MemoryDataStorage(DataStorage[Any]):
@@ -153,3 +155,68 @@ class FileDataStorage(DataStorage[bytes]):
         if abs_path.exists() and not abs_path.is_file():
             raise StorageInvalidUidError(f"uid is cannot be a file: {uid}", uid=UID())
         return UID(abs_path.relative_to(self._location))
+
+
+class HttpMetadataStorage(MetadataStorage):
+    """TODO"""
+
+    def __init__(self, url: str):
+        self._location = url
+
+    def _request(
+        self,
+        path: str = "/",
+        method: Literal["GET", "PUT", "POST", "DELETE", "HEAD", "PATCH"] = "GET",
+        params: dict | None = None,
+        data: dict | None = None,
+    ):
+        url = self._location + path
+        resp = httpx.request(method=method, url=url, params=params, data=data)
+        resp.raise_for_status()
+        return resp
+
+    def _getitem(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
+        return self._request(params={"a": attribute}).json()
+
+    def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
+        self._request(method="POST", data={attribute: value})
+
+
+class HttpDataStorage(DataStorage[bytes]):
+    """TODO"""
+
+    def _request(
+        self,
+        path: str = "/",
+        method: Literal["GET", "PUT", "POST", "DELETE", "HEAD", "PATCH"] = "GET",
+        params: dict | None = None,
+        data: bytes | None = None,
+    ):
+        url = self._location + path
+        resp = httpx.request(method=method, url=url, params=params, content=data)
+        resp.raise_for_status()
+        return resp
+
+    def _contains(self, uid: UID) -> bool:
+        resp = self._request(path=f"/{uid}", method="HEAD")
+        return resp.is_success
+
+    def _getitem(self, uid: UID) -> bytes:
+        resp = self._request(path=f"/{uid}", method="GET")
+        return resp.content
+
+    def _setitem(self, uid: UID, data: bytes) -> None:
+        self._request(path=f"/{uid}", method="PUT", data=data)
+
+    def _delitem(self, uid: UID) -> None:
+        self._request(path=f"/{uid}", method="DELETE")
+
+    def _iter(self) -> Iterable[UID]:
+        return self._list()
+
+    def _list(self, **filters: MetadataValue) -> Iterable[UID]:
+        return self._request(path="/").json()
+
+    def _metadata(self, uid: UID) -> HttpMetadataStorage:
+        url = self._location + f"/{uid}/metadata"
+        return HttpMetadataStorage(url)
