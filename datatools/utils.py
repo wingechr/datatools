@@ -4,6 +4,7 @@ from collections.abc import Callable
 import json
 import logging
 from pathlib import Path
+import socket
 import sys
 from typing import Literal
 
@@ -101,3 +102,11 @@ def wrap_exception(function: Callable[[], None], debug: bool = True):
 def parse_cmd_vals(arguments: list[str]) -> dict[str, str]:
     """TODO"""
     return dict(kv.split("=", 1) for kv in arguments)
+
+
+def get_free_port() -> int:
+    """TODO"""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("localhost", 0))  # 0 = let the OS choose
+        port = s.getsockname()[1]
+    return port

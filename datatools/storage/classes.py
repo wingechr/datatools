@@ -37,36 +37,36 @@ class MemoryMetadataStorage(MetadataStorage):
 
 
 class JsonFileMetadataStorage(MetadataStorage):
-    """TODO"""
+    """FIXME
+
+    - we load data on init and save on __del__, which is uper unsafe.
+    - but we also dont want to load file every time?
+    """
 
     def __init__(self, path: Path):
         self._file = TextFile(path)
-        self._storage: MemoryMetadataStorage  # created in __enter__
-        self._changed: bool
-
-    def __enter__(self) -> MetadataStorage:
+        self._storage = MemoryMetadataStorage(self._load_data())
         self._changed = False
+
+    def _load_data(self) -> dict:
         if not self._file.exists():
             data = {}
         else:
             data = self._file.load_json()
             if not isinstance(data, dict):
                 raise ValueError("json file for metadata must be dict")
+        return data
 
-        self._storage = MemoryMetadataStorage(data)
-        return self
-
-    def __exit__(self, exc_type, exc, tb) -> None:
+    def __del__(self):
         if self._changed:
             self._file.dump_json(self._storage._data)
-        self._changed = False
 
     def _getitem(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
         return self._storage._getitem(attribute)
 
     def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
         self._changed = True
-        return self._storage._setitem(attribute, value)
+        self._storage._setitem(attribute, value)
 
 
 class MemoryDataStorage(DataStorage[Any]):
@@ -88,14 +88,14 @@ class MemoryDataStorage(DataStorage[Any]):
 
     def _setitem(self, uid: UID, data: Any) -> None:
         self.__data[uid] = data
-        if uid not in self.__metadata:
-            self.__metadata[uid] = MemoryMetadataStorage()
 
     def _delitem(self, uid: UID) -> None:
         del self.__data[uid]
         # dont delete metadata
 
     def _metadata(self, uid: UID) -> MemoryMetadataStorage:
+        if uid not in self.__metadata:
+            self.__metadata[uid] = MemoryMetadataStorage()
         return self.__metadata[uid]
 
 
@@ -171,7 +171,7 @@ class HttpMetadataStorage(MetadataStorage):
         data: dict | None = None,
     ):
         url = self._location + path
-        resp = httpx.request(method=method, url=url, params=params, data=data)
+        resp = httpx.request(method=method, url=url, params=params, json=data)
         resp.raise_for_status()
         return resp
 
@@ -198,8 +198,13 @@ class HttpDataStorage(DataStorage[bytes]):
         return resp
 
     def _contains(self, uid: UID) -> bool:
-        resp = self._request(path=f"/{uid}", method="HEAD")
-        return resp.is_success
+        try:
+            resp = self._request(path=f"/{uid}", method="HEAD")
+            return resp.is_success
+        except httpx.HTTPStatusError as exc:
+            if not exc.response.status_code == 404:
+                raise
+        return False
 
     def _getitem(self, uid: UID) -> bytes:
         resp = self._request(path=f"/{uid}", method="GET")
@@ -215,7 +220,8 @@ class HttpDataStorage(DataStorage[bytes]):
         return self._list()
 
     def _list(self, **filters: MetadataValue) -> Iterable[UID]:
-        return self._request(path="/").json()
+        filters_list = [f"{k}={v}" for k, v in filters.items()]
+        return self._request(path="/", params={"q": filters_list}).json()
 
     def _metadata(self, uid: UID) -> HttpMetadataStorage:
         url = self._location + f"/{uid}/metadata"

@@ -9,7 +9,7 @@ import uvicorn
 
 from ..utils import parse_cmd_vals, wrap_exception
 from .classes import FileDataStorage
-from .server import make_server
+from .server import make_server_app
 from .types import DataStorage, MetadataStorage
 
 
@@ -152,7 +152,7 @@ def metadata_set(ctx_obj: ClickContextObject, attribute_values: list[str]) -> No
 @click.option("--port", "-p", type=int, default=8000)
 def serve(ctx_obj: ClickContextObject, host: str, port: int) -> None:
     """TODO"""
-    app = make_server(data_storage=ctx_obj.data_storage)
+    app = make_server_app(data_storage=ctx_obj.data_storage)
     uvicorn.run(app, host=host, port=port)
 
 

@@ -2,7 +2,6 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Mapping
-from contextlib import AbstractContextManager
 from typing import Any, Generic, TypeVar
 
 Data = TypeVar("Data")
@@ -44,7 +43,7 @@ class StorageInvalidUidError(KeyError, StorageException):
         self.uid = UID  # corrected UID
 
 
-class MetadataStorage(AbstractContextManager):
+class MetadataStorage:  # TODO: subclass AbstractContextManager ?
     """Abstract metadata storage."""
 
     @abstractmethod
@@ -61,12 +60,6 @@ class MetadataStorage(AbstractContextManager):
 
     def __setitem__(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
         return self._setitem(attribute=attribute, value=value)
-
-    def __enter__(self) -> "MetadataStorage":
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback) -> None:
-        return None
 
 
 class DataStorage(ABC, Generic[Data]):
@@ -98,9 +91,9 @@ class DataStorage(ABC, Generic[Data]):
 
     def _list(self, **filters: MetadataValue) -> Iterable[UID]:
         for uid in self:
-            with self._metadata(uid) as md:
-                if md._match(**filters):
-                    yield uid
+            metadata = self._metadata(uid)
+            if metadata._match(**filters):
+                yield uid
 
     def __iter__(self) -> Iterator[UID]:
         return iter(self._iter())

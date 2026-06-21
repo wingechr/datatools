@@ -1,14 +1,17 @@
 """TODO"""
 
-from fastapi import FastAPI
+from fastapi import Body, FastAPI, HTTPException, Query, Response
 
 from ..utils import parse_cmd_vals
-from .types import DataStorage
+from .types import (
+    DataStorage,
+    StorageFileNotFoundError,
+)
 
 # FIXME: wrap some errors into HTTP responses
 
 
-def make_server(data_storage: DataStorage) -> FastAPI:
+def make_server_app(data_storage: DataStorage) -> FastAPI:
     """TODO"""
     app = FastAPI()
 
@@ -17,26 +20,36 @@ def make_server(data_storage: DataStorage) -> FastAPI:
         return data_storage.info()
 
     @app.get("/")
-    def find(q: list[str]):
+    def find(q: list[str] = Query(default=[])):
         filters_dict = parse_cmd_vals(q)
         return data_storage.list(**filters_dict)
 
     @app.head("/{uid}")
     def has(uid: str):
-        # fixme 200 or 404
-        return uid in data_storage
+        if uid not in data_storage:
+            raise HTTPException(status_code=404)
 
     @app.delete("/{uid}")
     def delete(uid: str):
-        del data_storage[uid]
+        try:
+            del data_storage[uid]
+        except StorageFileNotFoundError as err:
+            raise HTTPException(status_code=404) from err
 
     @app.get("/{uid}")
     def get(uid: str):
-        return data_storage[uid]
+        try:
+            data = data_storage[uid]
+            return Response(content=data)
+        except StorageFileNotFoundError as err:
+            raise HTTPException(status_code=404) from err
 
     @app.put("/{uid}")
-    def put(uid: str):
-        data_storage[uid] = b""
+    def put(uid: str, data: bytes = Body(...)):
+        try:
+            data_storage[uid] = data
+        except StorageFileNotFoundError as err:
+            raise HTTPException(status_code=403) from err
 
     @app.get("/{uid}/metadata/")
     def metadata_get(uid, a: str):
@@ -44,8 +57,8 @@ def make_server(data_storage: DataStorage) -> FastAPI:
 
     @app.post("/{uid}/metadata/")
     def metadata_set(uid, data: dict):
-        with data_storage.metadata(uid) as metadata:
-            for k, v in data.items():
-                metadata[k] = v
+        metadata = data_storage.metadata(uid)
+        for k, v in data.items():
+            metadata[k] = v
 
     return app
