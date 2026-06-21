@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Mapping
+from contextlib import AbstractContextManager
 from typing import Generic, TypeVar
 
 Data = TypeVar("Data")
@@ -12,8 +13,6 @@ MetadataPairs = (
     Mapping[MetadataAttribute, MetadataValue]
     | Iterable[tuple[MetadataAttribute, MetadataValue]]
 )
-JsonPrimitive = str | float | int | bool | None
-Json = JsonPrimitive | list[JsonPrimitive] | dict[str, JsonPrimitive]
 
 
 class StorageException(Exception):
@@ -45,7 +44,7 @@ class StorageInvalidUidError(KeyError, StorageException):
         self.uid = UID  # corrected UID
 
 
-class MetadataStorage(ABC):
+class MetadataStorage(AbstractContextManager):
     """Abstract metadata storage."""
 
     @abstractmethod
@@ -62,6 +61,12 @@ class MetadataStorage(ABC):
 
     def __setitem__(self, attribtue: MetadataAttribute, value: MetadataValue) -> None:
         return self._setitem(attribtue=attribtue, value=value)
+
+    def __enter__(self) -> "MetadataStorage":
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        return None
 
 
 class DataStorage(ABC, Generic[Data]):
@@ -90,8 +95,9 @@ class DataStorage(ABC, Generic[Data]):
 
     def _list(self, **filters: MetadataValue) -> Iterable[UID]:
         for uid in self:
-            if self._metadata(uid)._match(**filters):
-                yield uid
+            with self._metadata(uid) as md:
+                if md._match(**filters):
+                    yield uid
 
     def __iter__(self) -> Iterator[UID]:
         return iter(self._iter())
