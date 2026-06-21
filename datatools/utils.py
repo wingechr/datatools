@@ -1,7 +1,10 @@
 """TODO"""
 
+from collections.abc import Callable
 import json
+import logging
 from pathlib import Path
+import sys
 from typing import Literal
 
 JsonPrimitive = str | float | int | bool | None
@@ -27,8 +30,13 @@ class TextFile:
         self.sort_keys = sort_keys
         self.indent = indent
 
+    def exists(self) -> bool:
+        """TODO"""
+        return self.path.exists()
+
     def load_bytes(self) -> bytes:
         """TODO"""
+        logging.debug("Reading %s", self.path)
         with self.path.open("rb") as file:
             return file.read()
 
@@ -46,6 +54,7 @@ class TextFile:
     def dump_bytes(self, data: bytes) -> None:
         """TODO"""
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        logging.debug("Writing %s", self.path)
         with self.path.open("wb") as file:
             file.write(data)
 
@@ -63,3 +72,27 @@ class TextFile:
             indent=self.indent,
         )
         self.dump_str(data_s)
+
+
+def find_subclass(base_cls, name: str):
+    """TODO"""
+    for cls in base_cls.__subclasses__():
+        if cls.__name__ == name:
+            return cls
+        found = find_subclass(cls, name)
+        if found:
+            return found
+    return None
+
+
+def wrap_exception(function: Callable[[], None], debug: bool = True):
+    """TODO"""
+    try:
+        # your logic here
+        function()
+    except Exception as e:
+        if debug:
+            logging.exception(e)  # includes stack trace
+        else:
+            logging.error(e)
+        sys.exit(1)

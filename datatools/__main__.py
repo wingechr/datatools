@@ -1,47 +1,38 @@
 """datatools cmd entry point."""
 
-import argparse
 import logging
 
+import click
 import coloredlogs
 
-from datatools import __version__
+from .storage.__main__ import main as storage_main
+from .utils import wrap_exception
+
+LOGLEVELS_COLORS = {
+    "debug": "blue",
+    "info": "green",
+    "warning": "yellow",
+    "error": "red",
+}
 
 
-def main(**kwargs):
-    """main script"""
-    ap = argparse.ArgumentParser()
-    ap.add_argument(
-        "--loglevel",
-        "-l",
-        choices=["debug", "info", "warning", "error"],
-        default="info",
-    )
-    ap.add_argument(
-        "--version",
-        action="store_true",
-    )
-    # parse args
-    kwargs = vars(ap.parse_args())
-    # logging
+@click.group()
+@click.option(
+    "--loglevel", "-l", type=click.Choice(LOGLEVELS_COLORS.keys()), default="info"
+)
+def main(loglevel: str) -> None:
+    """TODO"""
     coloredlogs.install(
-        level=getattr(logging, kwargs.pop("loglevel").upper()),
+        level=getattr(logging, loglevel.upper()),
         fmt="[%(asctime)s %(levelname)7s] %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
-        field_styles={
-            "asctime": {"color": "white"},
-            "levelname": {"color": "white"},
-        },
-        level_styles={
-            "debug": {"color": "blue"},
-            "info": {"color": "green"},
-            "warning": {"color": "yellow"},
-            "error": {"color": "red"},
-        },
+        field_styles={k: {"color": "white"} for k in ["asctime", "levelname"]},
+        level_styles={k: {"color": v} for k, v in LOGLEVELS_COLORS.items()},
     )
-    if kwargs.pop("version"):
-        print(__version__)
+    logging.debug("loglevel: %s", loglevel)
 
+
+main.add_command(storage_main, name="storage")
 
 if __name__ == "__main__":
-    main()
+    wrap_exception(main)

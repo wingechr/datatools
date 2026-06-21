@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Mapping
 from contextlib import AbstractContextManager
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 Data = TypeVar("Data")
 UID = str
@@ -73,6 +73,10 @@ class DataStorage(ABC, Generic[Data]):
     """Abstract data storage."""
 
     @abstractmethod
+    def __init__(self, location: Any = None):
+        self._location = location
+
+    @abstractmethod
     def _contains(self, uid: UID) -> bool: ...
 
     @abstractmethod
@@ -109,19 +113,19 @@ class DataStorage(ABC, Generic[Data]):
     def __getitem__(self, uid: UID) -> Data:
         self._assert_valid_uid(uid=uid)
         if uid not in self:
-            raise StorageFileNotFoundError(uid)
+            raise StorageFileNotFoundError(f"Not found: {uid}")
         return self._getitem(uid=uid)
 
     def __setitem__(self, uid: UID, data: Data) -> None:
         self._assert_valid_uid(uid=uid)
         if uid in self:
-            raise StorageFileExistsError(uid)
+            raise StorageFileExistsError(f"Already exists: {uid}")
         return self._setitem(uid=uid, data=data)
 
     def __delitem__(self, uid: UID) -> None:
         self._assert_valid_uid(uid=uid)
         if uid not in self:
-            raise StorageFileNotFoundError(uid)
+            raise StorageFileNotFoundError(f"Not found: {uid}")
         return self._delitem(uid=uid)
 
     def metadata(self, uid: UID) -> MetadataStorage:
@@ -136,4 +140,9 @@ class DataStorage(ABC, Generic[Data]):
     def _assert_valid_uid(self, uid: UID):
         valid_uid = self._get_valid_uid(uid)
         if uid != valid_uid:
-            raise StorageInvalidUidError(f"Invalid uid: {uid}", uid=valid_uid)
+            raise StorageInvalidUidError(
+                f"Invalid uid: {uid} => {valid_uid}", uid=valid_uid
+            )
+
+    def __str__(self) -> str:
+        return f"{self.__class__.__name__}({self._location})"

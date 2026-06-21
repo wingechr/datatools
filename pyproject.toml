@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.10,<3.14"
 authors = [{ name = "Christian Winger", email = "c@wingechr.de" }]
 dependencies = [
+    "click>=8.3.1",
     "coloredlogs~=15.0",
     #"appdirs>=1.4.4",
     #"chardet>=5.2.0",
