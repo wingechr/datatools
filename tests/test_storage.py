@@ -1,3 +1,5 @@
+"""TODO"""
+
 from threading import Thread
 from unittest import TestCase
 
@@ -7,6 +9,7 @@ from datatools.storage.classes import (
     FileDataStorage,
     HttpDataStorage,
     MemoryDataStorage,
+    SqlDataStorage,
 )
 from datatools.storage.server import make_server_app
 from datatools.storage.types import DataStorage, StorageFileExistsError
@@ -77,6 +80,16 @@ class TestStorageFiles(TestActionMixin, TempdirTestCase):
         """TODO"""
         super().setUpClass()
         cls.storage = FileDataStorage(cls.temp_dir)
+
+
+class TestStorageSql(TestActionMixin, TempdirTestCase):
+    """TODO"""
+
+    @classmethod
+    def setUpClass(cls):
+        """TODO"""
+        super().setUpClass()
+        cls.storage = SqlDataStorage()
 
 
 class TestStoragehttpServer(TestActionMixin, TestCase):

@@ -81,22 +81,16 @@ class DataStorage(ABC, Generic[Data]):
     def _delitem(self, uid: UID) -> None: ...
 
     @abstractmethod
-    def _iter(self) -> Iterable[UID]: ...
+    def _metadata(self, uid: UID) -> MetadataStorage: ...
 
     @abstractmethod
-    def _metadata(self, uid: UID) -> MetadataStorage: ...
+    def _list(self, **filters: MetadataValue) -> Iterable[UID]: ...
 
     def _get_valid_uid(self, uid: UID) -> UID:
         return UID(uid)
 
-    def _list(self, **filters: MetadataValue) -> Iterable[UID]:
-        for uid in self:
-            metadata = self._metadata(uid)
-            if metadata._match(**filters):
-                yield uid
-
     def __iter__(self) -> Iterator[UID]:
-        return iter(self._iter())
+        return iter(self._list())
 
     def __contains__(self, uid: UID) -> bool:
         self._assert_valid_uid(uid=uid)

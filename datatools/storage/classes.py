@@ -7,6 +7,15 @@ from pathlib import Path
 from typing import Any, Literal
 
 import httpx
+from sqlalchemy import (
+    VARBINARY,
+    VARCHAR,
+    Column,
+    Engine,
+    MetaData,
+    Table,
+    create_engine,
+)
 
 from ..utils import TextFile
 from .types import (
@@ -16,6 +25,22 @@ from .types import (
     MetadataStorage,
     MetadataValue,
     StorageInvalidUidError,
+)
+
+metadata = MetaData()
+
+table_data = Table(
+    "data",
+    metadata,
+    Column("uid", VARCHAR, primary_key=True),
+    Column("data", VARBINARY),
+)
+table_metadata = Table(
+    "metadata",
+    metadata,
+    Column("uid", VARCHAR),
+    Column("attribute", VARCHAR),
+    Column("value", VARCHAR),
 )
 
 
@@ -72,16 +97,13 @@ class JsonFileMetadataStorage(MetadataStorage):
 class MemoryDataStorage(DataStorage[Any]):
     """TODO"""
 
-    def __init__(self, location: str | None = None):
+    def __init__(self):
         super().__init__(location=":memory")
         self.__data: dict[UID, Any] = {}
         self.__metadata: dict[UID, MemoryMetadataStorage] = {}
 
     def _contains(self, uid: UID) -> bool:
         return uid in self.__data
-
-    def _iter(self) -> Iterable[UID]:
-        return iter(self.__data)
 
     def _getitem(self, uid: UID) -> Any:
         return self.__data[uid]
@@ -92,6 +114,15 @@ class MemoryDataStorage(DataStorage[Any]):
     def _delitem(self, uid: UID) -> None:
         del self.__data[uid]
         # dont delete metadata
+
+    def _list(self, **filters: MetadataValue) -> Iterable[UID]:
+        for uid in self.__data:
+            if filters:
+                metadata = self._metadata(uid)
+                if not metadata._match(**filters):
+                    continue
+
+            yield uid
 
     def _metadata(self, uid: UID) -> MemoryMetadataStorage:
         if uid not in self.__metadata:
@@ -128,13 +159,19 @@ class FileDataStorage(DataStorage[bytes]):
         logging.debug("Deleting %s", path)
         os.remove(path)
 
-    def _iter(self) -> Iterable[UID]:
+    def _list(self, **filters: MetadataValue) -> Iterable[UID]:
         for root, _, fs in os.walk(self._location):
             for f in fs:
                 if f.endswith(self.metadata_sufix):
                     continue
                 path = Path(root) / str(f)
                 uid = str(path.relative_to(self._location))
+
+                if filters:
+                    metadata = self._metadata(uid)
+                    if not metadata._match(**filters):
+                        continue
+
                 yield uid
 
     def _metadata(self, uid: UID) -> JsonFileMetadataStorage:
@@ -216,9 +253,6 @@ class HttpDataStorage(DataStorage[bytes]):
     def _delitem(self, uid: UID) -> None:
         self._request(path=f"/{uid}", method="DELETE")
 
-    def _iter(self) -> Iterable[UID]:
-        return self._list()
-
     def _list(self, **filters: MetadataValue) -> Iterable[UID]:
         filters_list = [f"{k}={v}" for k, v in filters.items()]
         return self._request(path="/", params={"q": filters_list}).json()
@@ -226,3 +260,88 @@ class HttpDataStorage(DataStorage[bytes]):
     def _metadata(self, uid: UID) -> HttpMetadataStorage:
         url = self._location + f"/{uid}/metadata"
         return HttpMetadataStorage(url)
+
+
+class SqlMetadataStorage(MetadataStorage):
+    """TODO"""
+
+    def __init__(self, engine: Engine, uid: UID):
+        self._engine = engine
+        self._uid = uid
+
+    def _getitem(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
+        with self._engine.begin() as con:
+            resp = con.execute(
+                table_metadata.select()
+                .with_only_columns(table_metadata.c.value)
+                .where(
+                    table_metadata.c.uid == self._uid,
+                    table_metadata.c.attribute == attribute,
+                )
+            )
+            return list(x[0] for x in resp.fetchall())
+
+    def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
+        with self._engine.begin() as con:
+            con.execute(
+                table_metadata.insert().values(
+                    uid=self._uid, attribute=attribute, value=value
+                )
+            )
+
+
+class SqlDataStorage(DataStorage[Any]):
+    """TODO"""
+
+    def __init__(self, location: str = "sqlite:///:memory:"):
+        super().__init__(location=location)
+        self._engine = create_engine(location)
+
+        metadata.create_all(self._engine)
+
+    def _contains(self, uid: UID) -> bool:
+        with self._engine.begin() as con:
+            resp = con.execute(
+                table_data.select()
+                .with_only_columns(table_data.c.uid)
+                .where(table_data.c.uid == uid)
+            )
+            n_res = len(resp.fetchall())
+        return bool(n_res)
+
+    def _getitem(self, uid: UID) -> bytes:
+        with self._engine.begin() as con:
+            resp = con.execute(
+                table_data.select()
+                .with_only_columns(table_data.c.data)
+                .where(table_data.c.uid == uid)
+            )
+            return resp.fetchone()[0]
+
+    def _setitem(self, uid: UID, data: bytes) -> None:
+        with self._engine.begin() as con:
+            con.execute(table_data.insert().values(uid=uid, data=data))
+
+    def _delitem(self, uid: UID) -> None:
+        with self._engine.begin() as con:
+            con.execute(table_data.delete().where(table_data.c.uid == uid))
+
+    def _list(self, **filters: MetadataValue) -> Iterable[UID]:
+        with self._engine.begin() as con:
+            resp = con.execute(table_data.select().with_only_columns(table_data.c.uid))
+            uids = set(x[0] for x in resp.fetchall())
+            # TODO query join directly in database
+            for a, v in filters.items():
+                print(con.execute(table_metadata.select()).fetchall())
+                resp = con.execute(
+                    table_metadata.select()
+                    .with_only_columns(table_metadata.c.uid)
+                    .where(table_metadata.c.attribute == a, table_metadata.c.value == v)
+                )
+                uids_filtered = set(x[0] for x in resp.fetchall())
+                uids = uids & uids_filtered
+
+        return uids
+
+    def _metadata(self, uid: UID) -> MetadataStorage:
+        return SqlMetadataStorage(engine=self._engine, uid=uid)
