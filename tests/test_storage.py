@@ -1,5 +1,6 @@
 """TODO"""
 
+from tempfile import TemporaryDirectory
 from threading import Thread
 from unittest import TestCase
 
@@ -15,92 +16,76 @@ from datatools.storage.server import make_server_app
 from datatools.storage.types import DataStorage, StorageFileExistsError
 from datatools.utils import get_free_port
 
-from . import TempdirTestCase
 
-
-class AbstractTestActionMixin(TestCase):
-    storage: DataStorage
-
-
-class TestActionMixin:
+def _test_action_sequence(self: TestCase, storage: DataStorage):
     """TODO"""
 
-    def test_action_sequence(self: AbstractTestActionMixin):
+    # insert our first data
+    uid1 = "data1"
+    data1 = b"data1"
+
+    storage[uid1] = data1
+    # now it exists
+    self.assertTrue(uid1 in storage)
+    # now we cannot add it again
+    self.assertRaises(StorageFileExistsError, storage.__setitem__, uid1, data1)
+    # we can retreive it
+    self.assertEqual(storage[uid1], data1)
+
+    uid2 = "data2"
+    data2 = b"data2"
+    mdata2_key, mdata2_val = "metadata2_a", "10"
+    self.assertFalse(uid2 in storage)
+    # but even though it does not exist, we can add metadata
+    storage.metadata(uid2)[mdata2_key] = mdata2_val
+    # and can retrieve it
+    self.assertEqual(next(iter(storage.metadata(uid2)[mdata2_key])), mdata2_val)
+    # now we insert and retrieve data
+    storage[uid2] = data2
+    self.assertEqual(storage[uid2], data2)
+    # list all uids:
+    self.assertEqual(set(storage.list()), {uid1, uid2})
+    # filter by metadata
+    self.assertEqual(set(storage.list(**{mdata2_key: mdata2_val})), {uid2})
+
+    # delete
+    del storage[uid1]
+    self.assertFalse(uid1 in storage)
+
+
+class TestStorageMemory(TestCase):
+    """TODO"""
+
+    def test_action_sequence(self):
         """TODO"""
-
-        # insert our first data
-        uid1 = "data1"
-        data1 = b"data1"
-
-        self.storage[uid1] = data1
-        # now it exists
-        self.assertTrue(uid1 in self.storage)
-        # now we cannot add it again
-        self.assertRaises(StorageFileExistsError, self.storage.__setitem__, uid1, data1)
-        # we can retreive it
-        self.assertEqual(self.storage[uid1], data1)
-
-        uid2 = "data2"
-        data2 = b"data2"
-        mdata2_key, mdata2_val = "metadata2_a", "10"
-        self.assertFalse(uid2 in self.storage)
-        # but even though it does not exist, we can add metadata
-        self.storage.metadata(uid2)[mdata2_key] = mdata2_val
-        # and can retrieve it
-        self.assertEqual(
-            next(iter(self.storage.metadata(uid2)[mdata2_key])), mdata2_val
-        )
-        # now we insert and retrieve data
-        self.storage[uid2] = data2
-        self.assertEqual(self.storage[uid2], data2)
-        # list all uids:
-        self.assertEqual(set(self.storage.list()), {uid1, uid2})
-        # filter by metadata
-        self.assertEqual(set(self.storage.list(**{mdata2_key: mdata2_val})), {uid2})
-
-        # delete
-        del self.storage[uid1]
-        self.assertFalse(uid1 in self.storage)
+        storage = MemoryDataStorage()
+        _test_action_sequence(self, storage)
 
 
-class TestStorageMemory(TestActionMixin, TestCase):
+class TestStorageFiles(TestCase):
     """TODO"""
 
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.storage = MemoryDataStorage()
-
-
-class TestStorageFiles(TestActionMixin, TempdirTestCase):
-    """TODO"""
-
-    @classmethod
-    def setUpClass(cls):
+    def test_action_sequence(self):
         """TODO"""
-        super().setUpClass()
-        cls.storage = FileDataStorage(cls.temp_dir)
+        with TemporaryDirectory() as tmpdir:
+            storage = FileDataStorage(tmpdir)
+            _test_action_sequence(self, storage)
 
 
-class TestStorageSql(TestActionMixin, TempdirTestCase):
+class TestStorageSql(TestCase):
     """TODO"""
 
-    @classmethod
-    def setUpClass(cls):
+    def test_action_sequence(self):
         """TODO"""
-        super().setUpClass()
-        cls.storage = SqlDataStorage()
+        storage = SqlDataStorage()
+        _test_action_sequence(self, storage)
 
 
-class TestStoragehttpServer(TestActionMixin, TestCase):
+class TestStoragehttpServer(TestCase):
     """TODO"""
 
-    @classmethod
-    def setUpClass(cls) -> None:
+    def test_action_sequence(self):
         """TODO"""
-        super().setUpClass()
-        # create temp dir
-
         remote_storage = MemoryDataStorage()
         host = "127.0.0.1"
         port = get_free_port()
@@ -111,4 +96,5 @@ class TestStoragehttpServer(TestActionMixin, TestCase):
             daemon=True,
         )
         server_thread.start()
-        cls.storage = HttpDataStorage(f"http://{host}:{port}")
+        storage = HttpDataStorage(f"http://{host}:{port}")
+        _test_action_sequence(self, storage)

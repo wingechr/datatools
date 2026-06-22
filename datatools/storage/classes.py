@@ -279,7 +279,7 @@ class SqlMetadataStorage(MetadataStorage):
                     table_metadata.c.attribute == attribute,
                 )
             )
-            return list(x[0] for x in resp.fetchall())
+            return [x[0] for x in resp.fetchall()]
 
     def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
         with self._engine.begin() as con:
@@ -329,7 +329,7 @@ class SqlDataStorage(DataStorage[Any]):
     def _list(self, **filters: MetadataValue) -> Iterable[UID]:
         with self._engine.begin() as con:
             resp = con.execute(table_data.select().with_only_columns(table_data.c.uid))
-            uids = set(x[0] for x in resp.fetchall())
+            uids = {x[0] for x in resp.fetchall()}
             # TODO query join directly in database
             for a, v in filters.items():
                 print(con.execute(table_metadata.select()).fetchall())
@@ -338,7 +338,7 @@ class SqlDataStorage(DataStorage[Any]):
                     .with_only_columns(table_metadata.c.uid)
                     .where(table_metadata.c.attribute == a, table_metadata.c.value == v)
                 )
-                uids_filtered = set(x[0] for x in resp.fetchall())
+                uids_filtered = {x[0] for x in resp.fetchall()}
                 uids = uids & uids_filtered
 
         return uids

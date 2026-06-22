@@ -20,7 +20,7 @@ def make_server_app(data_storage: DataStorage) -> FastAPI:
         return data_storage.info()
 
     @app.get("/")
-    def find(q: list[str] = Query(default=[])):
+    def find(q: list[str] = Query(default=[])):  # noqa: B008
         filters_dict = parse_cmd_vals(q)
         return data_storage.list(**filters_dict)
 
