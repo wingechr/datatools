@@ -116,11 +116,10 @@ def metadata(ctx_obj: ClickContextObject, uid: str) -> None:
 def metadata_get(ctx_obj: ClickContextObject, attribute: str) -> None:
     """TODO"""
     assert ctx_obj.metadata_storage  # noqa
-    with ctx_obj.metadata_storage:
-        values = ctx_obj.metadata_storage[attribute]
-        for value in values:
-            # FIXME: maybe json dumps value first?
-            print(value)
+    values = ctx_obj.metadata_storage[attribute]
+    for value in values:
+        # FIXME: maybe json dumps value first?
+        print(value)
 
 
 @metadata.command("set")
@@ -131,9 +130,8 @@ def metadata_set(ctx_obj: ClickContextObject, attribute_values: list[str]) -> No
     assert ctx_obj.metadata_storage  # noqa
     # FIXME: maybe json parse value first
     attribute_values_dct = parse_cmd_vals(attribute_values)
-    with ctx_obj.metadata_storage:
-        for attribute, value in attribute_values_dct.items():
-            ctx_obj.metadata_storage[attribute] = value
+    for attribute, value in attribute_values_dct.items():
+        ctx_obj.metadata_storage[attribute] = value
 
 
 @main.command("serve")
