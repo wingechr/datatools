@@ -8,6 +8,7 @@ import uvicorn
 
 from datatools.storage.classes import (
     FileDataStorage,
+    FileDataStorageWithRdfMetadata,
     HttpDataStorage,
     MemoryDataStorage,
     SqlDataStorage,
@@ -69,6 +70,16 @@ class TestStorageFiles(TestCase):
         """TODO"""
         with TemporaryDirectory() as tmpdir:
             storage = FileDataStorage(tmpdir)
+            _test_action_sequence(self, storage)
+
+
+class TestStorageFilesWithRdfMetadata(TestCase):
+    """TODO"""
+
+    def test_action_sequence(self):
+        """TODO"""
+        with TemporaryDirectory() as tmpdir:
+            storage = FileDataStorageWithRdfMetadata(tmpdir)
             _test_action_sequence(self, storage)
 
 

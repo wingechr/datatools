@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import httpx
+import rdflib
 from sqlalchemy import (
     VARBINARY,
     VARCHAR,
@@ -59,6 +60,61 @@ class MemoryMetadataStorage(MetadataStorage):
 
     def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
         self._data[attribute] = value
+
+
+class JsonLdFileMetadataStorage(MetadataStorage):
+    """FIXME
+
+    - we load data on init and save on __del__, which is uper unsafe.
+    - but we also dont want to load file every time?
+    """
+
+    def __init__(self, path: Path, uid: UID):
+        self._file = TextFile(path)
+        self._changed = False
+        self._graph = self._load_graph()
+        self._uid = uid
+
+    def _load_graph(self) -> rdflib.Graph:
+        graph = rdflib.Graph()
+        if self._file.exists():
+            graph.parse(self._file.path, format="json-ld")
+        return graph
+
+    def __del__(self):
+        if self._changed:
+            data_b = self._graph.serialize(
+                format="json-ld",
+                indent=2,
+                # auto_compact=True,
+                expand=True,
+                sort_keys=True,
+                encoding="utf-8",
+            )
+
+            self._file.dump_bytes(data_b)
+
+    def _getitem(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
+        subj = self._as_uri(self._uid)
+        pred = self._as_uri(attribute)
+        for obj in self._graph.objects(subj, pred):
+            yield str(obj)
+
+    def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
+        subj = self._as_uri(self._uid)
+        pred = self._as_uri(attribute)
+        obj = self._as_uri_or_literal(value)
+        triple = (subj, pred, obj)
+        self._graph.add(triple)
+        self._changed = True
+
+    def _as_uri(self, x: str) -> rdflib.URIRef:
+        """FIXME"""
+        return rdflib.URIRef("urn:" + x)
+
+    def _as_uri_or_literal(self, x: str) -> rdflib.URIRef | rdflib.Literal:
+        """FIXME"""
+        return rdflib.Literal(x)
 
 
 class JsonFileMetadataStorage(MetadataStorage):
@@ -194,6 +250,15 @@ class FileDataStorage(DataStorage[bytes]):
         return UID(abs_path.relative_to(self._location))
 
 
+class FileDataStorageWithRdfMetadata(FileDataStorage):
+    """TODO"""
+
+    def _metadata(self, uid: UID) -> JsonLdFileMetadataStorage:
+        path = self._get_abs_path(uid)
+        path_metadata = path.with_name(path.name + self.metadata_sufix).resolve()
+        return JsonLdFileMetadataStorage(path_metadata, uid=uid)
+
+
 class HttpMetadataStorage(MetadataStorage):
     """TODO"""
 
@@ -316,7 +381,10 @@ class SqlDataStorage(DataStorage[Any]):
                 .with_only_columns(table_data.c.data)
                 .where(table_data.c.uid == uid)
             )
-            return resp.fetchone()[0]
+            row = resp.fetchone()
+            if not row:
+                raise Exception()
+            return row[0]
 
     def _setitem(self, uid: UID, data: bytes) -> None:
         with self._engine.begin() as con:
