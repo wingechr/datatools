@@ -86,6 +86,10 @@ class DataStorage(ABC, Generic[Data]):
     @abstractmethod
     def _list(self, **filters: MetadataValue) -> Iterable[UID]: ...
 
+    @classmethod
+    def _can_handle_location(cls, location: str) -> bool:
+        return False
+
     def _get_valid_uid(self, uid: UID) -> UID:
         return UID(uid)
 

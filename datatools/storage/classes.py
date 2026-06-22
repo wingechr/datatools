@@ -4,6 +4,7 @@ from collections.abc import Iterable
 import logging
 import os
 from pathlib import Path
+import re
 from typing import Any, Literal
 
 import httpx
@@ -18,7 +19,7 @@ from sqlalchemy import (
     create_engine,
 )
 
-from ..utils import TextFile
+from ..utils import TextFile, file_uri_to_path
 from .types import (
     UID,
     DataStorage,
@@ -191,9 +192,20 @@ class FileDataStorage(DataStorage[bytes]):
 
     metadata_sufix = ".metadata.json"
 
-    def __init__(self, location: str | None = None):
+    @classmethod
+    def _can_handle_location(cls, location: str) -> bool:
+        return bool(re.match(r"file://", location)) or Path(location).is_dir()
+
+    def __init__(self, location: str = "."):
+        if re.match(r"file://", location):
+            path = file_uri_to_path(location)
+        else:
+            path = Path(location)
+
+        path = path.resolve()
+
         self._location: Path  # absolute, resolved location
-        super().__init__(location=Path(location or ".").resolve())
+        super().__init__(location=path)
 
     def _contains(self, uid: UID) -> bool:
         path = self._get_abs_path(uid)
@@ -287,6 +299,10 @@ class HttpMetadataStorage(MetadataStorage):
 class HttpDataStorage(DataStorage[bytes]):
     """TODO"""
 
+    @classmethod
+    def _can_handle_location(cls, location: str) -> bool:
+        return bool(re.match(r"^https?://", location))
+
     def _request(
         self,
         path: str = "/",
@@ -357,6 +373,10 @@ class SqlMetadataStorage(MetadataStorage):
 
 class SqlDataStorage(DataStorage[Any]):
     """TODO"""
+
+    @classmethod
+    def _can_handle_location(cls, location: str) -> bool:
+        return bool(re.match(r"^.*sql.*://", location))
 
     def __init__(self, location: str = "sqlite:///:memory:"):
         super().__init__(location=location)

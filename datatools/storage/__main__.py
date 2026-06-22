@@ -7,8 +7,7 @@ import click
 from pydantic import BaseModel, ConfigDict
 import uvicorn
 
-from ..utils import parse_cmd_vals, wrap_exception
-from .classes import FileDataStorage
+from ..utils import iter_subclasses, parse_cmd_vals, wrap_exception
 from .server import make_server_app
 from .types import DataStorage, MetadataStorage
 
@@ -24,19 +23,30 @@ class ClickContextObject(BaseModel):
 # we need to use print()
 sys.stdout.reconfigure(errors="replace")  # type: ignore
 
+REGISTERES_STORAGE_CLASSES = {
+    c.__name__: c for c in list(iter_subclasses(DataStorage))[1:]
+}
 
-def get_storage_class_from_location(location: str) -> type[DataStorage]:
+
+def infer_storage_class(location: str, storage_class=str | None) -> type[DataStorage]:
     """TODO"""
-    # FIXME
-    return FileDataStorage
+    if isinstance(storage_class, str) and storage_class:
+        return REGISTERES_STORAGE_CLASSES[storage_class]
+    for cls in REGISTERES_STORAGE_CLASSES.values():
+        if cls._can_handle_location(location):
+            return cls
+    raise Exception(f"Cannot infer DataStorage class for location {location}")
 
 
 @click.group()
 @click.argument("location")
+@click.option(
+    "--storage_class", "-c", type=click.Choice(REGISTERES_STORAGE_CLASSES.keys())
+)
 @click.pass_context
-def main(ctx, location: str) -> None:
+def main(ctx, location: str, storage_class=str | None) -> None:
     """TODO"""
-    StorageClass = get_storage_class_from_location(location)
+    StorageClass = infer_storage_class(location, storage_class=storage_class)
     data_storage = StorageClass(location)
     ctx.obj = ClickContextObject(data_storage=data_storage)
 

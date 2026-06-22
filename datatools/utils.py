@@ -1,12 +1,14 @@
 """TODO"""
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 import json
 import logging
+import os
 from pathlib import Path
 import socket
 import sys
-from typing import Literal
+from typing import Literal, TypeVar
+from urllib.parse import urlparse
 
 JsonPrimitive = str | float | int | bool | None
 Json = JsonPrimitive | list[JsonPrimitive] | dict[str, JsonPrimitive]
@@ -86,6 +88,16 @@ def find_subclass(base_cls, name: str):
     return None
 
 
+XSub = TypeVar("XSub")
+
+
+def iter_subclasses(cls: type[XSub]) -> Iterable[type[XSub]]:
+    """TODO"""
+    yield cls
+    for subcls in cls.__subclasses__():
+        yield from iter_subclasses(subcls)
+
+
 def wrap_exception(function: Callable[[], None], debug: bool = True):
     """TODO"""
     try:
@@ -110,3 +122,17 @@ def get_free_port() -> int:
         s.bind(("localhost", 0))  # 0 = let the OS choose
         port = s.getsockname()[1]
     return port
+
+
+def file_uri_to_path(uri: str) -> Path:
+    """TODO"""
+    parts = urlparse(uri)
+    if parts.netloc:
+        raise NotImplementedError(uri)
+    if parts.path.startswith("/./") or parts.path.startswith("/../"):
+        path_s = Path(os.getcwd()).as_posix() + parts.path
+    else:
+        path_s = parts.path
+    path = Path(path_s)
+
+    return path
