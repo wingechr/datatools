@@ -1,17 +1,15 @@
 """TODO"""
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 import json
 import logging
 import os
 from pathlib import Path
+import re
 import socket
 import sys
-from typing import Any, Literal, TypeVar
+from typing import Any, Literal
 from urllib.parse import urlparse
-
-JsonPrimitive = str | float | int | bool | None
-Json = JsonPrimitive | list[JsonPrimitive] | dict[str, JsonPrimitive]
 
 
 class TextFile:
@@ -49,7 +47,7 @@ class TextFile:
         data_s = data_b.decode(encoding=self.encoding, errors=self.errors)
         return data_s
 
-    def load_json(self) -> Json:
+    def load_json(self) -> Any:
         """TODO"""
         data_s = self.load_str()
         return json.loads(data_s)
@@ -66,7 +64,7 @@ class TextFile:
         data_b = data.encode(encoding=self.encoding, errors=self.errors)
         self.dump_bytes(data_b)
 
-    def dump_json(self, data: Json) -> None:
+    def dump_json(self, data: Any) -> None:
         """TODO"""
         data_s = json.dumps(
             data,
@@ -86,16 +84,6 @@ def find_subclass(base_cls, name: str):
         if found:
             return found
     return None
-
-
-XSub = TypeVar("XSub")
-
-
-def iter_subclasses(cls: type[XSub]) -> Iterable[type[XSub]]:
-    """TODO"""
-    yield cls
-    for subcls in cls.__subclasses__():
-        yield from iter_subclasses(subcls)
 
 
 def wrap_exception(function: Callable[[], None], debug: bool = True):
@@ -152,3 +140,20 @@ def try_parse_json_str(s: str) -> Any:
         return json.loads(s)
     except Exception:
         return s
+
+
+def is_file_uri_or_path(x: str | Path) -> bool:
+    """TODO"""
+    if isinstance(x, Path):
+        return True
+    return bool(re.match(r"file://", x)) or "://" not in x
+
+
+def uri_or_path_to_path(x: str | Path) -> Path:
+    """TODO"""
+    if isinstance(x, Path):
+        return x
+    elif re.match(r"file://", x):
+        return file_uri_to_path(x)
+    else:
+        return Path(x)

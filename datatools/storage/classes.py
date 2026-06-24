@@ -21,8 +21,7 @@ from sqlalchemy import (
     create_engine,
 )
 
-from ..utils import TextFile, file_uri_to_path, reverse_prints, try_parse_json_str
-from .types import (
+from datatools.types import (
     UID,
     DataStorage,
     MetadataAttribute,
@@ -30,6 +29,13 @@ from .types import (
     MetadataValue,
     StorageInvalidUidError,
     SubprocessStatus,
+)
+from datatools.utils import (
+    TextFile,
+    is_file_uri_or_path,
+    reverse_prints,
+    try_parse_json_str,
+    uri_or_path_to_path,
 )
 
 metadata = MetaData()
@@ -197,17 +203,12 @@ class FileDataStorage(DataStorage[bytes]):
     metadata_sufix = ".metadata.json"
 
     @classmethod
-    def _can_handle_location(cls, location: str) -> bool:
-        return bool(re.match(r"file://", location)) or Path(location).is_dir()
+    def _can_handle(cls, location: str) -> bool:
+        """Either file:// protocol or no protocol"""
+        return is_file_uri_or_path(location)
 
     def __init__(self, location: str = "."):
-        if re.match(r"file://", location):
-            path = file_uri_to_path(location)
-        else:
-            path = Path(location)
-
-        path = path.resolve()
-
+        path = uri_or_path_to_path(location).resolve()
         self._location: Path  # absolute, resolved location
         super().__init__(location=path)
 
@@ -304,7 +305,7 @@ class HttpDataStorage(DataStorage[bytes]):
     """TODO"""
 
     @classmethod
-    def _can_handle_location(cls, location: str) -> bool:
+    def _can_handle(cls, location: str) -> bool:
         return bool(re.match(r"^https?://", location))
 
     def _request(
@@ -380,7 +381,7 @@ class SqlDataStorage(DataStorage[Any]):
     """TODO"""
 
     @classmethod
-    def _can_handle_location(cls, location: str) -> bool:
+    def _can_handle(cls, location: str) -> bool:
         return bool(re.match(r"^.*sql.*://", location))
 
     def __init__(self, location: str = "sqlite:///:memory:"):

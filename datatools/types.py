@@ -4,8 +4,8 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Mapping
 from typing import Any, Generic, TypeVar
 
-from ..utils import Json
-
+JsonPrimitive = str | float | int | bool | None
+Json = JsonPrimitive | list[JsonPrimitive] | dict[str, JsonPrimitive]
 Data = TypeVar("Data")
 UID = str
 MetadataAttribute = str
@@ -14,6 +14,15 @@ MetadataPairs = (
     Mapping[MetadataAttribute, MetadataValue]
     | Iterable[tuple[MetadataAttribute, MetadataValue]]
 )
+
+XSub = TypeVar("XSub")
+
+
+def iter_subclasses(cls: type[XSub]) -> Iterable[type[XSub]]:
+    """TODO"""
+    yield cls
+    for subcls in cls.__subclasses__():
+        yield from iter_subclasses(subcls)
 
 
 class StorageException(Exception):
@@ -95,7 +104,7 @@ class DataStorage(ABC, Generic[Data]):
     def _list(self, **filters: MetadataValue) -> Iterable[UID]: ...
 
     @classmethod
-    def _can_handle_location(cls, location: str) -> bool:
+    def _can_handle(cls, location: str) -> bool:
         return False
 
     def _get_valid_uid(self, uid: UID) -> UID:
@@ -148,3 +157,57 @@ class DataStorage(ABC, Generic[Data]):
     def info(self) -> dict:
         """TODO"""
         return {"Location": str(self._location), "Class": str(self.__class__.__name__)}
+
+    def import_from_uri(self, uri: str, **options):
+        """TODO"""
+        importer_class = infer_importer_class(uri, **options)
+        importer = importer_class(data_storage=self, uri=uri, **options)
+        importer()
+
+
+class Importer(ABC):
+    """TODO"""
+
+    @classmethod
+    def _can_handle(cls, uri: str, **options) -> bool:
+        return False
+
+    def __init__(self, data_storage: DataStorage, uri: str, **options):
+        self._data_storage = data_storage
+        self._options = options
+        self._uri = uri
+
+    @abstractmethod
+    def _get_data_and_metadata(
+        self, uri: str, **options
+    ) -> tuple[bytes, MetadataPairs]: ...
+
+    @abstractmethod
+    def _get_output_uid(self, uri: str, **options) -> UID: ...
+
+    def _get_valid_output_uid(self, uri: str, **options) -> UID:
+        output_uid = self._get_output_uid(self._uri, **self._options)
+        if output_uid in self._data_storage:
+            raise StorageFileExistsError(output_uid)
+        return output_uid
+
+    def __call__(self):
+        """TODO"""
+        output_uid = self._get_valid_output_uid(self._uri, **self._options)
+        data, metadata = self._get_data_and_metadata(self._uri, **self._options)
+        self._data_storage[output_uid] = data
+        metadata_storage = self._data_storage.metadata(output_uid)
+        for k, v in metadata:
+            metadata_storage[k] = v
+
+
+def infer_importer_class(uri: str, **options) -> type[Importer]:
+    """TODO"""
+    REGISTERED_IMPORTER_CLASSES = {
+        c.__name__: c for c in list(iter_subclasses(Importer))[1:]
+    }
+
+    for cls in REGISTERED_IMPORTER_CLASSES.values():
+        if cls._can_handle(uri, **options):
+            return cls
+    raise NotImplementedError(f"Cannot infer Importer class for {uri}")

@@ -7,13 +7,13 @@ import click
 import uvicorn
 
 from datatools.storage.server import make_server_app
-from datatools.storage.types import DataStorage
-from datatools.utils import iter_subclasses, parse_cmd_vals, wrap_exception
+from datatools.types import DataStorage, iter_subclasses
+from datatools.utils import parse_cmd_vals, wrap_exception
 
 # we need to use print()
 sys.stdout.reconfigure(errors="replace")  # type: ignore
 
-REGISTERES_STORAGE_CLASSES = {
+REGISTERED_STORAGE_CLASSES = {
     c.__name__: c for c in list(iter_subclasses(DataStorage))[1:]
 }
 
@@ -21,17 +21,17 @@ REGISTERES_STORAGE_CLASSES = {
 def infer_storage_class(location: str, storage_class=str | None) -> type[DataStorage]:
     """TODO"""
     if isinstance(storage_class, str) and storage_class:
-        return REGISTERES_STORAGE_CLASSES[storage_class]
-    for cls in REGISTERES_STORAGE_CLASSES.values():
-        if cls._can_handle_location(location):
+        return REGISTERED_STORAGE_CLASSES[storage_class]
+    for cls in REGISTERED_STORAGE_CLASSES.values():
+        if cls._can_handle(location):
             return cls
-    raise Exception(f"Cannot infer DataStorage class for location {location}")
+    raise NotImplementedError(f"Cannot infer DataStorage class for location {location}")
 
 
 @click.group()
 @click.option("--location", "-l", default=".")
 @click.option(
-    "--storage_class", "-c", type=click.Choice(REGISTERES_STORAGE_CLASSES.keys())
+    "--storage_class", "-c", type=click.Choice(REGISTERED_STORAGE_CLASSES.keys())
 )
 @click.pass_context
 def main(ctx, location: str, storage_class=str | None) -> None:
@@ -134,6 +134,18 @@ def metadata_set(
     attribute_values_dct = parse_cmd_vals(attribute_values)
     for attribute, value in attribute_values_dct.items():
         metadata_storage[attribute] = value
+
+
+@main.command("import")
+@click.pass_obj
+@click.argument("uri")
+@click.argument("options", nargs=-1)
+def import_from_uri(
+    ctx_data_storage: DataStorage, uri: str, options: list[str]
+) -> None:
+    """TODO"""
+    options_dict = parse_cmd_vals(options)
+    ctx_data_storage.import_from_uri(uri, **options_dict)
 
 
 @main.command("serve")

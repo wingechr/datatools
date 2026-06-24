@@ -5,6 +5,7 @@ import logging
 import click
 import coloredlogs
 
+from datatools.job.__main__ import main as job_main
 from datatools.storage.__main__ import main as storage_main
 from datatools.utils import wrap_exception
 
@@ -33,6 +34,7 @@ def main(loglevel: str) -> None:
 
 
 main.add_command(storage_main, name="storage")
+main.add_command(job_main, name="job")
 
 if __name__ == "__main__":
     wrap_exception(main)

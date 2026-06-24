@@ -15,7 +15,7 @@ from datatools.storage.classes import (
     SqlDataStorage,
 )
 from datatools.storage.server import make_server_app
-from datatools.storage.types import DataStorage, StorageFileExistsError
+from datatools.types import DataStorage, StorageFileExistsError
 from datatools.utils import get_free_port
 
 

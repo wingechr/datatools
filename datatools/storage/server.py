@@ -2,11 +2,11 @@
 
 from fastapi import Body, FastAPI, HTTPException, Query, Response
 
-from ..utils import parse_cmd_vals
-from .types import (
+from datatools.types import (
     DataStorage,
     StorageFileNotFoundError,
 )
+from datatools.utils import parse_cmd_vals
 
 # FIXME: wrap some errors into HTTP responses
 
