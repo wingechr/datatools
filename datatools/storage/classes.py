@@ -79,8 +79,8 @@ class JsonLdFileMetadataStorage(MetadataStorage):
         self._graph = self._load_graph()
         self._uid = uid
 
-    def _load_graph(self) -> rdflib.Graph:
-        graph = rdflib.Graph()
+    def _load_graph(self) -> rdflib.Dataset:
+        graph = rdflib.Dataset()
         if self._file.exists():
             graph.parse(self._file.path, format="json-ld")
         return graph
