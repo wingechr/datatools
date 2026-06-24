@@ -12,6 +12,7 @@ from datatools.storage.classes import (
     HttpDataStorage,
     MemoryDataStorage,
     SqlDataStorage,
+    TestCliDataStorage,
 )
 from datatools.storage.server import make_server_app
 from datatools.storage.types import DataStorage, StorageFileExistsError
@@ -90,6 +91,16 @@ class TestStorageSql(TestCase):
         """TODO"""
         storage = SqlDataStorage()
         _test_action_sequence(self, storage)
+
+
+class TestTestCliDataStorage(TestCase):
+    """TODO"""
+
+    def test_action_sequence(self):
+        """TODO"""
+        with TemporaryDirectory() as tmpdir:
+            storage = TestCliDataStorage(location=tmpdir)
+            _test_action_sequence(self, storage)
 
 
 class TestStoragehttpServer(TestCase):

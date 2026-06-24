@@ -136,3 +136,10 @@ def file_uri_to_path(uri: str) -> Path:
     path = Path(path_s)
 
     return path
+
+
+def reverse_prints(stdout_data: bytes) -> list[str]:
+    """TODO"""
+    text = stdout_data.decode(sys.stdout.encoding, errors="replace")
+    lines = text.splitlines(keepends=False)[::-1]
+    return lines

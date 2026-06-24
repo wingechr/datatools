@@ -5,8 +5,8 @@ import logging
 import click
 import coloredlogs
 
-from .storage.__main__ import main as storage_main
-from .utils import wrap_exception
+from datatools.storage.__main__ import main as storage_main
+from datatools.utils import wrap_exception
 
 LOGLEVELS_COLORS = {
     "debug": "blue",

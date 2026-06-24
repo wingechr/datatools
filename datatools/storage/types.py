@@ -43,7 +43,13 @@ class StorageInvalidUidError(KeyError, StorageException):
         self.uid = UID  # corrected UID
 
 
-class MetadataStorage:  # TODO: subclass AbstractContextManager ?
+class SubprocessStatus(StorageException):
+    """TODO."""
+
+    pass
+
+
+class MetadataStorage(ABC):  # TODO: subclass AbstractContextManager ?
     """Abstract metadata storage."""
 
     @abstractmethod

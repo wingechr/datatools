@@ -1,10 +1,12 @@
 """TODO"""
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 import logging
 import os
 from pathlib import Path
 import re
+import subprocess as sp
+import sys
 from typing import Any, Literal
 
 import httpx
@@ -19,7 +21,7 @@ from sqlalchemy import (
     create_engine,
 )
 
-from ..utils import TextFile, file_uri_to_path
+from ..utils import TextFile, file_uri_to_path, reverse_prints
 from .types import (
     UID,
     DataStorage,
@@ -27,6 +29,7 @@ from .types import (
     MetadataStorage,
     MetadataValue,
     StorageInvalidUidError,
+    SubprocessStatus,
 )
 
 metadata = MetaData()
@@ -433,3 +436,60 @@ class SqlDataStorage(DataStorage[Any]):
 
     def _metadata(self, uid: UID) -> MetadataStorage:
         return SqlMetadataStorage(engine=self._engine, uid=uid)
+
+
+class TestCliMetadataDataStorage(MetadataStorage):
+    """TODO"""
+
+    def __init__(self, uid: UID, request: Callable):
+        self._uid = uid
+        self._request = request
+
+    def _getitem(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
+        data = self._request("metadata", self._uid, "get", str(attribute))
+        return reverse_prints(data)
+
+    def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
+        self._request("metadata", self._uid, "set", f"{attribute}={value}")
+
+
+class TestCliDataStorage(DataStorage[bytes]):
+    """TODO"""
+
+    def __init__(self, location: Any = None):
+        self._location = location
+        self._python = sys.executable
+        self._module = str(Path(__file__).parent / "__main__.py")
+
+    def _request(self, *args: str, data: bytes | None = None) -> bytes:
+        cmd = [self._python, self._module, str(self._location)] + list(args)
+        logging.debug(cmd)
+        pop = sp.Popen(cmd, stdin=sp.PIPE, stdout=sp.PIPE)
+        stdout, _stderr = pop.communicate(data)
+        if pop.returncode:
+            raise SubprocessStatus(pop.returncode)
+        return stdout
+
+    def _contains(self, uid: UID) -> bool:
+        try:
+            self._request("has", uid)
+        except SubprocessStatus:
+            return False
+        return True
+
+    def _getitem(self, uid: UID) -> bytes:
+        return self._request("get", uid)
+
+    def _setitem(self, uid: UID, data: bytes) -> None:
+        self._request("put", uid, data=data)
+
+    def _delitem(self, uid: UID) -> None:
+        self._request("delete", uid)
+
+    def _metadata(self, uid: UID) -> MetadataStorage:
+        return TestCliMetadataDataStorage(uid, self._request)
+
+    def _list(self, **filters: MetadataValue) -> Iterable[UID]:
+        filters_str = [f"{k}={v}" for k, v in filters.items()]
+        data = self._request("find", *filters_str)
+        return reverse_prints(data)
