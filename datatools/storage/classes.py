@@ -453,7 +453,7 @@ class TestCliMetadataDataStorage(MetadataStorage):
         self._request("metadata", self._uid, "set", f"{attribute}={value}")
 
 
-class TestCliDataStorage(DataStorage[bytes]):
+class CliWrapperDataStorage(DataStorage[bytes]):
     """TODO"""
 
     def __init__(self, location: Any = None):

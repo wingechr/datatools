@@ -7,12 +7,12 @@ from unittest import TestCase
 import uvicorn
 
 from datatools.storage.classes import (
+    CliWrapperDataStorage,
     FileDataStorage,
     FileDataStorageWithRdfMetadata,
     HttpDataStorage,
     MemoryDataStorage,
     SqlDataStorage,
-    TestCliDataStorage,
 )
 from datatools.storage.server import make_server_app
 from datatools.storage.types import DataStorage, StorageFileExistsError
@@ -93,13 +93,13 @@ class TestStorageSql(TestCase):
         _test_action_sequence(self, storage)
 
 
-class TestTestCliDataStorage(TestCase):
+class TestCliWrapperDataStorage(TestCase):
     """TODO"""
 
     def test_action_sequence(self):
         """TODO"""
         with TemporaryDirectory() as tmpdir:
-            storage = TestCliDataStorage(location=tmpdir)
+            storage = CliWrapperDataStorage(location=tmpdir)
             _test_action_sequence(self, storage)
 
 
