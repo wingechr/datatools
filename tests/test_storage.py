@@ -36,7 +36,7 @@ def _test_action_sequence(self: TestCase, storage: DataStorage):
 
     uid2 = "data2"
     data2 = b"data2"
-    mdata2_key, mdata2_val = "metadata2_a", "10"
+    mdata2_key, mdata2_val = "metadata2_a", 10
     self.assertFalse(uid2 in storage)
     # but even though it does not exist, we can add metadata
     storage.metadata(uid2)[mdata2_key] = mdata2_val

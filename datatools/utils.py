@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 import socket
 import sys
-from typing import Literal, TypeVar
+from typing import Any, Literal, TypeVar
 from urllib.parse import urlparse
 
 JsonPrimitive = str | float | int | bool | None
@@ -113,7 +113,8 @@ def wrap_exception(function: Callable[[], None], debug: bool = True):
 
 def parse_cmd_vals(arguments: list[str]) -> dict[str, str]:
     """TODO"""
-    return dict(kv.split("=", 1) for kv in arguments)
+    items = [kv.split("=", 1) for kv in arguments]
+    return {k: try_parse_json_str(v) for k, v in items}
 
 
 def get_free_port() -> int:
@@ -143,3 +144,11 @@ def reverse_prints(stdout_data: bytes) -> list[str]:
     text = stdout_data.decode(sys.stdout.encoding, errors="replace")
     lines = text.splitlines(keepends=False)[::-1]
     return lines
+
+
+def try_parse_json_str(s: str) -> Any:
+    """TODO"""
+    try:
+        return json.loads(s)
+    except Exception:
+        return s

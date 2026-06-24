@@ -21,7 +21,7 @@ from sqlalchemy import (
     create_engine,
 )
 
-from ..utils import TextFile, file_uri_to_path, reverse_prints
+from ..utils import TextFile, file_uri_to_path, reverse_prints, try_parse_json_str
 from .types import (
     UID,
     DataStorage,
@@ -102,7 +102,8 @@ class JsonLdFileMetadataStorage(MetadataStorage):
         subj = self._as_uri(self._uid)
         pred = self._as_uri(attribute)
         for obj in self._graph.objects(subj, pred):
-            yield str(obj)
+            # TODO: smarter way convert result?
+            yield try_parse_json_str(str(obj))
 
     def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
         subj = self._as_uri(self._uid)
@@ -116,7 +117,7 @@ class JsonLdFileMetadataStorage(MetadataStorage):
         """FIXME"""
         return rdflib.URIRef("urn:" + x)
 
-    def _as_uri_or_literal(self, x: str) -> rdflib.URIRef | rdflib.Literal:
+    def _as_uri_or_literal(self, x: MetadataValue) -> rdflib.URIRef | rdflib.Literal:
         """FIXME"""
         return rdflib.Literal(x)
 
@@ -363,7 +364,8 @@ class SqlMetadataStorage(MetadataStorage):
                     table_metadata.c.attribute == attribute,
                 )
             )
-            return [x[0] for x in resp.fetchall()]
+            # todo: better parser
+            return [try_parse_json_str(x[0]) for x in resp.fetchall()]
 
     def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
         with self._engine.begin() as con:
@@ -447,7 +449,8 @@ class TestCliMetadataDataStorage(MetadataStorage):
 
     def _getitem(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
         data = self._request("metadata", "get", self._uid, str(attribute))
-        return reverse_prints(data)
+        for text in reverse_prints(data):
+            yield try_parse_json_str(text)
 
     def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
         self._request("metadata", "set", self._uid, f"{attribute}={value}")

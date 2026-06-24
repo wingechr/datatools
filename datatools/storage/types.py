@@ -4,10 +4,12 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Mapping
 from typing import Any, Generic, TypeVar
 
+from ..utils import Json
+
 Data = TypeVar("Data")
 UID = str
 MetadataAttribute = str
-MetadataValue = str
+MetadataValue = Json
 MetadataPairs = (
     Mapping[MetadataAttribute, MetadataValue]
     | Iterable[tuple[MetadataAttribute, MetadataValue]]
