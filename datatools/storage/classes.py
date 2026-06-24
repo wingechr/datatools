@@ -462,7 +462,7 @@ class CliWrapperDataStorage(DataStorage[bytes]):
         self._module = str(Path(__file__).parent / "__main__.py")
 
     def _request(self, *args: str, data: bytes | None = None) -> bytes:
-        cmd = [self._python, self._module, str(self._location)] + list(args)
+        cmd = [self._python, self._module, "-l", str(self._location)] + list(args)
         logging.debug(cmd)
         pop = sp.Popen(cmd, stdin=sp.PIPE, stdout=sp.PIPE)
         stdout, _stderr = pop.communicate(data)

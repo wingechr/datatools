@@ -39,7 +39,7 @@ def infer_storage_class(location: str, storage_class=str | None) -> type[DataSto
 
 
 @click.group()
-@click.argument("location")
+@click.option("--location", "-l", default=".")
 @click.option(
     "--storage_class", "-c", type=click.Choice(REGISTERES_STORAGE_CLASSES.keys())
 )
