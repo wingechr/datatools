@@ -446,11 +446,11 @@ class TestCliMetadataDataStorage(MetadataStorage):
         self._request = request
 
     def _getitem(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
-        data = self._request("metadata", self._uid, "get", str(attribute))
+        data = self._request("metadata", "get", self._uid, str(attribute))
         return reverse_prints(data)
 
     def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
-        self._request("metadata", self._uid, "set", f"{attribute}={value}")
+        self._request("metadata", "set", self._uid, f"{attribute}={value}")
 
 
 class CliWrapperDataStorage(DataStorage[bytes]):
