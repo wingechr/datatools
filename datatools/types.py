@@ -1,13 +1,18 @@
 """Abstract classes / interfaces, types"""
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Iterator, Mapping
-from typing import Any, Generic, TypeVar
+from collections.abc import Callable, Iterable, Iterator, Mapping
+import functools
+import hashlib
+import json
+import pickle
+from typing import Any, TypeVar
 
 JsonPrimitive = str | float | int | bool | None
 Json = JsonPrimitive | list[JsonPrimitive] | dict[str, JsonPrimitive]
-Data = TypeVar("Data")
+
 UID = str
+ByteData = bytes
 MetadataAttribute = str
 MetadataValue = Json
 MetadataPairs = (
@@ -79,7 +84,7 @@ class MetadataStorage(ABC):  # TODO: subclass AbstractContextManager ?
         return self._setitem(attribute=attribute, value=value)
 
 
-class DataStorage(ABC, Generic[Data]):
+class DataStorage(ABC):
     """Abstract data storage."""
 
     def __init__(self, location: Any = None):
@@ -89,10 +94,10 @@ class DataStorage(ABC, Generic[Data]):
     def _contains(self, uid: UID) -> bool: ...
 
     @abstractmethod
-    def _getitem(self, uid: UID) -> Data: ...
+    def _getitem(self, uid: UID) -> ByteData: ...
 
     @abstractmethod
-    def _setitem(self, uid: UID, data: Data) -> None: ...
+    def _setitem(self, uid: UID, data: ByteData) -> None: ...
 
     @abstractmethod
     def _delitem(self, uid: UID) -> None: ...
@@ -117,13 +122,13 @@ class DataStorage(ABC, Generic[Data]):
         self._assert_valid_uid(uid=uid)
         return self._contains(uid=uid)
 
-    def __getitem__(self, uid: UID) -> Data:
+    def __getitem__(self, uid: UID) -> ByteData:
         self._assert_valid_uid(uid=uid)
         if uid not in self:
             raise StorageFileNotFoundError(f"Not found: {uid}")
         return self._getitem(uid=uid)
 
-    def __setitem__(self, uid: UID, data: Data) -> None:
+    def __setitem__(self, uid: UID, data: ByteData) -> None:
         self._assert_valid_uid(uid=uid)
         if uid in self:
             raise StorageFileExistsError(f"Already exists: {uid}")
@@ -164,6 +169,49 @@ class DataStorage(ABC, Generic[Data]):
         importer = importer_class(data_storage=self, uri=uri, **options)
         return importer()
 
+    def cache(self, *args, **kwargs) -> Callable:
+        """TODO"""
+
+        Result = TypeVar("Result")
+
+        def decorator(fun: Callable[..., Result]) -> Callable:
+            """TODO"""
+
+            function_id = fun.__name__
+
+            def get_output_uid(args: tuple, kwargs: dict) -> UID:
+                hash_data = {"function": function_id, "args": args, "kwargs": kwargs}
+                hash_data_s = json.dumps(
+                    hash_data, ensure_ascii=False, indent=0, sort_keys=True
+                )
+                hash_data_b = hash_data_s.encode("utf-8")
+                hashsum = hashlib.md5(hash_data_b).hexdigest()  # noqa:S324
+                return hashsum
+
+            def dump_output(result: Result) -> ByteData:
+                return pickle.dumps(result)  # type:ignore
+
+            def load_output(data: ByteData) -> Result:
+                return pickle.loads(data)  # type:ignore # noqa
+
+            @functools.wraps(fun)
+            def _fun(*args, **kwargs):
+                output_uid = get_output_uid(args, kwargs)
+                if output_uid not in self:
+                    # call base function
+                    # NOTE: we only support namedarguments
+                    result = fun(*args, **kwargs)
+                    self[output_uid] = dump_output(result)
+
+                # retrieval
+                data = self[output_uid]
+                result = load_output(data)
+                return result
+
+            return _fun
+
+        return decorator
+
 
 class Importer(ABC):
     """TODO"""
@@ -202,13 +250,36 @@ class Importer(ABC):
         return output_uid
 
 
+def _find_import_classes() -> dict[str, type[Importer]]:
+    return {c.__name__: c for c in list(iter_subclasses(Importer))[1:]}
+
+
 def infer_importer_class(uri: str, **options) -> type[Importer]:
     """TODO"""
-    REGISTERED_IMPORTER_CLASSES = {
-        c.__name__: c for c in list(iter_subclasses(Importer))[1:]
-    }
-
-    for cls in REGISTERED_IMPORTER_CLASSES.values():
+    for cls in _find_import_classes().values():
         if cls._can_handle(uri, **options):
             return cls
     raise NotImplementedError(f"Cannot infer Importer class for {uri}")
+
+
+def _find_storage_classes() -> dict[str, type[DataStorage]]:
+    return {c.__name__: c for c in list(iter_subclasses(DataStorage))[1:]}
+
+
+def infer_storage_class(location: str, storage_class=str | None) -> type[DataStorage]:
+    """TODO"""
+    storage_classes = _find_storage_classes()
+    if isinstance(storage_class, str) and storage_class:
+        return storage_classes[storage_class]
+    for cls in storage_classes.values():
+        if cls._can_handle(location):
+            return cls
+    raise NotImplementedError(f"Cannot infer DataStorage class for location {location}")
+
+
+def as_storage(storage: str | DataStorage) -> DataStorage:
+    """TODO"""
+    if not isinstance(storage, DataStorage):
+        storage = infer_storage_class(storage)(storage)
+
+    return storage

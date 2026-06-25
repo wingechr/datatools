@@ -7,31 +7,21 @@ import click
 import uvicorn
 
 from datatools.storage.server import make_server_app
-from datatools.types import DataStorage, iter_subclasses
+from datatools.types import (
+    DataStorage,
+    _find_storage_classes,
+    infer_storage_class,
+)
 from datatools.utils import parse_cmd_vals, wrap_exception
 
 # we need to use print()
 sys.stdout.reconfigure(errors="replace")  # type: ignore
 
-REGISTERED_STORAGE_CLASSES = {
-    c.__name__: c for c in list(iter_subclasses(DataStorage))[1:]
-}
-
-
-def infer_storage_class(location: str, storage_class=str | None) -> type[DataStorage]:
-    """TODO"""
-    if isinstance(storage_class, str) and storage_class:
-        return REGISTERED_STORAGE_CLASSES[storage_class]
-    for cls in REGISTERED_STORAGE_CLASSES.values():
-        if cls._can_handle(location):
-            return cls
-    raise NotImplementedError(f"Cannot infer DataStorage class for location {location}")
-
 
 @click.group()
 @click.option("--location", "-l", default=".")
 @click.option(
-    "--storage_class", "-c", type=click.Choice(REGISTERED_STORAGE_CLASSES.keys())
+    "--storage_class", "-c", type=click.Choice(_find_storage_classes().keys())
 )
 @click.pass_context
 def main(ctx, location: str, storage_class=str | None) -> None:

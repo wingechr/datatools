@@ -161,7 +161,7 @@ class JsonFileMetadataStorage(MetadataStorage):
         self._storage._setitem(attribute, value)
 
 
-class MemoryDataStorage(DataStorage[Any]):
+class MemoryDataStorage(DataStorage):
     """TODO"""
 
     def __init__(self):
@@ -197,7 +197,7 @@ class MemoryDataStorage(DataStorage[Any]):
         return self.__metadata[uid]
 
 
-class FileDataStorage(DataStorage[bytes]):
+class FileDataStorage(DataStorage):
     """TODO"""
 
     metadata_sufix = ".metadata.json"
@@ -301,7 +301,7 @@ class HttpMetadataStorage(MetadataStorage):
         self._request(method="POST", data={attribute: value})
 
 
-class HttpDataStorage(DataStorage[bytes]):
+class HttpDataStorage(DataStorage):
     """TODO
 
     TODO: maybe add option to delegate import to handle on remote side?
@@ -380,7 +380,7 @@ class SqlMetadataStorage(MetadataStorage):
             )
 
 
-class SqlDataStorage(DataStorage[Any]):
+class SqlDataStorage(DataStorage):
     """TODO"""
 
     @classmethod
@@ -460,7 +460,7 @@ class TestCliMetadataDataStorage(MetadataStorage):
         self._request("metadata", "set", self._uid, f"{attribute}={value}")
 
 
-class CliWrapperDataStorage(DataStorage[bytes]):
+class CliWrapperDataStorage(DataStorage):
     """TODO"""
 
     def __init__(self, location: Any = None):

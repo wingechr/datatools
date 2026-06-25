@@ -10,8 +10,6 @@ from unittest import TestCase
 
 from datatools.utils import get_free_port
 
-print("Serving on http://127.0.0.1:8000/")
-
 logging.basicConfig(
     format="[%(asctime)s %(levelname)7s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
