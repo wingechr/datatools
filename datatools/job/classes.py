@@ -13,18 +13,18 @@ from datatools.utils import (
     function_has_varargs,
 )
 
-P = ParamSpec("P")
-R = TypeVar("R")
+FunParams = ParamSpec("FunParams")
+FunResult = TypeVar("FunResult")
 
 
-class FunctionWrapper(Generic[P, R]):
+class FunctionWrapper(Generic[FunParams, FunResult]):
     """TODO"""
 
     def __init__(
         self,
-        fun: Callable[P, R],
-        output_to_bytes: Callable[[R], bytes] | None = None,
-        output_from_bytes: Callable[[bytes], R] | None = None,
+        fun: Callable[FunParams, FunResult],
+        output_to_bytes: Callable[[FunResult], bytes] | None = None,
+        output_from_bytes: Callable[[bytes], FunResult] | None = None,
         **params,
     ):
         if function_has_varargs(fun):
@@ -32,17 +32,21 @@ class FunctionWrapper(Generic[P, R]):
         self.fun = fun
         # self.fun_defaults = function_get_defaults(fun)
         # self.fun_parameter_names = function_get_regular_params(fun)
-        self.output_to_bytes: Callable[[R], bytes] = output_to_bytes or pickle.dumps
-        self.output_from_bytes: Callable[[bytes], R] = output_from_bytes or pickle.loads
+        self.output_to_bytes: Callable[[FunResult], bytes] = (
+            output_to_bytes or pickle.dumps
+        )
+        self.output_from_bytes: Callable[[bytes], FunResult] = (
+            output_from_bytes or pickle.loads
+        )
 
-    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:  # noqa
+    def __call__(self, *args: FunParams.args, **kwargs: FunParams.kwargs) -> FunResult:  # noqa
         return self.fun(*args, **kwargs)
 
     @classmethod
     def wrap(
         cls,
-        output_to_bytes: Callable[[R], bytes] | None = None,
-        output_from_bytes: Callable[[bytes], R] | None = None,
+        output_to_bytes: Callable[[FunResult], bytes] | None = None,
+        output_from_bytes: Callable[[bytes], FunResult] | None = None,
         **params,
     ):
         """TODO"""
@@ -85,4 +89,5 @@ class FunctionWrapper(Generic[P, R]):
         )
         hash_data_b = hash_data_s.encode("utf-8")
         hashsum = hashlib.md5(hash_data_b).hexdigest()  # noqa:S324
+        # logging.error("%s %s", hashsum, hash_data)
         return hashsum

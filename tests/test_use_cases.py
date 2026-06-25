@@ -67,7 +67,7 @@ class TestUseCases(TestCase):
         self.assertEqual(fun(1, 2), fun(1, 2))
         self.assertEqual(count_calls, 1)
         self.assertEqual(fun(1, y=2), fun(1, y=2))
-        self.assertEqual(count_calls, 2)
+        self.assertEqual(count_calls, 1)
 
     def test_use_case_job_graph(self):
         """TODO

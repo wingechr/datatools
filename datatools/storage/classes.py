@@ -3,16 +3,13 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator
 import functools
-import hashlib
-import json
 import logging
 import os
 from pathlib import Path
-import pickle
 import re
 import subprocess as sp
 import sys
-from typing import Any, Literal, TypeVar
+from typing import Any, Literal
 
 import httpx
 import rdflib
@@ -27,6 +24,7 @@ from sqlalchemy import (
 )
 
 from datatools.importer import infer_importer_class
+from datatools.job.classes import FunctionWrapper, FunResult
 from datatools.types import (
     UID,
     ByteData,
@@ -169,40 +167,24 @@ class DataStorage(ABC):
     def cache(self, *args, **kwargs) -> Callable:
         """TODO"""
 
-        Result = TypeVar("Result")
-
-        def decorator(fun: Callable[..., Result]) -> Callable:
+        def decorator(fun: Callable[..., FunResult]) -> Callable:
             """TODO"""
 
-            function_id = fun.__name__
-
-            def get_output_uid(args: tuple, kwargs: dict) -> UID:
-                hash_data = {"function": function_id, "args": args, "kwargs": kwargs}
-                hash_data_s = json.dumps(
-                    hash_data, ensure_ascii=False, indent=0, sort_keys=True
-                )
-                hash_data_b = hash_data_s.encode("utf-8")
-                hashsum = hashlib.md5(hash_data_b).hexdigest()  # noqa:S324
-                return hashsum
-
-            def dump_output(result: Result) -> ByteData:
-                return pickle.dumps(result)  # type:ignore
-
-            def load_output(data: ByteData) -> Result:
-                return pickle.loads(data)  # type:ignore # noqa
+            function = FunctionWrapper.assert_wrapped(fun)
 
             @functools.wraps(fun)
             def _fun(*args, **kwargs):
-                output_uid = get_output_uid(args, kwargs)
+                hash_data = function.get_unique_hash_data(*args, **kwargs)
+                output_uid = function.get_unique_hash(hash_data)
                 if output_uid not in self:
                     # call base function
                     # NOTE: we only support namedarguments
                     result = fun(*args, **kwargs)
-                    self[output_uid] = dump_output(result)
+                    self[output_uid] = function.output_to_bytes(result)
 
                 # retrieval
                 data = self[output_uid]
-                result = load_output(data)
+                result = function.output_from_bytes(data)
                 return result
 
             return _fun
