@@ -1,7 +1,6 @@
 """Abstract classes / interfaces, types"""
 
 from collections.abc import Callable
-from dataclasses import dataclass
 import logging
 from typing import Any, Generic
 
@@ -62,57 +61,58 @@ class FunctionWrapper(Generic[FunParams, FunResult]):
         return names_get_argument_dict(self.fun_parameter_names, *args, **kwargs)
 
 
-@dataclass
-class InputHandler:
+class Job:
     """TODO"""
 
-    handle: Callable[[Any], Any]
-    name: str = "input"
+    def __init__(
+        self,
+        function: Callable,
+        output_writers: dict[str, Callable[[Any, str], Any]],
+        input_readers: dict[str, Callable[[Any], Any]] | None = None,
+    ):
+        self.function = FunctionWrapper.assert_wrapped(function)
+        self.output_writers = output_writers
+        self.input_readers = input_readers or {}
 
+        self.output_parameter_names = list(self.output_writers)
+        self.input_parameter_names = self.function.fun_parameter_names
+        self.parameter_names = self.output_parameter_names + self.input_parameter_names
+        self.defaults = {
+            k: v
+            for k, v in self.function.fun_defaults.items()
+            if k in self.input_parameter_names
+        }
 
-@dataclass
-class OutputHandler:
-    """TODO"""
+        # checks
 
-    handle: Callable[[Any, Any], None]
-    name: str = "output"
-
-
-@dataclass
-class OutputConvertHandler(OutputHandler):
-    """TODO"""
-
-    handle: Callable[[Any], Any]
-
-
-def make_job(
-    function: Callable,
-    input_readers: dict[str, Callable[[Any], Any]],
-    output_writers: dict[str, Callable[[Any, str], Any]],
-):
-    """TODO"""
-
-    def job_fun(*args, **kwargs):
-        # logging.error("orig_fun_parameter_names: %s", input_parameter_names)
-
-        output_uids, input_params = get_job_parameters(
-            function=function,
-            output_parameter_names=list(output_writers),
-            args=args,
-            kwargs=kwargs,
+        additional_input_parameter_names = set(self.input_readers) - set(
+            self.input_parameter_names
         )
-
-        additional_input_parameter_names = set(input_readers) - set(input_params)
         if additional_input_parameter_names:
             raise Exception(
                 "Mismatched names between input handlers and argument names: %s",
                 additional_input_parameter_names,
             )
 
+        # parameter the input funcion expects
+        invalid_output_parameter_names = set(self.output_parameter_names) & set(
+            self.input_parameter_names
+        )
+        if invalid_output_parameter_names:
+            raise Exception(
+                "Invalid output parameters: %s", invalid_output_parameter_names
+            )
+
+    def __call__(self, *args, **kwargs):
+        """TODO"""
+        # logging.error("orig_fun_parameter_names: %s", input_parameter_names)
+
+        output_uids, input_params = self.get_job_parameters(*args, **kwargs)
+
         # logging.error("input_params: %s", input_params)
 
         updated_input_values = {
-            p: read(input_params[p]) for p, read in input_readers.items()
+            p: read(input_params[p]) for p, read in self.input_readers.items()
         }
 
         input_param_values = input_params | updated_input_values
@@ -120,48 +120,24 @@ def make_job(
         # logging.error("param_values input_param_values: %s", input_param_values)
 
         # call function
-        result = function(**input_param_values)
+        result = self.function(**input_param_values)
 
-        for param, write in output_writers.items():
+        for param, write in self.output_writers.items():
             name = output_uids[param]
             write(result, name)
 
-    return job_fun
+    def get_job_parameters(
+        self,
+        *args,
+        **kwargs,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """TODO"""
 
-
-def get_job_parameters(
-    function: Callable,
-    output_parameter_names: list[str],
-    args: tuple[Any],
-    kwargs: dict[str, Any],
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    """TODO"""
-
-    # checks
-    wrapped_function = FunctionWrapper.assert_wrapped(function)
-
-    # parameter the input funcion expects
-    input_parameter_names = wrapped_function.fun_parameter_names
-
-    invalid_output_parameter_names = set(output_parameter_names) & set(
-        input_parameter_names
-    )
-    if invalid_output_parameter_names:
-        raise Exception("Invalid output parameters: %s", invalid_output_parameter_names)
-
-    input_parameter_names = wrapped_function.fun_parameter_names
-    defaults = {
-        k: v
-        for k, v in wrapped_function.fun_defaults.items()
-        if k in input_parameter_names
-    }
-
-    # add missing defaults:
-    parameter_names = output_parameter_names + input_parameter_names
-    kwargs = defaults | kwargs
-    param_values = names_get_argument_dict(parameter_names, *args, **kwargs)
-    # we want to keep these param_values for meta data
-    logging.error("param_values: %s", param_values)
-    output_values = {p: param_values[p] for p in output_parameter_names}
-    input_values = {p: param_values[p] for p in input_parameter_names}
-    return output_values, input_values
+        # add missing defaults:
+        kwargs = self.defaults | kwargs
+        param_values = names_get_argument_dict(self.parameter_names, *args, **kwargs)
+        # we want to keep these param_values for meta data
+        # logging.error("param_values: %s", param_values)
+        output_values = {p: param_values[p] for p in self.output_parameter_names}
+        input_values = {p: param_values[p] for p in self.input_parameter_names}
+        return output_values, input_values

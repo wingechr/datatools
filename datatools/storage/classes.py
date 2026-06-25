@@ -28,8 +28,7 @@ from sqlalchemy import (
 from datatools.importer import infer_importer_class
 from datatools.job.classes import (
     FunctionWrapper,
-    get_job_parameters,
-    make_job,
+    Job,
 )
 from datatools.types import (
     UID,
@@ -248,7 +247,7 @@ class DataStorage(ABC):
 
             return handle_
 
-        job = make_job(
+        job = Job(
             function,
             input_readers={
                 name: wrap_input_handle(conv) for name, conv in input_converters.items()
@@ -265,12 +264,7 @@ class DataStorage(ABC):
 
             wrapped_function = FunctionWrapper.assert_wrapped(function)
 
-            _ouput_uids, input_params = get_job_parameters(
-                function=wrapped_function,
-                output_parameter_names=list(output_converters),
-                args=args,
-                kwargs=kwargs,
-            )
+            _ouput_uids, input_params = job.get_job_parameters(*args, **kwargs)
 
             # update metadata before running job
             # so output handlers can use it
