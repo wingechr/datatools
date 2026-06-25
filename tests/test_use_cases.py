@@ -1,5 +1,6 @@
 """TODO"""
 
+import datetime
 from pathlib import Path
 import pickle
 from tempfile import TemporaryDirectory
@@ -106,14 +107,21 @@ class TestUseCases(TestCase):
 
         # generate input1
         storage["input1.pickle"] = pickle.dumps(3)
+        output_uid = "output.pickle"
 
         # try to call mutliple times - but only of output does not exist
         for _ in range(2):
-            if "output.pickle" not in storage:
-                job_create_output("output.pickle", "input1.pickle", 10)
+            if output_uid not in storage:
+                job_create_output(output_uid, "input1.pickle", 10)
 
-        self.assertTrue("output.pickle" in storage)
+        self.assertTrue(output_uid in storage)
         self.assertEqual(count_calls, 1)
+
+        # check that metadata should also be writtem
+        job_timestamp_s: str = get_item_or_first(
+            storage.metadata(output_uid)["job_timestamp"]
+        )  # type:ignore
+        datetime.datetime.fromisoformat(job_timestamp_s)
 
         # use named arguments, change order
         job_create_output(

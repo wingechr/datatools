@@ -143,7 +143,7 @@ def make_job(
     )
     assert_unique(new_fun_parameter_names)
 
-    def job_fun(*args, **kwargs) -> None:
+    def job_fun(*args, **kwargs):
         logging.error("orig_fun_parameter_names: %s", orig_fun_parameter_names)
         logging.error("new_fun_parameter_names: %s", new_fun_parameter_names)
 

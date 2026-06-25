@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator
+import datetime
 import functools
 import logging
 import os
@@ -234,6 +235,7 @@ class DataStorage(ABC):
         """TODO"""
 
         # wrap handler
+        metadata = {}
 
         def wrap_input_handle(handle):
             def handle_(uid: UID):
@@ -246,10 +248,12 @@ class DataStorage(ABC):
             def handle_(data: Any, uid: UID):
                 bdata = handle(data)
                 self[uid] = bdata
+                for k, v in metadata.items():
+                    self.metadata(uid)[k] = v
 
             return handle_
 
-        return make_job(
+        job = make_job(
             function,
             input_handlers=[
                 InputHandler(
@@ -267,6 +271,16 @@ class DataStorage(ABC):
                 for h in output_handlers
             ],
         )
+
+        @functools.wraps(job)
+        def _job(*args, **kwargs):
+            # update metadata before running job
+            # so output handlers can use it
+            metadata["job_timestamp"] = datetime.datetime.now().isoformat()
+
+            job(*args, **kwargs)
+
+        return _job
 
 
 class MemoryMetadataStorage(MetadataStorage):
