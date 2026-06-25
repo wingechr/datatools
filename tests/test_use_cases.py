@@ -92,7 +92,7 @@ class TestUseCases(TestCase):
         global count_calls
         count_calls = 0
 
-        def function(param_input1, param_input2):
+        def function(param_input1, param_input2=-1):
             global count_calls
             count_calls += 1
             return param_input1 + param_input2
@@ -112,7 +112,7 @@ class TestUseCases(TestCase):
         # try to call mutliple times - but only of output does not exist
         for _ in range(2):
             if output_uid not in storage:
-                job_create_output(output_uid, "input1.pickle", 10)
+                job_create_output(output_uid, "input1.pickle")
 
         self.assertTrue(output_uid in storage)
         self.assertEqual(count_calls, 1)

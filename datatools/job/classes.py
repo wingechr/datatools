@@ -127,6 +127,12 @@ def make_job(
             "Mismatched names between input handlers and argument names: %s",
             unused_input_handlers_names,
         )
+    # find unmapped parameters that have defaults
+    unmapped_names = set(orig_fun_parameter_names) - set(input_handlers_by_name_mapped)
+    unmapped_defaults = {
+        k: v for k, v in wrapped_function.fun_defaults.items() if k in unmapped_names
+    }
+    logging.error("unmapped_defaults: %s", unmapped_defaults)
 
     new_fun_parameter_names_input = []
     for name in orig_fun_parameter_names:
@@ -147,7 +153,13 @@ def make_job(
         logging.error("orig_fun_parameter_names: %s", orig_fun_parameter_names)
         logging.error("new_fun_parameter_names: %s", new_fun_parameter_names)
 
+        # add missing defaults:
+        for k, v in unmapped_defaults.items():
+            if k not in kwargs:
+                kwargs[k] = v
+
         param_values = names_get_argument_dict(new_fun_parameter_names, *args, **kwargs)
+        # we want to keep these param_values for meta data
         logging.error("param_values: %s", param_values)
 
         param_values_input_mapped = {}

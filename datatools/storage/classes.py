@@ -279,6 +279,7 @@ class DataStorage(ABC):
             metadata["job_timestamp"] = datetime.datetime.now().isoformat()
 
             job(*args, **kwargs)
+            raise Exception
 
         return _job
 
