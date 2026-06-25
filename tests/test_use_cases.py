@@ -120,7 +120,5 @@ class TestUseCases(TestCase):
 
         # check that metadata should also be writtem
         for uid in outputs.values():
-            job_timestamp_s: str = get_item_or_first(
-                storage.metadata(uid)["job_timestamp"]
-            )  # type:ignore
+            job_timestamp_s: str = get_item_or_first(storage.metadata(uid)["timestamp"])  # type:ignore
             datetime.datetime.fromisoformat(job_timestamp_s)

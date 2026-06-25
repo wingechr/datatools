@@ -28,6 +28,7 @@ from sqlalchemy import (
 from datatools.importer import infer_importer_class
 from datatools.job.classes import (
     FunctionWrapper,
+    get_job_parameters,
     make_job,
 )
 from datatools.types import (
@@ -231,8 +232,7 @@ class DataStorage(ABC):
     ):
         """TODO"""
 
-        # wrap handler
-        metadata = {}
+        data_buffer = {}
 
         def wrap_input_handle(handle):
             def handle_(uid: UID):
@@ -244,9 +244,7 @@ class DataStorage(ABC):
         def wrap_output_handle(handle):
             def handle_(data: Any, uid: UID):
                 bdata = handle(data)
-                self[uid] = bdata
-                for k, v in metadata.items():
-                    self.metadata(uid)[k] = v
+                data_buffer[uid] = bdata
 
             return handle_
 
@@ -263,11 +261,31 @@ class DataStorage(ABC):
 
         @functools.wraps(job)
         def _job(*args, **kwargs):
+            job(*args, **kwargs)
+
+            wrapped_function = FunctionWrapper.assert_wrapped(function)
+
+            _ouput_uids, input_params = get_job_parameters(
+                function=wrapped_function,
+                output_parameter_names=list(output_converters),
+                args=args,
+                kwargs=kwargs,
+            )
+
             # update metadata before running job
             # so output handlers can use it
-            metadata["job_timestamp"] = datetime.datetime.now().isoformat()
+            timestamp = datetime.datetime.now().isoformat()
 
-            job(*args, **kwargs)
+            metadata = {
+                "timestamp": timestamp,
+                "parameter": input_params,
+                "function": wrapped_function.get_function_id(),
+            }
+
+            for uid, bdata in data_buffer.items():
+                self[uid] = bdata
+                for k, v in metadata.items():
+                    self.metadata(uid)[k] = v
 
         return _job
 
