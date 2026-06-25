@@ -1,10 +1,13 @@
 """Abstract classes / interfaces, types"""
 
 from collections.abc import Iterable, Mapping
+from typing import ParamSpec, TypeVar
 
 JsonPrimitive = str | float | int | bool | None
 Json = JsonPrimitive | list[JsonPrimitive] | dict[str, JsonPrimitive]
-
+FunParams = ParamSpec("FunParams")
+FunResult = TypeVar("FunResult")
+SubCls = TypeVar("SubCls")
 UID = str
 ByteData = bytes
 MetadataAttribute = str

@@ -47,9 +47,9 @@ def _test_action_sequence(self: TestCase, storage: DataStorage):
     storage[uid2] = data2
     self.assertEqual(storage[uid2], data2)
     # list all uids:
-    self.assertEqual(set(storage.list()), {uid1, uid2})
+    self.assertEqual(set(storage.find()), {uid1, uid2})
     # filter by metadata
-    self.assertEqual(set(storage.list(**{mdata2_key: mdata2_val})), {uid2})
+    self.assertEqual(set(storage.find(**{mdata2_key: mdata2_val})), {uid2})
 
     # delete
     del storage[uid1]

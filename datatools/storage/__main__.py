@@ -57,7 +57,7 @@ def find(ctx_data_storage: DataStorage, filters: list[str]) -> None:
     """TODO"""
     # FIXME: maybe json parse value first
     filters_dict = parse_cmd_vals(filters)
-    for uid in ctx_data_storage.list(**filters_dict):
+    for uid in ctx_data_storage.find(**filters_dict):
         print(uid)
 
 

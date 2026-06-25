@@ -1,6 +1,7 @@
 """TODO"""
 
 from collections.abc import Callable, Iterable
+import hashlib
 import inspect
 from inspect import Parameter, Signature
 import json
@@ -10,14 +11,14 @@ from pathlib import Path
 import re
 import socket
 import sys
-from typing import TYPE_CHECKING, Any, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import unquote, urlparse
 from urllib.request import url2pathname
 
+from datatools.types import Json, SubCls
+
 if TYPE_CHECKING:
     pass
-
-XSub = TypeVar("XSub")
 
 
 class TextFile:
@@ -211,13 +212,31 @@ def names_get_argument_dict(params: list[str], *args, **kwargs) -> dict[str, Any
     return bound.arguments
 
 
-def iter_subclasses(cls: type[XSub]) -> Iterable[type[XSub]]:
+def iter_subclasses(cls: type[SubCls]) -> Iterable[type[SubCls]]:
     """TODO"""
     yield cls
     for subcls in cls.__subclasses__():
         yield from iter_subclasses(subcls)
 
 
-def subclasses_by_name(cls: type[XSub]) -> dict[str, type[XSub]]:
+def subclasses_by_name(cls: type[SubCls]) -> dict[str, type[SubCls]]:
     """TODO"""
     return {c.__name__: c for c in list(iter_subclasses(cls))[1:]}
+
+
+def get_md5_hash(hash_data: Json) -> str:
+    """TODO"""
+    hash_data_s = json.dumps(hash_data, ensure_ascii=False, indent=0, sort_keys=True)
+    hash_data_b = hash_data_s.encode("utf-8")
+    hashsum = hashlib.md5(hash_data_b).hexdigest()  # noqa:S324
+    # logging.error("%s %s", hashsum, hash_data)
+    return hashsum
+
+
+def assert_unique(iterable: Iterable):
+    """TODO"""
+    uq = set()
+    for x in iterable:
+        if x in uq:
+            raise KeyError("Duplicate key: %s", x)
+        uq.add(x)

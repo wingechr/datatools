@@ -22,7 +22,7 @@ def make_server_app(data_storage: DataStorage) -> FastAPI:
     @app.get("/")
     def find(q: list[str] = Query(default=[])):  # noqa: B008
         filters_dict = parse_cmd_vals(q)
-        return data_storage.list(**filters_dict)
+        return data_storage.find(**filters_dict)
 
     @app.head("/{uid}")
     def has(uid: str):

@@ -3,12 +3,10 @@
 from pathlib import Path
 import pickle
 from tempfile import TemporaryDirectory
-from typing import Any
 from unittest import TestCase
 
-from datatools.job.classes import FunctionWrapper
+from datatools.job.classes import InputHandler, OutputConvertHandler
 from datatools.storage.classes import MemoryDataStorage
-from datatools.utils import names_get_argument_dict
 from tests import start_http_server
 
 
@@ -93,54 +91,18 @@ class TestUseCases(TestCase):
         global count_calls
         count_calls = 0
 
-        def make_decorator(storage):
-            def load_input1(path_input1: Path) -> Any:
-                bytes_input1 = storage[str(path_input1)]
-                param_input1 = pickle.loads(bytes_input1)  # noqa:S301
-                return param_input1
-
-            def dump_output(path_output: Path, data: Any) -> None:
-                bytes_output = pickle.dumps(data)
-                storage[str(path_output)] = bytes_output
-
-            def decorator(function):
-                # example build tool job
-                def job_create_output(*args, **kwargs) -> None:
-                    __params = names_get_argument_dict(
-                        ["path_output", "path_input1", "param_input2"], *args, **kwargs
-                    )
-
-                    # FIXME kwargs
-                    path_output, path_input1, param_input2 = args
-
-                    # optionally: return if exist
-                    # (might conflict with build tools decision)
-                    if path_output in storage:
-                        return
-
-                    global count_calls
-                    count_calls += 1
-
-                    # read input(s)
-                    param_input1 = load_input1(path_input1)
-
-                    # transform
-                    value_output = function(
-                        param_input1=param_input1, param_input2=param_input2
-                    )
-
-                    # write output(s)
-                    dump_output(path_output, value_output)
-
-                return job_create_output
-
-            return decorator
-
-        @FunctionWrapper.wrap()
         def function(param_input1, param_input2):
+            global count_calls
+            count_calls += 1
             return param_input1 + param_input2
 
-        job_create_output = make_decorator(storage)(function)
+        job_create_output = storage.job(
+            function,
+            input_handlers=[
+                InputHandler(handle=pickle.loads, name_mapped="param_input1")
+            ],
+            output_handlers=[OutputConvertHandler(handle=pickle.dumps)],
+        )
 
         # generate input1
         storage["input1.pickle"] = pickle.dumps(3)
@@ -150,8 +112,10 @@ class TestUseCases(TestCase):
             if "output.pickle" not in storage:
                 job_create_output("output.pickle", "input1.pickle", 10)
 
-        for _ in range(2):
-            job_create_output("output.pickle", "input1.pickle", 10)
-
         self.assertTrue("output.pickle" in storage)
         self.assertEqual(count_calls, 1)
+
+        # use named arguments, change order
+        job_create_output(
+            param_input2=10, input="input1.pickle", output="output2.pickle"
+        )

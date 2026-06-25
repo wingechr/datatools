@@ -6,6 +6,7 @@ import functools
 import logging
 import os
 from pathlib import Path
+import pickle
 import re
 import subprocess as sp
 import sys
@@ -24,10 +25,19 @@ from sqlalchemy import (
 )
 
 from datatools.importer import infer_importer_class
-from datatools.job.classes import FunctionWrapper, FunResult
+from datatools.job.classes import (
+    FunctionWrapper,
+    InputHandler,
+    OutputConvertHandler,
+    OutputHandler,
+    make_job,
+)
 from datatools.types import (
     UID,
     ByteData,
+    FunParams,
+    FunResult,
+    Json,
     MetadataAttribute,
     MetadataValue,
     StorageFileExistsError,
@@ -37,6 +47,7 @@ from datatools.types import (
 )
 from datatools.utils import (
     TextFile,
+    get_md5_hash,
     is_file_uri_or_path,
     reverse_prints,
     try_parse_json_str,
@@ -140,7 +151,7 @@ class DataStorage(ABC):
         self._assert_valid_uid(uid=uid)
         return self._metadata(uid=uid)
 
-    def list(self, **filters: MetadataValue) -> Iterable[UID]:
+    def find(self, **filters: MetadataValue) -> Iterable[UID]:
         """list UIDs for given metadata query."""
         return self._list(**filters)
 
@@ -164,32 +175,98 @@ class DataStorage(ABC):
         importer = importer_class(data_storage=self, uri=uri, **options)
         return importer()
 
-    def cache(self, *args, **kwargs) -> Callable:
+    def cache(
+        self,
+        output_to_bytes: Callable[[FunResult], bytes] | None = None,
+        output_from_bytes: Callable[[bytes], FunResult] | None = None,
+        get_hash_data: Callable[[str, dict], Json] | None = None,
+        get_hash: Callable[[Json], str] | None = None,
+    ) -> Callable:
         """TODO"""
 
-        def decorator(fun: Callable[..., FunResult]) -> Callable:
+        def default_get_hash_data(function_id: str, parameter: dict) -> Json:
+            return {
+                "function": function_id,
+                "parameter": parameter,
+            }  # type:ignore
+
+        _output_to_bytes: Callable[[FunResult], bytes] = output_to_bytes or pickle.dumps
+        _output_from_bytes: Callable[[bytes], FunResult] = (
+            output_from_bytes or pickle.loads
+        )
+        _get_hash_data: Callable[[str, dict], Json] = (
+            get_hash_data or default_get_hash_data
+        )
+        _get_hash: Callable[[Json], str] = get_hash or get_md5_hash
+
+        def decorator(fun: Callable[FunParams, FunResult]) -> Callable:
             """TODO"""
 
-            function = FunctionWrapper.assert_wrapped(fun)
+            wrapped_fun = FunctionWrapper.assert_wrapped(fun)
+            function_id = wrapped_fun.get_function_id()
 
             @functools.wraps(fun)
             def _fun(*args, **kwargs):
-                hash_data = function.get_unique_hash_data(*args, **kwargs)
-                output_uid = function.get_unique_hash(hash_data)
+                param_values = wrapped_fun.get_argument_dict(*args, **kwargs)
+                hash_data = _get_hash_data(function_id, param_values)
+                output_uid = _get_hash(hash_data)
                 if output_uid not in self:
                     # call base function
                     # NOTE: we only support namedarguments
                     result = fun(*args, **kwargs)
-                    self[output_uid] = function.output_to_bytes(result)
+                    self[output_uid] = _output_to_bytes(result)
 
                 # retrieval
                 data = self[output_uid]
-                result = function.output_from_bytes(data)
+                result = _output_from_bytes(data)
                 return result
 
             return _fun
 
         return decorator
+
+    def job(
+        self,
+        function: Callable,
+        input_handlers: list[InputHandler],
+        output_handlers: list[OutputConvertHandler],
+    ):
+        """TODO"""
+
+        # wrap handler
+
+        def wrap_input_handle(handle):
+            def handle_(uid: UID):
+                bdata = self[uid]
+                return handle(bdata)
+
+            return handle_
+
+        def wrap_output_handle(handle):
+            def handle_(data: Any, uid: UID):
+                bdata = handle(data)
+                self[uid] = bdata
+
+            return handle_
+
+        return make_job(
+            function,
+            input_handlers=[
+                InputHandler(
+                    name=h.name,
+                    name_mapped=h.name_mapped,
+                    handle=wrap_input_handle(h.handle),
+                )
+                for h in input_handlers
+            ],
+            output_handlers=[
+                OutputHandler(
+                    name=h.name,
+                    handle=wrap_output_handle(h.handle),
+                )
+                for h in output_handlers
+            ],
+        )
 
 
 class MemoryMetadataStorage(MetadataStorage):
