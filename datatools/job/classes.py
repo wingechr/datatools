@@ -1,7 +1,11 @@
 """Abstract classes / interfaces, types"""
 
 from collections.abc import Callable
+import hashlib
+import json
 import logging
+from pathlib import Path
+import pickle
 from typing import Any, Generic
 
 from datatools.types import FunParams, FunResult
@@ -141,3 +145,64 @@ class Job:
         output_values = {p: param_values[p] for p in self.output_parameter_names}
         input_values = {p: param_values[p] for p in self.input_parameter_names}
         return output_values, input_values
+
+
+class Cache(Generic[FunParams, FunResult]):
+    """TODO"""
+
+    __output_name__ = "__output"
+
+    def __init__(self, function: Callable[FunParams, FunResult], location="__cache__"):
+        self.function = FunctionWrapper.assert_wrapped(function)
+        self.job = Job(
+            function=self.function, output_writers={self.__output_name__: self.dump}
+        )
+        self.location = location
+
+    def dump(self, data: FunResult, uid: Path) -> None:
+        """TODO"""
+        with uid.open("wb") as file:
+            return pickle.dump(data, file)
+
+    def load(self, uid: Path) -> FunResult:
+        """TODO"""
+        with uid.open("rb") as file:
+            return pickle.load(file)  # noqa:S301
+
+    def exists(self, uid: Path) -> bool:
+        """TODO"""
+        return uid.exists()
+
+    def get_uid(self, hash_data) -> Path:
+        """TODO"""
+        hash_data_s = json.dumps(
+            hash_data, ensure_ascii=False, indent=0, sort_keys=True
+        )
+        hash_data_b = hash_data_s.encode("utf-8")
+        hashsum = hashlib.md5(hash_data_b).hexdigest()  # noqa:S324
+        uid = Path(self.location) / hashsum[:2] / hashsum[2:4] / f"{hashsum}.pickle"
+        return uid
+
+    def __call__(self, *args: FunParams.args, **kwargs: FunParams.kwargs) -> FunResult:  # noqa
+        _ouput_uids, input_params = self.job.get_job_parameters(*args, **kwargs)
+        function_id = self.function.get_function_id()
+        hash_data = {"function": function_id, "parameters": input_params}
+        uid = self.get_uid(hash_data)
+        if not self.exists(uid):
+            self.job(uid)
+        return self.load(uid)
+
+    @classmethod
+    def cache(
+        cls,
+        location="__cache__",
+    ):
+        """TODO"""
+
+        def decorator(function):
+            return Cache(
+                function,
+                location=location,
+            )
+
+        return decorator
