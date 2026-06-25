@@ -6,7 +6,9 @@ from tempfile import TemporaryDirectory
 from typing import Any
 from unittest import TestCase
 
+from datatools.job.classes import FunctionWrapper
 from datatools.storage.classes import MemoryDataStorage
+from datatools.utils import names_get_argument_dict
 from tests import start_http_server
 
 
@@ -104,6 +106,10 @@ class TestUseCases(TestCase):
             def decorator(function):
                 # example build tool job
                 def job_create_output(*args, **kwargs) -> None:
+                    __params = names_get_argument_dict(
+                        ["path_output", "path_input1", "param_input2"], *args, **kwargs
+                    )
+
                     # FIXME kwargs
                     path_output, path_input1, param_input2 = args
 
@@ -130,13 +136,14 @@ class TestUseCases(TestCase):
 
             return decorator
 
-        # generate input1
-        storage["input1.pickle"] = pickle.dumps(3)
-
+        @FunctionWrapper.wrap()
         def function(param_input1, param_input2):
             return param_input1 + param_input2
 
         job_create_output = make_decorator(storage)(function)
+
+        # generate input1
+        storage["input1.pickle"] = pickle.dumps(3)
 
         # try to call mutliple times - but only of output does not exist
         for _ in range(2):

@@ -2,7 +2,7 @@
 
 from collections.abc import Callable, Iterable
 import inspect
-from inspect import Parameter
+from inspect import Parameter, Signature
 import json
 import logging
 import os
@@ -199,6 +199,15 @@ def function_get_argument_dict(f: Callable, *args, **kwargs) -> dict[str, Any]:
     sig = inspect.signature(f)
     bound = sig.bind(*args, **kwargs)  # or bind_partial()
     bound.apply_defaults()
+    return bound.arguments
+
+
+def names_get_argument_dict(params: list[str], *args, **kwargs) -> dict[str, Any]:
+    """TODO"""
+    sig = Signature(
+        [Parameter(name, Parameter.POSITIONAL_OR_KEYWORD) for name in params]
+    )
+    bound = sig.bind(*args, **kwargs)
     return bound.arguments
 
 
