@@ -1,15 +1,57 @@
 """init"""
 
+from abc import ABC, abstractmethod
 from collections.abc import Callable
 import re
+from typing import TYPE_CHECKING
 from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 import httpx
 import pandas as pd
 import sqlalchemy as sa
 
-from datatools.types import UID, DataStorage, Importer, MetadataPairs
-from datatools.utils import is_file_uri_or_path, uri_or_path_to_path
+from datatools.types import UID, MetadataPairs, StorageFileExistsError
+from datatools.utils import is_file_uri_or_path, subclasses_by_name, uri_or_path_to_path
+
+if TYPE_CHECKING:
+    from datatools.storage.classes import DataStorage
+
+
+class Importer(ABC):
+    """TODO"""
+
+    @classmethod
+    def _can_handle(cls, uri: str, **options) -> bool:
+        return False
+
+    def __init__(self, data_storage: "DataStorage", uri: str, **options):
+        self._data_storage = data_storage
+        self._options = options
+        self._uri = uri
+
+    @abstractmethod
+    def _get_data_and_metadata(
+        self, uri: str, **options
+    ) -> tuple[bytes, MetadataPairs]: ...
+
+    @abstractmethod
+    def _get_output_uid(self, uri: str, **options) -> UID: ...
+
+    def _get_valid_output_uid(self, uri: str, **options) -> UID:
+        output_uid = self._get_output_uid(self._uri, **self._options)
+        if output_uid in self._data_storage:
+            raise StorageFileExistsError(output_uid)
+        return output_uid
+
+    def __call__(self) -> UID:
+        """TODO"""
+        output_uid = self._get_valid_output_uid(self._uri, **self._options)
+        data, metadata = self._get_data_and_metadata(self._uri, **self._options)
+        self._data_storage[output_uid] = data
+        metadata_storage = self._data_storage.metadata(output_uid)
+        for k, v in metadata:
+            metadata_storage[k] = v
+        return output_uid
 
 
 class FileImporter(Importer):
@@ -63,7 +105,7 @@ class HttpImporter(Importer):
 class SqlImporter(Importer):
     """TODO"""
 
-    def __init__(self, data_storage: DataStorage, uri: str, **options):
+    def __init__(self, data_storage: "DataStorage", uri: str, **options):
         super().__init__(data_storage, uri=uri, **options)
 
     @classmethod
@@ -117,3 +159,11 @@ class SqlImporter(Importer):
             return data_b
 
         return dump
+
+
+def infer_importer_class(uri: str, **options) -> type[Importer]:
+    """TODO"""
+    for cls in subclasses_by_name(Importer).values():
+        if cls._can_handle(uri, **options):
+            return cls
+    raise NotImplementedError(f"Cannot infer Importer class for {uri}")

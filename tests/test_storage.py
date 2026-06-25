@@ -8,6 +8,7 @@ import uvicorn
 
 from datatools.storage.classes import (
     CliWrapperDataStorage,
+    DataStorage,
     FileDataStorage,
     FileDataStorageWithRdfMetadata,
     HttpDataStorage,
@@ -15,7 +16,7 @@ from datatools.storage.classes import (
     SqlDataStorage,
 )
 from datatools.storage.server import make_server_app
-from datatools.types import DataStorage, StorageFileExistsError
+from datatools.types import StorageFileExistsError
 from datatools.utils import get_free_port
 
 

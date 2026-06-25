@@ -2,8 +2,8 @@
 
 from fastapi import Body, FastAPI, HTTPException, Query, Response
 
+from datatools.storage.classes import DataStorage
 from datatools.types import (
-    DataStorage,
     StorageFileNotFoundError,
 )
 from datatools.utils import parse_cmd_vals

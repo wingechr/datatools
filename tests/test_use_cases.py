@@ -1,10 +1,9 @@
 """TODO"""
 
-from collections.abc import Callable
 from pathlib import Path
 import pickle
 from tempfile import TemporaryDirectory
-from typing import Any, Generic, ParamSpec, TypeVar
+from typing import Any
 from unittest import TestCase
 
 from datatools.storage.classes import MemoryDataStorage
@@ -149,40 +148,3 @@ class TestUseCases(TestCase):
 
         self.assertTrue("output.pickle" in storage)
         self.assertEqual(count_calls, 1)
-
-    def test_use_case_function_decorator(self):
-        """TODO
-
-        We want to decorte a function to help with function id and metadata as
-        well as input output handling
-        """
-
-        P = ParamSpec("P")
-        R = TypeVar("R")
-
-        class FunctionWrapper(Generic[P, R]):
-            """TODO"""
-
-            def __init__(self, fun: Callable[P, R], p=2):
-                self.fun = fun
-                self.p = p
-
-            def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:  # noqa
-                print(self.p)
-                return self.fun(*args, **kwargs)
-
-            @classmethod
-            def wrap(cls, p=10):
-                """TODO"""
-
-                def decorator(fun):
-                    return FunctionWrapper(fun, p=p)
-
-                return decorator
-
-        @FunctionWrapper.wrap(p=2)
-        def my_function(a: int, b: int | str) -> float | None:
-            """my description"""
-            if not b:
-                return None
-            return a / float(b)

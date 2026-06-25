@@ -1,6 +1,8 @@
 """TODO"""
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
+import inspect
+from inspect import Parameter
 import json
 import logging
 import os
@@ -8,9 +10,14 @@ from pathlib import Path
 import re
 import socket
 import sys
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, TypeVar
 from urllib.parse import unquote, urlparse
 from urllib.request import url2pathname
+
+if TYPE_CHECKING:
+    pass
+
+XSub = TypeVar("XSub")
 
 
 class TextFile:
@@ -159,3 +166,49 @@ def uri_or_path_to_path(x: str | Path) -> Path:
         return file_uri_to_path(x)
     else:
         return Path(x)
+
+
+def function_get_defaults(func: Callable):
+    """TODO"""
+    sig = inspect.signature(func)
+    return {
+        name: param.default
+        for name, param in sig.parameters.items()
+        if param.default is not inspect._empty
+    }
+
+
+def function_has_varargs(func: Callable) -> bool:
+    """TODO"""
+    sig = inspect.signature(func)
+    has_args = any(p.kind == Parameter.VAR_POSITIONAL for p in sig.parameters.values())
+    has_kwargs = any(p.kind == Parameter.VAR_KEYWORD for p in sig.parameters.values())
+    return has_args or has_kwargs
+
+
+def function_get_regular_params(func: Callable) -> list[str]:
+    """TODO"""
+    if function_has_varargs(func):
+        raise TypeError("Function cannot have *args or **kwargs")
+    sig = inspect.signature(func)
+    return list(sig.parameters)
+
+
+def function_get_argument_dict(f: Callable, *args, **kwargs) -> dict[str, Any]:
+    """TODO"""
+    sig = inspect.signature(f)
+    bound = sig.bind(*args, **kwargs)  # or bind_partial()
+    bound.apply_defaults()
+    return bound.arguments
+
+
+def iter_subclasses(cls: type[XSub]) -> Iterable[type[XSub]]:
+    """TODO"""
+    yield cls
+    for subcls in cls.__subclasses__():
+        yield from iter_subclasses(subcls)
+
+
+def subclasses_by_name(cls: type[XSub]) -> dict[str, type[XSub]]:
+    """TODO"""
+    return {c.__name__: c for c in list(iter_subclasses(cls))[1:]}

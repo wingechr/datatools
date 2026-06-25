@@ -2,5 +2,4 @@
 
 __all__ = ["DataStorage", "MemoryDataStorage"]
 
-from datatools.storage.classes import MemoryDataStorage
-from datatools.types import DataStorage
+from datatools.storage.classes import DataStorage, MemoryDataStorage
