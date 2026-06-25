@@ -302,7 +302,10 @@ class HttpMetadataStorage(MetadataStorage):
 
 
 class HttpDataStorage(DataStorage[bytes]):
-    """TODO"""
+    """TODO
+
+    TODO: maybe add option to delegate import to handle on remote side?
+    """
 
     @classmethod
     def _can_handle(cls, location: str) -> bool:

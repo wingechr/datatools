@@ -9,6 +9,31 @@ import pandas as pd
 import sqlalchemy as sa
 
 from datatools.types import UID, DataStorage, Importer, MetadataPairs
+from datatools.utils import is_file_uri_or_path, uri_or_path_to_path
+
+
+class FileImporter(Importer):
+    """TODO"""
+
+    @classmethod
+    def _can_handle(cls, uri: str) -> bool:
+        """Either file:// protocol or no protocol"""
+        return is_file_uri_or_path(uri)
+
+    def _get_data_and_metadata(
+        self, uri: str, **options
+    ) -> tuple[bytes, MetadataPairs]:
+        path = uri_or_path_to_path(uri).resolve()
+        print((uri, path))
+        data = path.read_bytes()
+        metadata = [("source", uri)]
+        return data, metadata
+
+    def _get_output_uid(self, uri: str, **options) -> UID:
+        """FIXME"""
+        path = uri_or_path_to_path(uri).resolve()
+        name = path.name
+        return name
 
 
 class HttpImporter(Importer):
@@ -30,7 +55,7 @@ class HttpImporter(Importer):
     def _get_output_uid(self, uri: str, **options) -> UID:
         """FIXME"""
         parts = urlsplit(uri)
-        name = f"{parts.netloc}/{parts.path}"
+        name = f"{parts.netloc}/{parts.path.strip('/')}"
         name = name.strip("/")
         return name
 

@@ -158,11 +158,11 @@ class DataStorage(ABC, Generic[Data]):
         """TODO"""
         return {"Location": str(self._location), "Class": str(self.__class__.__name__)}
 
-    def import_from_uri(self, uri: str, **options):
+    def import_from_uri(self, uri: str, **options) -> UID:
         """TODO"""
         importer_class = infer_importer_class(uri, **options)
         importer = importer_class(data_storage=self, uri=uri, **options)
-        importer()
+        return importer()
 
 
 class Importer(ABC):
@@ -191,7 +191,7 @@ class Importer(ABC):
             raise StorageFileExistsError(output_uid)
         return output_uid
 
-    def __call__(self):
+    def __call__(self) -> UID:
         """TODO"""
         output_uid = self._get_valid_output_uid(self._uri, **self._options)
         data, metadata = self._get_data_and_metadata(self._uri, **self._options)
@@ -199,6 +199,7 @@ class Importer(ABC):
         metadata_storage = self._data_storage.metadata(output_uid)
         for k, v in metadata:
             metadata_storage[k] = v
+        return output_uid
 
 
 def infer_importer_class(uri: str, **options) -> type[Importer]:

@@ -1,9 +1,16 @@
 """package init"""
 
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import logging
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from threading import Thread
 from unittest import TestCase
+
+from datatools.utils import get_free_port
+
+print("Serving on http://127.0.0.1:8000/")
 
 logging.basicConfig(
     format="[%(asctime)s %(levelname)7s] %(message)s",
@@ -11,6 +18,21 @@ logging.basicConfig(
     level=logging.DEBUG,
     force=True,
 )
+
+
+def start_http_server(
+    directory: str = ".", port: int | None = None, host: str = "127.0.0.1"
+) -> str:
+    """TODO"""
+    port = port or get_free_port()
+    server = ThreadingHTTPServer(
+        (host, port),
+        partial(SimpleHTTPRequestHandler, directory=directory),
+    )
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    url = f"http://{host}:{port}"
+    return url
 
 
 class TempdirTestCase(TestCase):

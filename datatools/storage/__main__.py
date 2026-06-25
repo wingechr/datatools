@@ -145,7 +145,8 @@ def import_from_uri(
 ) -> None:
     """TODO"""
     options_dict = parse_cmd_vals(options)
-    ctx_data_storage.import_from_uri(uri, **options_dict)
+    uid = ctx_data_storage.import_from_uri(uri, **options_dict)
+    logging.info(uid)
 
 
 @main.command("serve")

@@ -9,7 +9,8 @@ import re
 import socket
 import sys
 from typing import Any, Literal
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
+from urllib.request import url2pathname
 
 
 class TextFile:
@@ -118,10 +119,11 @@ def file_uri_to_path(uri: str) -> Path:
     parts = urlparse(uri)
     if parts.netloc:
         raise NotImplementedError(uri)
-    if parts.path.startswith("/./") or parts.path.startswith("/../"):
+    elif parts.path.startswith("/./") or parts.path.startswith("/../"):
+        # relative path (not standard file:// schema)
         path_s = Path(os.getcwd()).as_posix() + parts.path
     else:
-        path_s = parts.path
+        path_s = url2pathname(unquote(parts.path))
     path = Path(path_s)
 
     return path
