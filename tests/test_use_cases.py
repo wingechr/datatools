@@ -6,7 +6,6 @@ import pickle
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 
-from datatools.job.classes import InputHandler, OutputConvertHandler
 from datatools.storage.classes import MemoryDataStorage
 from tests import start_http_server
 
@@ -97,33 +96,31 @@ class TestUseCases(TestCase):
             count_calls += 1
             return param_input1 + param_input2
 
+        outputs = {"output": "output.pickle"}
+        inputs = {"param_input1": "input.pickle"}
+
+        # generate inputs
+        for uid in inputs.values():
+            storage[uid] = pickle.dumps(3)
+
         job_create_output = storage.job(
             function,
-            input_handlers=[
-                InputHandler(handle=pickle.loads, name_mapped="param_input1")
-            ],
-            output_handlers=[OutputConvertHandler(handle=pickle.dumps)],
+            input_converters=dict.fromkeys(inputs, pickle.loads),
+            output_converters=dict.fromkeys(outputs, pickle.dumps),
         )
-
-        # generate input1
-        storage["input1.pickle"] = pickle.dumps(3)
-        output_uid = "output.pickle"
 
         # try to call mutliple times - but only of output does not exist
         for _ in range(2):
-            if output_uid not in storage:
-                job_create_output(output_uid, "input1.pickle")
+            if not all(uid in storage for uid in outputs.values()):
+                job_create_output(**outputs, **inputs)
 
-        self.assertTrue(output_uid in storage)
+        self.assertTrue(all(uid in storage for uid in outputs.values()))
+
         self.assertEqual(count_calls, 1)
 
         # check that metadata should also be writtem
-        job_timestamp_s: str = get_item_or_first(
-            storage.metadata(output_uid)["job_timestamp"]
-        )  # type:ignore
-        datetime.datetime.fromisoformat(job_timestamp_s)
-
-        # use named arguments, change order
-        job_create_output(
-            param_input2=10, input="input1.pickle", output="output2.pickle"
-        )
+        for uid in outputs.values():
+            job_timestamp_s: str = get_item_or_first(
+                storage.metadata(uid)["job_timestamp"]
+            )  # type:ignore
+            datetime.datetime.fromisoformat(job_timestamp_s)

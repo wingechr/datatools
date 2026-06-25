@@ -7,7 +7,6 @@ from typing import Any, Generic
 
 from datatools.types import FunParams, FunResult
 from datatools.utils import (
-    assert_unique,
     function_get_defaults,
     function_get_regular_params,
     function_has_varargs,
@@ -69,11 +68,6 @@ class InputHandler:
 
     handle: Callable[[Any], Any]
     name: str = "input"
-    name_mapped: str | None = None  # name in inner function
-
-    @property
-    def _name_mapped(self) -> str:
-        return self.name_mapped or self.name
 
 
 @dataclass
@@ -82,14 +76,6 @@ class OutputHandler:
 
     handle: Callable[[Any, Any], None]
     name: str = "output"
-    split: Callable[[Any], Any] | None = None
-
-    @property
-    def _split(self) -> Callable[[Any], Any]:
-        def use_all(x):
-            return x
-
-        return self.split or use_all
 
 
 @dataclass
@@ -101,86 +87,61 @@ class OutputConvertHandler(OutputHandler):
 
 def make_job(
     function: Callable,
-    input_handlers: list[InputHandler],
-    output_handlers: list[OutputHandler],
+    input_readers: dict[str, Callable[[Any], Any]],
+    output_writers: dict[str, Callable[[Any, str], Any]],
 ):
     """TODO"""
 
     wrapped_function = FunctionWrapper.assert_wrapped(function)
 
     # parameter the input funcion expects
-    orig_fun_parameter_names = wrapped_function.fun_parameter_names
-    new_fun_parameter_names_output = []
-    for oh in output_handlers:
-        new_fun_parameter_names_output.append(oh.name)
+    input_parameter_names = wrapped_function.fun_parameter_names
+    output_parameter_names = list(output_writers)
+    invalid_output_parameter_names = set(output_writers) & set(input_parameter_names)
+    if invalid_output_parameter_names:
+        raise Exception("Invalid output parameters: %s", invalid_output_parameter_names)
 
-    assert_unique(h._name_mapped for h in input_handlers)
-    input_handlers_by_name_mapped = {h._name_mapped: h for h in input_handlers}
+    parameter_names = output_parameter_names + input_parameter_names
 
-    assert_unique(h.name for h in input_handlers)
-    input_handlers_by_name = {h.name: h for h in input_handlers}
-    unused_input_handlers_names = set(input_handlers_by_name_mapped) - set(
-        orig_fun_parameter_names
-    )
-    if unused_input_handlers_names:
+    additional_input_parameter_names = set(input_readers) - set(input_parameter_names)
+    if additional_input_parameter_names:
         raise Exception(
             "Mismatched names between input handlers and argument names: %s",
-            unused_input_handlers_names,
+            additional_input_parameter_names,
         )
+
     # find unmapped parameters that have defaults
-    unmapped_names = set(orig_fun_parameter_names) - set(input_handlers_by_name_mapped)
-    unmapped_defaults = {
-        k: v for k, v in wrapped_function.fun_defaults.items() if k in unmapped_names
+    unhandled_input_parameter_names = set(input_parameter_names) - set(input_readers)
+    defaults = {
+        k: v
+        for k, v in wrapped_function.fun_defaults.items()
+        if k in unhandled_input_parameter_names
     }
-    logging.error("unmapped_defaults: %s", unmapped_defaults)
-
-    new_fun_parameter_names_input = []
-    for name in orig_fun_parameter_names:
-        name_ = (
-            input_handlers_by_name_mapped[name].name
-            if name in input_handlers_by_name_mapped
-            else name
-        )
-        new_fun_parameter_names_input.append(name_)
-
-    # output first (but does not have to be)
-    new_fun_parameter_names = (
-        new_fun_parameter_names_output + new_fun_parameter_names_input
-    )
-    assert_unique(new_fun_parameter_names)
+    logging.error("unmapped_defaults: %s", defaults)
 
     def job_fun(*args, **kwargs):
-        logging.error("orig_fun_parameter_names: %s", orig_fun_parameter_names)
-        logging.error("new_fun_parameter_names: %s", new_fun_parameter_names)
+        logging.error("orig_fun_parameter_names: %s", input_parameter_names)
 
         # add missing defaults:
-        for k, v in unmapped_defaults.items():
-            if k not in kwargs:
-                kwargs[k] = v
-
-        param_values = names_get_argument_dict(new_fun_parameter_names, *args, **kwargs)
+        kwargs = defaults | kwargs
+        param_values = names_get_argument_dict(parameter_names, *args, **kwargs)
         # we want to keep these param_values for meta data
         logging.error("param_values: %s", param_values)
 
-        param_values_input_mapped = {}
-        for name in new_fun_parameter_names_input:
-            value = param_values[name]
-            handler = input_handlers_by_name.get(name)
-            if handler:
-                name_mapped = handler._name_mapped
-                value = handler.handle(value)
-            else:
-                name_mapped = name
-            param_values_input_mapped[name_mapped] = value
+        input_param_values = {}
+        for param in input_parameter_names:
+            value = param_values[param]
+            if param in input_readers:
+                value = input_readers[param](value)
+            input_param_values[param] = value
 
-        logging.error("param_values_input_mapped: %s", param_values_input_mapped)
+        logging.error("param_values input_param_values: %s", input_param_values)
 
         # call function
-        result = function(**param_values_input_mapped)
-        for oh in output_handlers:
-            value = oh._split(result)
-            name_ = param_values[oh.name]
-            logging.error("output %s %s %s", oh.name, name_, value)
-            oh.handle(value, name_)
+        result = function(**input_param_values)
+
+        for param, write in output_writers.items():
+            name = param_values[param]
+            write(result, name)
 
     return job_fun

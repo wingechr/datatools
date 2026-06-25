@@ -28,9 +28,6 @@ from sqlalchemy import (
 from datatools.importer import infer_importer_class
 from datatools.job.classes import (
     FunctionWrapper,
-    InputHandler,
-    OutputConvertHandler,
-    OutputHandler,
     make_job,
 )
 from datatools.types import (
@@ -229,8 +226,8 @@ class DataStorage(ABC):
     def job(
         self,
         function: Callable,
-        input_handlers: list[InputHandler],
-        output_handlers: list[OutputConvertHandler],
+        input_converters: dict[str, Callable[[FunResult], bytes]],
+        output_converters: dict[str, Callable[[bytes], FunResult]],
     ):
         """TODO"""
 
@@ -255,21 +252,13 @@ class DataStorage(ABC):
 
         job = make_job(
             function,
-            input_handlers=[
-                InputHandler(
-                    name=h.name,
-                    name_mapped=h.name_mapped,
-                    handle=wrap_input_handle(h.handle),
-                )
-                for h in input_handlers
-            ],
-            output_handlers=[
-                OutputHandler(
-                    name=h.name,
-                    handle=wrap_output_handle(h.handle),
-                )
-                for h in output_handlers
-            ],
+            input_readers={
+                name: wrap_input_handle(conv) for name, conv in input_converters.items()
+            },
+            output_writers={
+                name: wrap_output_handle(conv)
+                for name, conv in output_converters.items()
+            },
         )
 
         @functools.wraps(job)
@@ -279,7 +268,6 @@ class DataStorage(ABC):
             metadata["job_timestamp"] = datetime.datetime.now().isoformat()
 
             job(*args, **kwargs)
-            raise Exception
 
         return _job
 
