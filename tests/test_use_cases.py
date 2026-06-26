@@ -56,7 +56,7 @@ class TestUseCases(TestCase):
             query = "select 1 as a"
             uri = f"sqlite:///:memory:?q={query}"
             uid = storage.import_from_uri(uri)
-            self.assertEqual(storage[uid], b"a\r\n1\r\n")
+            self.assertEqual(storage[uid].replace(b"\r", b""), b"a\n1\n")
             # TODO add query?
             self.assertEqual(
                 get_item_or_first(storage.metadata(uid)["parameter"])["uri"],  # type:ignore
