@@ -226,62 +226,68 @@ class DataStorage(ABC):
     def job(
         self,
         function: Callable,
-        input_converters: dict[str, Callable[[FunResult], bytes]],
         output_converters: dict[str, Callable[[bytes], FunResult]],
-    ):
+        input_converters: dict[str, Callable[[FunResult], bytes]] | None = None,
+    ) -> Job:
         """TODO"""
 
-        data_buffer = {}
+        wrapped_function = FunctionWrapper.assert_wrapped(function)
 
-        def wrap_input_handle(handle):
+        # update metadata before running job
+        # so output handlers can use it
+        timestamp = datetime.datetime.now().isoformat()
+
+        job_metadata = {
+            "timestamp": timestamp,
+            "parameter": {},  # will be filledby input handlers
+            "function": wrapped_function.get_function_id(),
+        }
+
+        def wrap_input_handler(name: str, handler):
             def handle_(uid: UID):
+                job_metadata["parameter"][name] = uid
                 bdata = self[uid]
-                return handle(bdata)
+                return handler(bdata)
 
             return handle_
 
-        def wrap_output_handle(handle):
+        def create_input_handler(name):
+            def handle_(value: Any):
+                job_metadata["parameter"][name] = value
+                return value
+
+            return handle_
+
+        def wrap_output_handler(handler):
             def handle_(data: Any, uid: UID):
-                bdata = handle(data)
-                data_buffer[uid] = bdata
+                bdata = handler(data)
+                self[uid] = bdata
+                metadata = self.metadata(uid)
+                for k, v in job_metadata.items():
+                    metadata[k] = v
 
             return handle_
 
-        job = Job(
+        wrapped_output_handlers = {
+            name: wrap_output_handler(conv) for name, conv in output_converters.items()
+        }
+
+        input_converters = input_converters or {}
+        # !! we need to wrap all input parameters
+        wrapped_input_handlers = {
+            name: (
+                wrap_input_handler(name, input_converters[name])
+                if name in input_converters
+                else create_input_handler(name)
+            )
+            for name in wrapped_function.fun_parameter_names
+        }
+
+        return Job(
             function,
-            input_readers={
-                name: wrap_input_handle(conv) for name, conv in input_converters.items()
-            },
-            output_writers={
-                name: wrap_output_handle(conv)
-                for name, conv in output_converters.items()
-            },
+            output_writers=wrapped_output_handlers,
+            input_readers=wrapped_input_handlers,
         )
-
-        @functools.wraps(job)
-        def _job(*args, **kwargs):
-            job(*args, **kwargs)
-
-            wrapped_function = FunctionWrapper.assert_wrapped(function)
-
-            _ouput_uids, input_params = job.get_job_parameters(*args, **kwargs)
-
-            # update metadata before running job
-            # so output handlers can use it
-            timestamp = datetime.datetime.now().isoformat()
-
-            metadata = {
-                "timestamp": timestamp,
-                "parameter": input_params,
-                "function": wrapped_function.get_function_id(),
-            }
-
-            for uid, bdata in data_buffer.items():
-                self[uid] = bdata
-                for k, v in metadata.items():
-                    self.metadata(uid)[k] = v
-
-        return _job
 
 
 class MemoryMetadataStorage(MetadataStorage):
