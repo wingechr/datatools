@@ -13,6 +13,7 @@ import pickle
 import re
 from typing import Any, Literal
 
+from click.testing import CliRunner
 import httpx
 import rdflib
 from sqlalchemy import (
@@ -42,7 +43,6 @@ from datatools.types import (
 )
 from datatools.utils import (
     TextFile,
-    call_script,
     identity,
     is_file_uri_or_path,
     reverse_prints,
@@ -601,9 +601,9 @@ class HttpDataStorage(DataStorage):
 
     def info(self) -> dict:
         """TODO"""
-        info_server = self._request(path="/info").json()
+        info_remote = self._request(path="/info").json()
         info_client = super().info()
-        info_client.update({"server": info_server})
+        info_client.update({"remote": info_remote})
 
         return info_client
 
@@ -725,11 +725,23 @@ class CliWrapperDataStorage(DataStorage):
     def __init__(self, location: Any = None):
         self._location = location
         self._script = str(Path(__file__).parent / "__main__.py")
+        self._clirunner = CliRunner()
+
+        from datatools.storage.__main__ import main as storage_main_cli
+
+        self._storage_main_cli = storage_main_cli
 
     def _request(self, *args: str, data: bytes | None = None) -> bytes:
-        stdout, _stderr = call_script(
-            self._script, ["-l", str(self._location)] + list(args), data
-        )
+        cmd = ["-l", str(self._location)] + list(args)
+        # stdout, _stderr = call_script(
+        #    self._script, cmd, data
+        # )
+        result = self._clirunner.invoke(self._storage_main_cli, cmd, input=data)
+        if result.exit_code:
+            raise SubprocessStatus(result.exit_code)
+
+        stdout = result.stdout_bytes
+
         return stdout
 
     def _contains(self, uid: UID) -> bool:
@@ -755,3 +767,13 @@ class CliWrapperDataStorage(DataStorage):
         filters_str = [f"{k}={v}" for k, v in filters.items()]
         data = self._request("find", *filters_str)
         return reverse_prints(data)
+
+    def info(self) -> dict:
+        """TODO"""
+        info_remote = self._request("info")
+        logging.error(info_remote)
+        info_remote = json.loads(info_remote)
+        info_client = super().info()
+        info_client.update({"remote": info_remote})
+
+        return info_client

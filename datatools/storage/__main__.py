@@ -1,5 +1,6 @@
 """TODO"""
 
+import json
 import logging
 import sys
 
@@ -46,8 +47,8 @@ def main(ctx, location: str, storage_class=str | None) -> None:
 @click.pass_obj
 def info(ctx_data_storage: DataStorage) -> None:
     """TODO"""
-    for k, v in ctx_data_storage.info().items():
-        logging.info("%s: %s", k, v)
+    info = ctx_data_storage.info()
+    print(json.dumps(info, indent=2, ensure_ascii=False))
 
 
 @main.command()
@@ -67,7 +68,7 @@ def find(ctx_data_storage: DataStorage, filters: list[str]) -> None:
 def has(ctx_data_storage: DataStorage, uid: str) -> None:
     """TODO
 
-    just sets status code
+    just sets status code OK (0) if uid in ctx_data_storage
 
     """
     if uid not in ctx_data_storage:
