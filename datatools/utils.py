@@ -190,8 +190,10 @@ def function_has_varargs(func: Callable) -> bool:
 
 def function_get_regular_params(func: Callable) -> list[str]:
     """TODO"""
-    if function_has_varargs(func):
-        raise TypeError("Function cannot have *args or **kwargs")
+    # is this now possible?
+    # if function_has_varargs(func):
+    #     raise TypeError("Function cannot have *args or **kwargs")
+
     sig = inspect.signature(func)
     return list(sig.parameters)
 

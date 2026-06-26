@@ -3,7 +3,6 @@
 from collections.abc import Callable
 import hashlib
 import json
-import logging
 from pathlib import Path
 from typing import Any, Generic
 
@@ -11,7 +10,6 @@ from datatools.types import FunParams, FunResult
 from datatools.utils import (
     function_get_defaults,
     function_get_regular_params,
-    function_has_varargs,
     names_get_argument_dict,
     pickle_dump_to_path,
     pickle_load_from_path,
@@ -26,8 +24,10 @@ class FunctionWrapper(Generic[FunParams, FunResult]):
         fun: Callable[FunParams, FunResult],
         **params,
     ):
-        if function_has_varargs(fun):
-            logging.warning("Dont wrap a function with *args / **kwargs")
+        # TODO: is this still a problem?
+        # if function_has_varargs(fun):
+        #    logging.warning("Dont wrap a function with *args / **kwargs")
+
         self.fun = fun
         self.fun_defaults = function_get_defaults(fun)
         self.fun_parameter_names = function_get_regular_params(fun)

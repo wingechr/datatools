@@ -36,19 +36,32 @@ class TestUseCases(TestCase):
             # import from http source
             uri = base_url + "/" + filename
             uid = storage.import_from_uri(uri)
+            self.assertEqual(storage[uid], test_data)
             # should have meta data from import action
-            self.assertEqual(get_item_or_first(storage.metadata(uid)["source"]), uri)
+            self.assertEqual(
+                get_item_or_first(storage.metadata(uid)["parameter"])["uri"],  # type:ignore
+                uri,
+            )
 
             # import from path
             uri = filepath.as_uri()
             uid = storage.import_from_uri(uri)
-            self.assertEqual(get_item_or_first(storage.metadata(uid)["source"]), uri)
+            self.assertEqual(storage[uid], test_data)
+            self.assertEqual(
+                get_item_or_first(storage.metadata(uid)["parameter"])["uri"],  # type:ignore
+                uri,
+            )
 
             # import from sql
             query = "select 1 as a"
             uri = f"sqlite:///:memory:?q={query}"
             uid = storage.import_from_uri(uri)
-            self.assertEqual(get_item_or_first(storage.metadata(uid)["query"]), query)
+            self.assertEqual(storage[uid], b"a\r\n1\r\n")
+            # TODO add query?
+            self.assertEqual(
+                get_item_or_first(storage.metadata(uid)["parameter"])["uri"],  # type:ignore
+                uri,
+            )
 
     def test_use_case_cache(self):
         """TODO"""

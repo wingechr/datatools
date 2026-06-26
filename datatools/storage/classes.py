@@ -168,9 +168,19 @@ class DataStorage(ABC):
 
     def import_from_uri(self, uri: str, **options) -> UID:
         """TODO"""
+        _output_param_name = "__output"  # any name, must not collide with parameters
+
         importer_class = infer_importer_class(uri, **options)
-        importer = importer_class(data_storage=self, uri=uri, **options)
-        return importer()
+        uid = importer_class._get_output_uid(uri, **options)
+
+        # logging.error((uri, uid, options))
+
+        job = self.job(
+            function=importer_class.get_data,
+            output_converters={_output_param_name: importer_class.output_to_bytes},
+        )
+        job(uid, uri, **options)
+        return uid
 
     def cache(
         self,
@@ -180,12 +190,12 @@ class DataStorage(ABC):
     ) -> Callable:
         """TODO"""
 
-        _output_name = "__output"  # any name, but must not collide with parameters
+        _output_param_name = "__output"  # any name, must not collide with parameters
 
         def get_hash_data(job: Job, *args, **kwargs) -> Json:
             # logging.error((args, kwargs))
             _ouput_uids, input_params = job.get_job_parameters(
-                _output_name, *args, **kwargs
+                _output_param_name, *args, **kwargs
             )
             function_id = job.function.get_function_id()
             return {"function": function_id, "parameters": input_params}  # type:ignore
@@ -202,7 +212,8 @@ class DataStorage(ABC):
             """TODO"""
 
             job = self.job(
-                function=function, output_converters={_output_name: output_to_bytes}
+                function=function,
+                output_converters={_output_param_name: output_to_bytes},
             )
 
             @functools.wraps(function)
@@ -241,7 +252,7 @@ class DataStorage(ABC):
 
         job_metadata = {
             "timestamp": timestamp,
-            "parameter": {},  # will be filledby input handlers
+            "parameter": {},  # will be filled by input handlers
             "function": wrapped_function.get_function_id(),
         }
 
@@ -266,6 +277,7 @@ class DataStorage(ABC):
                 self[uid] = bdata
                 metadata = self.metadata(uid)
                 for k, v in job_metadata.items():
+                    # logging.error("SET %s.%s = %s", uid, k, v)
                     metadata[k] = v
 
             return handle_
