@@ -44,6 +44,7 @@ from datatools.types import (
 )
 from datatools.utils import (
     TextFile,
+    identity,
     is_file_uri_or_path,
     reverse_prints,
     try_parse_json_str,
@@ -175,8 +176,7 @@ class DataStorage(ABC):
         self,
         output_to_bytes: Callable[[Any], bytes] = pickle.dumps,
         output_from_bytes: Callable[[bytes], Any] = pickle.loads,
-        # get_hash_data: Callable[[str, dict], Json] | None = None,
-        # get_hash: Callable[[Json], str] | None = None,
+        get_uid_from_hash: Callable[[str], str] = identity,
     ) -> Callable:
         """TODO"""
 
@@ -198,13 +198,6 @@ class DataStorage(ABC):
             hashsum = hashlib.md5(hash_data_b).hexdigest()  # noqa:S324
             return hashsum
 
-        def get_uid(hashsum: str) -> str:
-            """TODO
-
-            depends on storage,maybe custom options
-            """
-            return f"{hashsum[:2]}/{hashsum[2:4]}/{hashsum}.pickle"
-
         def decorator(function: Callable[FunParams, FunResult]) -> Callable:
             """TODO"""
 
@@ -216,7 +209,7 @@ class DataStorage(ABC):
             def _fun(*args, **kwargs):
                 hash_data = get_hash_data(job, *args, **kwargs)
                 hashsum = get_hashsum(hash_data)
-                output_uid = get_uid(hashsum)
+                output_uid = get_uid_from_hash(hashsum)
                 # logging.error((hash_data, hashsum))
 
                 if output_uid not in self:

@@ -44,7 +44,10 @@ class Importer(ABC):
         return output_uid
 
     def __call__(self) -> UID:
-        """TODO"""
+        """TODO
+
+        maybe we can use storage.job()
+        """
         output_uid = self._get_valid_output_uid(self._uri, **self._options)
         data, metadata = self._get_data_and_metadata(self._uri, **self._options)
         self._data_storage[output_uid] = data

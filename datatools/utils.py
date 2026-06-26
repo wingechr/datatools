@@ -268,3 +268,8 @@ def pickle_load_from_path(path: Path) -> Any:
     """TODO"""
     with path.open("rb") as file:
         return pickle.load(file)  # noqa:S301
+
+
+def identity(x):
+    """TODO"""
+    return x
