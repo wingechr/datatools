@@ -5,7 +5,6 @@ import hashlib
 import json
 import logging
 from pathlib import Path
-import pickle
 from typing import Any, Generic
 
 from datatools.types import FunParams, FunResult
@@ -14,6 +13,8 @@ from datatools.utils import (
     function_get_regular_params,
     function_has_varargs,
     names_get_argument_dict,
+    pickle_dump_to_path,
+    pickle_load_from_path,
 )
 
 
@@ -139,7 +140,9 @@ class Job:
 
         # add missing defaults:
         kwargs = self.defaults | kwargs
+
         param_values = names_get_argument_dict(self.parameter_names, *args, **kwargs)
+
         # we want to keep these param_values for meta data
         # logging.error("param_values: %s", param_values)
         output_values = {p: param_values[p] for p in self.output_parameter_names}
@@ -152,42 +155,26 @@ class Cache(Generic[FunParams, FunResult]):
 
     __output_name__ = "__output"
 
-    def __init__(self, function: Callable[FunParams, FunResult], location="__cache__"):
+    def __init__(
+        self,
+        function: Callable[FunParams, FunResult],
+        get_id: Callable,
+        dump: Callable = pickle_dump_to_path,
+        load: Callable = pickle_load_from_path,
+        exists: Callable = lambda p: p.exists(),
+    ):
+        self.get_id = get_id
+        self.dump = dump
+        self.load = load
+        self.exists = exists
         self.function = FunctionWrapper.assert_wrapped(function)
+
         self.job = Job(
             function=self.function, output_writers={self.__output_name__: self.dump}
         )
-        self.location = location
-
-    def dump(self, data: FunResult, uid: Path) -> None:
-        """TODO"""
-        with uid.open("wb") as file:
-            return pickle.dump(data, file)
-
-    def load(self, uid: Path) -> FunResult:
-        """TODO"""
-        with uid.open("rb") as file:
-            return pickle.load(file)  # noqa:S301
-
-    def exists(self, uid: Path) -> bool:
-        """TODO"""
-        return uid.exists()
-
-    def get_uid(self, hash_data) -> Path:
-        """TODO"""
-        hash_data_s = json.dumps(
-            hash_data, ensure_ascii=False, indent=0, sort_keys=True
-        )
-        hash_data_b = hash_data_s.encode("utf-8")
-        hashsum = hashlib.md5(hash_data_b).hexdigest()  # noqa:S324
-        uid = Path(self.location) / hashsum[:2] / hashsum[2:4] / f"{hashsum}.pickle"
-        return uid
 
     def __call__(self, *args: FunParams.args, **kwargs: FunParams.kwargs) -> FunResult:  # noqa
-        _ouput_uids, input_params = self.job.get_job_parameters(*args, **kwargs)
-        function_id = self.function.get_function_id()
-        hash_data = {"function": function_id, "parameters": input_params}
-        uid = self.get_uid(hash_data)
+        uid = self.get_id(self.job, *args, **kwargs)
         if not self.exists(uid):
             self.job(uid)
         return self.load(uid)
@@ -195,14 +182,34 @@ class Cache(Generic[FunParams, FunResult]):
     @classmethod
     def cache(
         cls,
-        location="__cache__",
+        get_id: Callable,
+        dump: Callable = pickle_dump_to_path,
+        load: Callable = pickle_load_from_path,
+        exists: Callable = lambda p: p.exists(),
     ):
         """TODO"""
 
         def decorator(function):
-            return Cache(
-                function,
-                location=location,
-            )
+            return Cache(function, get_id=get_id, dump=dump, load=load, exists=exists)
 
         return decorator
+
+
+def make_file_cache_get_path(location: str | Path = "__cache__", suffix=".pickle"):
+    """TODO"""
+    location = Path(location)
+
+    def get_id(job: Job, *args, **kwargs):
+        _ouput_uids, input_params = job.get_job_parameters(*args, **kwargs)
+        function_id = job.function.get_function_id()
+        hash_data = {"function": function_id, "parameters": input_params}
+
+        hash_data_s = json.dumps(
+            hash_data, ensure_ascii=False, indent=0, sort_keys=True
+        )
+        hash_data_b = hash_data_s.encode("utf-8")
+        hashsum = hashlib.md5(hash_data_b).hexdigest()  # noqa:S324
+        path = location / hashsum[:2] / hashsum[2:4] / f"{hashsum}{suffix}"
+        return path
+
+    return get_id

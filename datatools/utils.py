@@ -8,6 +8,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import pickle
 import re
 import socket
 import sys
@@ -208,6 +209,7 @@ def names_get_argument_dict(params: list[str], *args, **kwargs) -> dict[str, Any
     sig = Signature(
         [Parameter(name, Parameter.POSITIONAL_OR_KEYWORD) for name in params]
     )
+    # logging.error(("names_get_argument_dict", sig.parameters, args, kwargs))
     bound = sig.bind(*args, **kwargs)
     return bound.arguments
 
@@ -240,3 +242,16 @@ def assert_unique(iterable: Iterable):
         if x in uq:
             raise KeyError("Duplicate key: %s", x)
         uq.add(x)
+
+
+def pickle_dump_to_path(data: Any, path: Path) -> None:
+    """TODO"""
+    path.parent.mkdir(exist_ok=True, parents=True)
+    with path.open("wb") as file:
+        return pickle.dump(data, file)
+
+
+def pickle_load_from_path(path: Path) -> Any:
+    """TODO"""
+    with path.open("rb") as file:
+        return pickle.load(file)  # noqa:S301

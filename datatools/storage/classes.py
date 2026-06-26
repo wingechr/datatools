@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator
 import datetime
 import functools
+import hashlib
+import json
 import logging
 import os
 from pathlib import Path
@@ -26,10 +28,7 @@ from sqlalchemy import (
 )
 
 from datatools.importer import infer_importer_class
-from datatools.job.classes import (
-    FunctionWrapper,
-    Job,
-)
+from datatools.job.classes import FunctionWrapper, Job
 from datatools.types import (
     UID,
     ByteData,
@@ -45,7 +44,6 @@ from datatools.types import (
 )
 from datatools.utils import (
     TextFile,
-    get_md5_hash,
     is_file_uri_or_path,
     reverse_prints,
     try_parse_json_str,
@@ -175,48 +173,59 @@ class DataStorage(ABC):
 
     def cache(
         self,
-        output_to_bytes: Callable[[FunResult], bytes] | None = None,
-        output_from_bytes: Callable[[bytes], FunResult] | None = None,
-        get_hash_data: Callable[[str, dict], Json] | None = None,
-        get_hash: Callable[[Json], str] | None = None,
+        output_to_bytes: Callable[[Any], bytes] = pickle.dumps,
+        output_from_bytes: Callable[[bytes], Any] = pickle.loads,
+        # get_hash_data: Callable[[str, dict], Json] | None = None,
+        # get_hash: Callable[[Json], str] | None = None,
     ) -> Callable:
         """TODO"""
 
-        def default_get_hash_data(function_id: str, parameter: dict) -> Json:
-            return {
-                "function": function_id,
-                "parameter": parameter,
-            }  # type:ignore
+        _output_name = "__output"  # any name, but must not collide with parameters
 
-        _output_to_bytes: Callable[[FunResult], bytes] = output_to_bytes or pickle.dumps
-        _output_from_bytes: Callable[[bytes], FunResult] = (
-            output_from_bytes or pickle.loads
-        )
-        _get_hash_data: Callable[[str, dict], Json] = (
-            get_hash_data or default_get_hash_data
-        )
-        _get_hash: Callable[[Json], str] = get_hash or get_md5_hash
+        def get_hash_data(job: Job, *args, **kwargs) -> Json:
+            # logging.error((args, kwargs))
+            _ouput_uids, input_params = job.get_job_parameters(
+                _output_name, *args, **kwargs
+            )
+            function_id = job.function.get_function_id()
+            return {"function": function_id, "parameters": input_params}  # type:ignore
 
-        def decorator(fun: Callable[FunParams, FunResult]) -> Callable:
+        def get_hashsum(hash_data: Json) -> str:
+            hash_data_s = json.dumps(
+                hash_data, ensure_ascii=False, indent=0, sort_keys=True
+            )
+            hash_data_b = hash_data_s.encode("utf-8")
+            hashsum = hashlib.md5(hash_data_b).hexdigest()  # noqa:S324
+            return hashsum
+
+        def get_uid(hashsum: str) -> str:
+            """TODO
+
+            depends on storage,maybe custom options
+            """
+            return f"{hashsum[:2]}/{hashsum[2:4]}/{hashsum}.pickle"
+
+        def decorator(function: Callable[FunParams, FunResult]) -> Callable:
             """TODO"""
 
-            wrapped_fun = FunctionWrapper.assert_wrapped(fun)
-            function_id = wrapped_fun.get_function_id()
+            job = self.job(
+                function=function, output_converters={_output_name: output_to_bytes}
+            )
 
-            @functools.wraps(fun)
+            @functools.wraps(function)
             def _fun(*args, **kwargs):
-                param_values = wrapped_fun.get_argument_dict(*args, **kwargs)
-                hash_data = _get_hash_data(function_id, param_values)
-                output_uid = _get_hash(hash_data)
+                hash_data = get_hash_data(job, *args, **kwargs)
+                hashsum = get_hashsum(hash_data)
+                output_uid = get_uid(hashsum)
+                # logging.error((hash_data, hashsum))
+
                 if output_uid not in self:
-                    # call base function
-                    # NOTE: we only support namedarguments
-                    result = fun(*args, **kwargs)
-                    self[output_uid] = _output_to_bytes(result)
+                    # run job (first arg (_output_name) is uid)
+                    job(output_uid, *args, **kwargs)
 
                 # retrieval
                 data = self[output_uid]
-                result = _output_from_bytes(data)
+                result = output_from_bytes(data)
                 return result
 
             return _fun
@@ -226,8 +235,8 @@ class DataStorage(ABC):
     def job(
         self,
         function: Callable,
-        output_converters: dict[str, Callable[[bytes], FunResult]],
-        input_converters: dict[str, Callable[[FunResult], bytes]] | None = None,
+        output_converters: dict[str, Callable[[bytes], Any]],
+        input_converters: dict[str, Callable[[Any], bytes]] | None = None,
     ) -> Job:
         """TODO"""
 
