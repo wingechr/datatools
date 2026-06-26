@@ -718,11 +718,14 @@ wheels = [
 
 [[package]]
 name = "mistune"
-version = "2.1.0"
+version = "3.2.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/78/0c/9fa8f2a906095bf0393e03d19bf33d22c0a501f1c9b1c9a021144a83db70/mistune-2.1.0.tar.gz", hash = "sha256:863bba1745fed5a05dbf3ada970d7a01f852bb0e1b0d9fcf6065ed794def1b73", size = 76490, upload-time = "2026-06-21T13:18:54.4Z" }
+dependencies = [
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ca/84/620cc3f7e3adf6f5067e10f4dbae71295d8f9e16d5d3f9ef97c40f2f592c/mistune-3.2.1.tar.gz", hash = "sha256:7c8e5501d38bac1582e067e46c8343f17d57ea1aaa735823f3aba1fd59c88a28", size = 98003, upload-time = "2026-05-03T14:33:22.312Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0b/fd/9147e30e862592f70acf548fa01f475f8873a921360c704d76362092e440/mistune-2.1.0-py2.py3-none-any.whl", hash = "sha256:8208c43d6771da99f8195ac4499ec1373202d3726564c93092302fc3ac92dc38", size = 25056, upload-time = "2026-06-21T13:18:53.125Z" },
+    { url = "https://files.pythonhosted.org/packages/2a/7f/a946aa4f8752b37102b41e64dca18a1976ac705c3a0d1dfe74d820a02552/mistune-3.2.1-py3-none-any.whl", hash = "sha256:78cdb0ba5e938053ccf63651b352508d2efa9411dc8810bfb05f2dc5140c0048", size = 53749, upload-time = "2026-05-03T14:33:20.551Z" },
 ]
 
 [[package]]
