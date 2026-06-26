@@ -36,6 +36,7 @@ class TestUseCases(TestCase):
             # import from http source
             uri = base_url + "/" + filename
             uid = storage.import_from_uri(uri)
+
             self.assertEqual(storage[uid], test_data)
             # should have meta data from import action
             self.assertEqual(

@@ -46,3 +46,6 @@ ignore = [
 [lint.isort]
 combine-as-imports = true
 force-sort-within-sections = true
+
+[lint.pydocstyle]
+ignore-decorators = ["abc.abstractmethod"]

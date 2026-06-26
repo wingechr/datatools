@@ -36,18 +36,16 @@ def start_http_server(
 class TempdirTestCase(TestCase):
     """TODO"""
 
-    @classmethod
-    def setUpClass(cls) -> None:
+    def setUp(self) -> None:
         """TODO"""
-        super().setUpClass()
+        super().setUp()
         # create temp dir
-        cls._temp_dir = TemporaryDirectory()
-        cls.temp_dir = Path(cls._temp_dir.name)
+        self._temp_dir = TemporaryDirectory()
+        self.temp_dir = Path(self._temp_dir.name)
         # assert cls.temp_dir.exists() # noqa
 
-    @classmethod
-    def tearDownClass(cls) -> None:
+    def tearDown(self) -> None:
         """TODO"""
-        cls._temp_dir.cleanup()
+        self._temp_dir.cleanup()
         # assert not cls.temp_dir.exists() # noqa
         super().tearDownClass()

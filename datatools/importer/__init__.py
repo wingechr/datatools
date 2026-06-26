@@ -1,7 +1,8 @@
 """init"""
 
+from abc import ABC, abstractmethod
 import re
-from typing import Any
+from typing import Any, override
 from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 import httpx
@@ -12,34 +13,33 @@ from datatools.types import UID
 from datatools.utils import is_file_uri_or_path, subclasses_by_name, uri_or_path_to_path
 
 
-class Importer:
+class Importer(ABC):
     """TODO"""
 
     @classmethod
-    def _can_handle(cls, uri: str, **options) -> bool:
-        """TODO"""
+    def can_handle(cls, uri: str, **options) -> bool:
+        """Can class handle uri"""
         return False
 
     @classmethod
-    def _get_output_uid(cls, uri: str, **options) -> str:
-        """TODO"""
-        return uri
+    @abstractmethod
+    def get_output_uid(cls, uri: str, **options) -> str: ...
 
     @classmethod
-    def get_data(cls, uri: str, **options) -> Any:
-        """TODO"""
-        raise NotImplementedError()
+    @abstractmethod
+    def get_data(cls, uri: str, **options) -> Any: ...
 
     @classmethod
     def output_to_bytes(cls, data: Any) -> bytes:
-        """TODO"""
+        """convert result to bytes."""
         return data
 
 
 def infer_importer_class(uri: str, **options) -> type[Importer]:
     """TODO"""
+
     for cls in subclasses_by_name(Importer).values():
-        if cls._can_handle(uri, **options):
+        if cls.can_handle(uri, **options):
             return cls
     raise NotImplementedError(f"Cannot infer Importer class for {uri}")
 
@@ -48,7 +48,8 @@ class HttpImporter(Importer):
     """TODO"""
 
     @classmethod
-    def _can_handle(cls, uri: str) -> bool:
+    @override
+    def can_handle(cls, uri: str) -> bool:
         return bool(re.match(r"^https?://", uri))
 
     @classmethod
@@ -60,7 +61,7 @@ class HttpImporter(Importer):
         return data
 
     @classmethod
-    def _get_output_uid(cls, uri: str, **options) -> UID:
+    def get_output_uid(cls, uri: str, **options) -> UID:
         """FIXME"""
         parts = urlsplit(uri)
         name = f"{parts.netloc}/{parts.path.strip('/')}"
@@ -72,7 +73,7 @@ class FileImporter(Importer):
     """TODO"""
 
     @classmethod
-    def _can_handle(cls, uri: str) -> bool:
+    def can_handle(cls, uri: str) -> bool:
         """Either file:// protocol or no protocol"""
         return is_file_uri_or_path(uri)
 
@@ -84,7 +85,7 @@ class FileImporter(Importer):
         return data
 
     @classmethod
-    def _get_output_uid(cls, uri: str, **options) -> UID:
+    def get_output_uid(cls, uri: str, **options) -> UID:
         """FIXME"""
         path = uri_or_path_to_path(uri).resolve()
         name = path.name
@@ -95,11 +96,12 @@ class SqlImporter(Importer):
     """TODO"""
 
     @classmethod
-    def _can_handle(cls, uri: str) -> bool:
+    @override
+    def can_handle(cls, uri: str) -> bool:
         return bool(re.match(r"^.*sql.*://", uri))
 
     @classmethod
-    def _get_output_uid(cls, uri: str, **options) -> UID:
+    def get_output_uid(cls, uri: str, **options) -> UID:
         """FIXME"""
         _cs, _query, uid = cls._get_cs_query_uid(uri, **options)
         return uid
@@ -135,8 +137,8 @@ class SqlImporter(Importer):
         return data
 
     @classmethod
+    @override
     def output_to_bytes(cls, data: list):
-        """TODO"""
         df = pd.DataFrame(data)
         data_s = df.to_csv(index=False)
         data_b = data_s.encode()

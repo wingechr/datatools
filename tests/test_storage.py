@@ -16,8 +16,13 @@ from datatools.storage.classes import (
     SqlDataStorage,
 )
 from datatools.storage.server import make_server_app
-from datatools.types import StorageFileExistsError
+from datatools.types import (
+    StorageFileExistsError,
+    StorageFileNotFoundError,
+    StorageInvalidUidError,
+)
 from datatools.utils import get_free_port
+from tests import TempdirTestCase
 
 
 def _test_action_sequence(self: TestCase, storage: DataStorage):
@@ -26,6 +31,8 @@ def _test_action_sequence(self: TestCase, storage: DataStorage):
     # insert our first data
     uid1 = "data1"
     data1 = b"data1"
+
+    storage.info()
 
     storage[uid1] = data1
     # now it exists
@@ -55,6 +62,9 @@ def _test_action_sequence(self: TestCase, storage: DataStorage):
     del storage[uid1]
     self.assertFalse(uid1 in storage)
 
+    # try if exception is raised
+    self.assertRaises(StorageFileNotFoundError, storage.__delitem__, uid1)
+
 
 class TestStorageMemory(TestCase):
     """TODO"""
@@ -65,14 +75,26 @@ class TestStorageMemory(TestCase):
         _test_action_sequence(self, storage)
 
 
-class TestStorageFiles(TestCase):
+class TestStorageFiles(TempdirTestCase):
     """TODO"""
 
     def test_action_sequence(self):
         """TODO"""
-        with TemporaryDirectory() as tmpdir:
-            storage = FileDataStorage(tmpdir)
-            _test_action_sequence(self, storage)
+        storage = FileDataStorage(str(self.temp_dir))
+        _test_action_sequence(self, storage)
+
+    def test_validate_uid(self):
+        """uid cannot be an absolute path"""
+        storage = FileDataStorage(str(self.temp_dir))
+
+        # no exception
+        storage._assert_valid_uid("file.txt")
+        storage._assert_valid_uid("folder/file.txt")
+
+        self.assertRaises(
+            StorageInvalidUidError, storage._assert_valid_uid, "/root/dir"
+        )
+        self.assertRaises(StorageInvalidUidError, storage._assert_valid_uid, "../xyz")
 
 
 class TestStorageFilesWithRdfMetadata(TestCase):
@@ -104,7 +126,7 @@ class TestCliWrapperDataStorage(TestCase):
             _test_action_sequence(self, storage)
 
 
-class TestStoragehttpServer(TestCase):
+class TestStorageHttpServer(TestCase):
     """TODO"""
 
     def test_action_sequence(self):

@@ -11,12 +11,13 @@ from pathlib import Path
 import pickle
 import re
 import socket
+import subprocess as sp
 import sys
 from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import unquote, urlparse
 from urllib.request import url2pathname
 
-from datatools.types import Json, SubCls
+from datatools.types import Json, SubCls, SubprocessStatus
 
 if TYPE_CHECKING:
     pass
@@ -238,7 +239,7 @@ def iter_subclasses(cls: type[SubCls]) -> Iterable[type[SubCls]]:
 
 def subclasses_by_name(cls: type[SubCls]) -> dict[str, type[SubCls]]:
     """TODO"""
-    return {c.__name__: c for c in list(iter_subclasses(cls))[1:]}
+    return {c.__name__: c for c in list(iter_subclasses(cls))}
 
 
 def get_md5_hash(hash_data: Json) -> str:
@@ -275,3 +276,16 @@ def pickle_load_from_path(path: Path) -> Any:
 def identity(x):
     """TODO"""
     return x
+
+
+def call_script(
+    script: Path | str, args: list[str], data: bytes | None = None
+) -> tuple[bytes, bytes]:
+    """Call python script."""
+    cmd = [sys.executable, str(script)] + list(args)
+    logging.debug(cmd)
+    pop = sp.Popen(cmd, stdin=sp.PIPE, stdout=sp.PIPE)
+    stdout, stderr = pop.communicate(data)
+    if pop.returncode:
+        raise SubprocessStatus(pop.returncode)
+    return stdout, stderr

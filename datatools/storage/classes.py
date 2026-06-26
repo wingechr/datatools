@@ -11,8 +11,6 @@ import os
 from pathlib import Path
 import pickle
 import re
-import subprocess as sp
-import sys
 from typing import Any, Literal
 
 import httpx
@@ -44,6 +42,7 @@ from datatools.types import (
 )
 from datatools.utils import (
     TextFile,
+    call_script,
     identity,
     is_file_uri_or_path,
     reverse_prints,
@@ -89,6 +88,8 @@ class MetadataStorage(ABC):  # TODO: subclass AbstractContextManager ?
 
 class DataStorage(ABC):
     """Abstract data storage."""
+
+    is_delegating: bool = False  # delegate to another Storage
 
     def __init__(self, location: Any = None):
         self._location = location
@@ -171,7 +172,7 @@ class DataStorage(ABC):
         _output_param_name = "__output"  # any name, must not collide with parameters
 
         importer_class = infer_importer_class(uri, **options)
-        uid = importer_class._get_output_uid(uri, **options)
+        uid = importer_class.get_output_uid(uri, **options)
 
         # logging.error((uri, uid, options))
 
@@ -513,7 +514,7 @@ class FileDataStorage(DataStorage):
             )
         if abs_path.exists() and not abs_path.is_file():
             raise StorageInvalidUidError(f"uid is cannot be a file: {uid}", uid=UID())
-        return UID(abs_path.relative_to(self._location))
+        return abs_path.relative_to(self._location).as_posix()
 
 
 class FileDataStorageWithRdfMetadata(FileDataStorage):
@@ -551,10 +552,9 @@ class HttpMetadataStorage(MetadataStorage):
 
 
 class HttpDataStorage(DataStorage):
-    """TODO
+    """TODO"""
 
-    TODO: maybe add option to delegate import to handle on remote side?
-    """
+    is_delegating = True  # delegates to http server
 
     @classmethod
     def _can_handle(cls, location: str) -> bool:
@@ -598,6 +598,14 @@ class HttpDataStorage(DataStorage):
     def _metadata(self, uid: UID) -> HttpMetadataStorage:
         url = self._location + f"/{uid}/metadata"
         return HttpMetadataStorage(url)
+
+    def info(self) -> dict:
+        """TODO"""
+        info_server = self._request(path="/info").json()
+        info_client = super().info()
+        info_client.update({"server": info_server})
+
+        return info_client
 
 
 class SqlMetadataStorage(MetadataStorage):
@@ -712,18 +720,16 @@ class TestCliMetadataDataStorage(MetadataStorage):
 class CliWrapperDataStorage(DataStorage):
     """TODO"""
 
+    is_delegating = True  # delegates to script
+
     def __init__(self, location: Any = None):
         self._location = location
-        self._python = sys.executable
-        self._module = str(Path(__file__).parent / "__main__.py")
+        self._script = str(Path(__file__).parent / "__main__.py")
 
     def _request(self, *args: str, data: bytes | None = None) -> bytes:
-        cmd = [self._python, self._module, "-l", str(self._location)] + list(args)
-        logging.debug(cmd)
-        pop = sp.Popen(cmd, stdin=sp.PIPE, stdout=sp.PIPE)
-        stdout, _stderr = pop.communicate(data)
-        if pop.returncode:
-            raise SubprocessStatus(pop.returncode)
+        stdout, _stderr = call_script(
+            self._script, ["-l", str(self._location)] + list(args), data
+        )
         return stdout
 
     def _contains(self, uid: UID) -> bool:

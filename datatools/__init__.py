@@ -6,6 +6,11 @@ __all__ = []
 # import classes so they re registrerd (TODO)
 from . import importer  # noqa
 from .storage import classes  # noqa
+import warnings
+
+
+# hide rdflib\graph.py: DeprecationWarning: Dataset.default_context is deprecated
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="rdflib.*")
 
 
 def self_check():

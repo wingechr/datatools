@@ -5,7 +5,7 @@ import logging
 import click
 import coloredlogs
 
-from datatools.job.__main__ import main as job_main
+from datatools import __version__
 from datatools.storage.__main__ import main as storage_main
 from datatools.utils import wrap_exception
 
@@ -18,6 +18,8 @@ LOGLEVELS_COLORS = {
 
 
 @click.group()
+# @click.pass_context
+@click.version_option(version=__version__)
 @click.option(
     "--loglevel", "-l", type=click.Choice(LOGLEVELS_COLORS.keys()), default="info"
 )
@@ -34,7 +36,7 @@ def main(loglevel: str) -> None:
 
 
 main.add_command(storage_main, name="storage")
-main.add_command(job_main, name="job")
+
 
 if __name__ == "__main__":
     wrap_exception(main)
