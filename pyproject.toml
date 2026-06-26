@@ -3,7 +3,7 @@ name = "wingechr-datatools"
 version = "0.14.0"
 description = "TODO"
 readme = "README.md"
-requires-python = ">=3.10,<3.14"
+requires-python = ">=3.10,<=3.14"
 authors = [{ name = "Christian Winger", email = "c@wingechr.de" }]
 dependencies = [
     "click>=8.3.1",
@@ -11,6 +11,7 @@ dependencies = [
     "fastapi>=0.138.0",
     "httpx>=0.28.1",
     "pandas>=2.3.3",
+    #"numpy==2.5.0",
     "pydantic>=2.13.4",
     "rdflib>=7.6.0",
     "sqlalchemy>=2.0.51",
@@ -44,7 +45,7 @@ build-backend = "setuptools.build_meta"
 datatools = "datatools.__main__:main"
 
 [tool.tox]
-envlist = ["py310", "py313"]
+envlist = ["py310", "py314"]
 
 [tool.tox.env_run_base]
 runner = "uv-venv-lock-runner" # use tox-uv
@@ -56,3 +57,5 @@ cov = "uv run pytest --cov=datatools --cov-report=term-missing --cov-report=html
 test = "uv run tox"
 docs = "uv run mkdocs build"
 run = "uv run -m datatools -l debug"
+build = "uv build"
+sync = "uv sync --all-groups"
