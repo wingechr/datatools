@@ -58,7 +58,7 @@ class TestUseCases(TestCase):
         count_calls = 0
 
         @storage.cache()
-        def fun(x, y):
+        def fun(x, y=3):
             global count_calls
             count_calls += 1
 

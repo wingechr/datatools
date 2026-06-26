@@ -63,7 +63,9 @@ class FunctionWrapper(Generic[FunParams, FunResult]):
 
     def get_argument_dict(self, *args, **kwargs) -> dict[str, Any]:
         """TODO"""
-        return names_get_argument_dict(self.fun_parameter_names, *args, **kwargs)
+        return names_get_argument_dict(
+            self.fun_parameter_names, self.fun_defaults, *args, **kwargs
+        )
 
 
 class Job:
@@ -138,10 +140,9 @@ class Job:
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """TODO"""
 
-        # add missing defaults:
-        kwargs = self.defaults | kwargs
-
-        param_values = names_get_argument_dict(self.parameter_names, *args, **kwargs)
+        param_values = names_get_argument_dict(
+            self.parameter_names, self.defaults, *args, **kwargs
+        )
 
         # we want to keep these param_values for meta data
         # logging.error("param_values: %s", param_values)
@@ -151,7 +152,10 @@ class Job:
 
 
 class Cache(Generic[FunParams, FunResult]):
-    """TODO"""
+    """TODO
+
+    maybe obsolete?
+    """
 
     __output_name__ = "__output"
 
@@ -196,7 +200,10 @@ class Cache(Generic[FunParams, FunResult]):
 
 
 def make_file_cache_get_path(location: str | Path = "__cache__", suffix=".pickle"):
-    """TODO"""
+    """TODO
+
+    maybe obsolete?
+    """
     location = Path(location)
 
     def get_id(job: Job, *args, **kwargs):

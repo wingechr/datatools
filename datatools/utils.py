@@ -204,14 +204,27 @@ def function_get_argument_dict(f: Callable, *args, **kwargs) -> dict[str, Any]:
     return bound.arguments
 
 
-def names_get_argument_dict(params: list[str], *args, **kwargs) -> dict[str, Any]:
+def names_get_argument_dict(
+    params: list[str], defaults: dict, *args, **kwargs
+) -> dict[str, Any]:
     """TODO"""
+
+    # we need to add defaults, otherwise sig.bind fails
     sig = Signature(
-        [Parameter(name, Parameter.POSITIONAL_OR_KEYWORD) for name in params]
+        [
+            Parameter(name, Parameter.POSITIONAL_OR_KEYWORD, default=defaults.get(name))
+            for name in params
+        ]
     )
-    # logging.error(("names_get_argument_dict", sig.parameters, args, kwargs))
+
     bound = sig.bind(*args, **kwargs)
-    return bound.arguments
+    bound.apply_defaults()
+
+    result = bound.arguments
+
+    # logging.error(("names_get_argument_dict", sig.parameters, args, kwargs, result))
+
+    return result
 
 
 def iter_subclasses(cls: type[SubCls]) -> Iterable[type[SubCls]]:
