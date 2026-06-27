@@ -4,7 +4,6 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator
 import datetime
 import functools
-import hashlib
 import json
 import logging
 import os
@@ -27,13 +26,12 @@ from sqlalchemy import (
 )
 
 from datatools.importer import infer_importer_class
-from datatools.job.classes import FunctionWrapper, Job
+from datatools.job.classes import FunctionWrapper, Job, default_get_job_hashsum
 from datatools.types import (
     UID,
     ByteData,
     FunParams,
     FunResult,
-    Json,
     MetadataAttribute,
     MetadataValue,
     StorageFileExistsError,
@@ -209,39 +207,25 @@ class DataStorage(ABC):
         output_to_bytes: Callable[[Any], bytes] = pickle.dumps,
         output_from_bytes: Callable[[bytes], Any] = pickle.loads,
         get_uid_from_hash: Callable[[str], str] = identity,
+        get_job_hashsum: Callable[..., str] = default_get_job_hashsum,
     ) -> Callable:
         """TODO"""
-
-        _output_param_name = "__output"  # any name, must not collide with parameters
-
-        def get_hash_data(job: Job, *args, **kwargs) -> Json:
-            # logging.error((args, kwargs))
-            _ouput_uids, input_params = job.get_job_parameters(
-                _output_param_name, *args, **kwargs
-            )
-            function_id = job.function.get_function_id()
-            return {"function": function_id, "parameters": input_params}  # type:ignore
-
-        def get_hashsum(hash_data: Json) -> str:
-            hash_data_s = json.dumps(
-                hash_data, ensure_ascii=False, indent=0, sort_keys=True
-            )
-            hash_data_b = hash_data_s.encode("utf-8")
-            hashsum = hashlib.md5(hash_data_b).hexdigest()  # noqa:S324
-            return hashsum
 
         def decorator(function: Callable[FunParams, FunResult]) -> Callable:
             """TODO"""
 
+            # any name, must not collide with parameters
+            _single_output_param_name = "__output"
+
             job = self.job(
                 function=function,
-                output_converters={_output_param_name: output_to_bytes},
+                output_converters={_single_output_param_name: output_to_bytes},
+                get_job_hashsum=get_job_hashsum,
             )
 
             @functools.wraps(function)
             def _fun(*args, **kwargs):
-                hash_data = get_hash_data(job, *args, **kwargs)
-                hashsum = get_hashsum(hash_data)
+                hashsum = job.get_job_hashsum(*args, **kwargs)
                 output_uid = get_uid_from_hash(hashsum)
                 # logging.error((hash_data, hashsum))
 
@@ -263,6 +247,7 @@ class DataStorage(ABC):
         function: Callable,
         output_converters: dict[str, Callable[[bytes], Any] | None],
         input_converters: dict[str, Callable[[Any], bytes] | None] | None = None,
+        get_job_hashsum: Callable[..., str] = default_get_job_hashsum,
         skip_finished: bool = False,
     ) -> Job:
         """TODO"""
@@ -335,6 +320,7 @@ class DataStorage(ABC):
             function,
             output_writers=wrapped_output_handlers,
             input_readers=wrapped_input_handlers,
+            get_job_hashsum=get_job_hashsum,
             check_done=check_uids_exist if skip_finished else None,
         )
 
