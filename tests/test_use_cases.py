@@ -40,7 +40,7 @@ class TestUseCases(TestCase):
             self.assertEqual(storage[uid], test_data)
             # should have meta data from import action
             self.assertEqual(
-                get_item_or_first(storage.metadata(uid)["parameter"])["uri"],  # type:ignore
+                get_item_or_first(storage.metadata(uid)["origin.parameter.uri.@value"]),
                 uri,
             )
 
@@ -49,7 +49,7 @@ class TestUseCases(TestCase):
             uid = storage.import_from_uri(uri)
             self.assertEqual(storage[uid], test_data)
             self.assertEqual(
-                get_item_or_first(storage.metadata(uid)["parameter"])["uri"],  # type:ignore
+                get_item_or_first(storage.metadata(uid)["origin.parameter.uri.@value"]),
                 uri,
             )
 
@@ -60,7 +60,7 @@ class TestUseCases(TestCase):
             self.assertEqual(storage[uid].replace(b"\r", b""), b"a\n1\n")
             # TODO add query?
             self.assertEqual(
-                get_item_or_first(storage.metadata(uid)["parameter"])["uri"],  # type:ignore
+                get_item_or_first(storage.metadata(uid)["origin.parameter.uri.@value"]),
                 uri,
             )
 
@@ -134,5 +134,7 @@ class TestUseCases(TestCase):
 
         # check that metadata should also be writtem
         for uid in outputs.values():
-            job_timestamp_s: str = get_item_or_first(storage.metadata(uid)["timestamp"])  # type:ignore
+            job_timestamp_s = str(
+                get_item_or_first(storage.metadata(uid)["origin.timestamp"])
+            )
             datetime.datetime.fromisoformat(job_timestamp_s)

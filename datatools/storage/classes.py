@@ -272,15 +272,15 @@ class DataStorage(ABC):
         # so output handlers can use it
         timestamp = datetime.datetime.now().isoformat()
 
-        job_metadata = {
+        metadata_origin = {
             "timestamp": timestamp,
             "parameter": {},  # will be filled by input handlers
-            "function": wrapped_function.get_function_id(),
+            "function": {"@id": wrapped_function.get_function_id()},
         }
 
         def wrap_input_handler(name: str, handler):
             def handle_(uid: UID):
-                job_metadata["parameter"][name] = uid
+                metadata_origin["parameter"][name] = {"@id": uid}
                 bdata = self[uid]
                 return handler(bdata)
 
@@ -288,7 +288,7 @@ class DataStorage(ABC):
 
         def create_input_handler(name):
             def handle_(value: Any):
-                job_metadata["parameter"][name] = value
+                metadata_origin["parameter"][name] = {"@value": value}
                 return value
 
             return handle_
@@ -298,9 +298,7 @@ class DataStorage(ABC):
                 bdata = handler(data)
                 self[uid] = bdata
                 metadata = self.metadata(uid)
-                for k, v in job_metadata.items():
-                    # logging.error("SET %s.%s = %s", uid, k, v)
-                    metadata[k] = v
+                metadata["origin"] = metadata_origin
 
             return handle_
 
