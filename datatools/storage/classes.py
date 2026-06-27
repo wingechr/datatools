@@ -263,7 +263,7 @@ class DataStorage(ABC):
         function: Callable,
         output_converters: dict[str, Callable[[bytes], Any] | None],
         input_converters: dict[str, Callable[[Any], bytes] | None] | None = None,
-        check_done: bool = False,
+        skip_finished: bool = False,
     ) -> Job:
         """TODO"""
 
@@ -335,7 +335,7 @@ class DataStorage(ABC):
             function,
             output_writers=wrapped_output_handlers,
             input_readers=wrapped_input_handlers,
-            check_done=check_uids_exist if check_done else None,
+            check_done=check_uids_exist if skip_finished else None,
         )
 
 

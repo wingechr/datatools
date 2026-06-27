@@ -160,9 +160,10 @@ class TestUseCases(TestCase):
 
         loads = FunctionWrapper(json.loads, function_id=fid_bytes2json)
 
-        job_generate = storage.job(generate1, {"output": None}, check_done=True)
+        # "output": None -> already bytes
+        job_generate = storage.job(generate1, {"output": None}, skip_finished=True)
         job_convert = storage.job(
-            convert, {"output": json.dumps}, {"data": loads}, check_done=True
+            convert, {"output": json.dumps}, {"data": loads}, skip_finished=True
         )
 
         job_generate(output=key1)
