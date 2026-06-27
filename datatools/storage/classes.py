@@ -261,8 +261,9 @@ class DataStorage(ABC):
     def job(
         self,
         function: Callable,
-        output_converters: dict[str, Callable[[bytes], Any]],
-        input_converters: dict[str, Callable[[Any], bytes]] | None = None,
+        output_converters: dict[str, Callable[[bytes], Any] | None],
+        input_converters: dict[str, Callable[[Any], bytes] | None] | None = None,
+        check_done: bool = False,
     ) -> Job:
         """TODO"""
 
@@ -278,9 +279,14 @@ class DataStorage(ABC):
             "function": {"@id": wrapped_function.get_function_id()},
         }
 
-        def wrap_input_handler(name: str, handler):
+        def wrap_input_handler(name: str, handler: Callable):
             def handle_(uid: UID):
-                metadata_origin["parameter"][name] = {"@id": uid}
+                metadata_origin["parameter"][name] = {
+                    "@value": uid,
+                    "converter": FunctionWrapper.assert_wrapped(
+                        handler
+                    ).get_function_id(),
+                }
                 bdata = self[uid]
                 return handler(bdata)
 
@@ -288,29 +294,37 @@ class DataStorage(ABC):
 
         def create_input_handler(name):
             def handle_(value: Any):
-                metadata_origin["parameter"][name] = {"@value": value}
+                metadata_origin["parameter"][name] = value
                 return value
 
             return handle_
 
-        def wrap_output_handler(handler):
+        def wrap_output_handler(handler: Callable):
             def handle_(data: Any, uid: UID):
                 bdata = handler(data)
                 self[uid] = bdata
                 metadata = self.metadata(uid)
-                metadata["origin"] = metadata_origin
+                metadata["origin"] = metadata_origin | {
+                    "converter": FunctionWrapper.assert_wrapped(
+                        handler
+                    ).get_function_id(),
+                }
 
             return handle_
 
+        def check_uids_exist(**uids):
+            return all(uid in self for uid in uids.values())
+
         wrapped_output_handlers = {
-            name: wrap_output_handler(conv) for name, conv in output_converters.items()
+            name: wrap_output_handler(conv or identity)
+            for name, conv in output_converters.items()
         }
 
         input_converters = input_converters or {}
         # !! we need to wrap all input parameters
         wrapped_input_handlers = {
             name: (
-                wrap_input_handler(name, input_converters[name])
+                wrap_input_handler(name, input_converters[name] or identity)
                 if name in input_converters
                 else create_input_handler(name)
             )
@@ -321,6 +335,7 @@ class DataStorage(ABC):
             function,
             output_writers=wrapped_output_handlers,
             input_readers=wrapped_input_handlers,
+            check_done=check_uids_exist if check_done else None,
         )
 
 

@@ -1,6 +1,7 @@
 """TODO"""
 
 import datetime
+import json
 from pathlib import Path
 import pickle
 from tempfile import TemporaryDirectory
@@ -40,7 +41,7 @@ class TestUseCases(TestCase):
             self.assertEqual(storage[uid], test_data)
             # should have meta data from import action
             self.assertEqual(
-                get_item_or_first(storage.metadata(uid)["origin.parameter.uri.@value"]),
+                get_item_or_first(storage.metadata(uid)["origin.parameter.uri"]),
                 uri,
             )
 
@@ -49,7 +50,7 @@ class TestUseCases(TestCase):
             uid = storage.import_from_uri(uri)
             self.assertEqual(storage[uid], test_data)
             self.assertEqual(
-                get_item_or_first(storage.metadata(uid)["origin.parameter.uri.@value"]),
+                get_item_or_first(storage.metadata(uid)["origin.parameter.uri"]),
                 uri,
             )
 
@@ -60,7 +61,7 @@ class TestUseCases(TestCase):
             self.assertEqual(storage[uid].replace(b"\r", b""), b"a\n1\n")
             # TODO add query?
             self.assertEqual(
-                get_item_or_first(storage.metadata(uid)["origin.parameter.uri.@value"]),
+                get_item_or_first(storage.metadata(uid)["origin.parameter.uri"]),
                 uri,
             )
 
@@ -138,3 +139,26 @@ class TestUseCases(TestCase):
                 get_item_or_first(storage.metadata(uid)["origin.timestamp"])
             )
             datetime.datetime.fromisoformat(job_timestamp_s)
+
+    def test_use_chain_of_jobs_w_storage(self):
+        """TODO"""
+        storage = MemoryDataStorage()
+
+        data1 = b"[1, 2]"
+        key1 = "result1"
+        key2 = "result2"
+
+        def generate1() -> bytes:
+            return data1
+
+        def convert(data: list) -> list:
+            return [x + 1 for x in data]
+
+        job_generate = storage.job(generate1, {"output": None}, check_done=True)
+        job_convert = storage.job(
+            convert, {"output": json.dumps}, {"data": json.loads}, check_done=True
+        )
+
+        job_generate(output=key1)
+        job_generate(key1)  # does nothing
+        job_convert(output=key2, data=key1)

@@ -3,6 +3,7 @@
 from collections.abc import Callable
 import hashlib
 import json
+import logging
 from pathlib import Path
 from typing import Any, Generic
 
@@ -22,6 +23,7 @@ class FunctionWrapper(Generic[FunParams, FunResult]):
     def __init__(
         self,
         fun: Callable[FunParams, FunResult],
+        function_id: str | None = None,
         **params,
     ):
         # TODO: is this still a problem?
@@ -31,6 +33,7 @@ class FunctionWrapper(Generic[FunParams, FunResult]):
         self.fun = fun
         self.fun_defaults = function_get_defaults(fun)
         self.fun_parameter_names = function_get_regular_params(fun)
+        self.function_id: str = function_id or fun.__name__
 
     def __call__(self, *args: FunParams.args, **kwargs: FunParams.kwargs) -> FunResult:  # noqa
         return self.fun(*args, **kwargs)
@@ -38,6 +41,7 @@ class FunctionWrapper(Generic[FunParams, FunResult]):
     @classmethod
     def wrap(
         cls,
+        function_id: str | None = None,
         **params,
     ):
         """TODO"""
@@ -45,6 +49,7 @@ class FunctionWrapper(Generic[FunParams, FunResult]):
         def decorator(fun):
             return FunctionWrapper(
                 fun,
+                function_id=function_id,
                 **params,
             )
 
@@ -59,7 +64,7 @@ class FunctionWrapper(Generic[FunParams, FunResult]):
 
     def get_function_id(self) -> str:
         """TODO"""
-        return self.fun.__name__
+        return self.function_id
 
     def get_argument_dict(self, *args, **kwargs) -> dict[str, Any]:
         """TODO"""
@@ -76,10 +81,12 @@ class Job:
         function: Callable,
         output_writers: dict[str, Callable[[Any, str], Any]],
         input_readers: dict[str, Callable[[Any], Any]] | None = None,
+        check_done: Callable[..., bool] | None = None,
     ):
         self.function = FunctionWrapper.assert_wrapped(function)
         self.output_writers = output_writers
         self.input_readers = input_readers or {}
+        self.check_done = check_done
 
         self.output_parameter_names = list(self.output_writers)
         self.input_parameter_names = self.function.fun_parameter_names
@@ -116,6 +123,10 @@ class Job:
 
         output_uids, input_params = self.get_job_parameters(*args, **kwargs)
 
+        if self.check_done and self.check_done(**output_uids):
+            logging.info("Already done, %s", self)
+            return
+
         # logging.error("input_params: %s", input_params)
 
         updated_input_values = {
@@ -149,6 +160,11 @@ class Job:
         output_values = {p: param_values[p] for p in self.output_parameter_names}
         input_values = {p: param_values[p] for p in self.input_parameter_names}
         return output_values, input_values
+
+    def __str__(self) -> str:
+        inp = ", ".join(self.input_parameter_names)
+        outp = ", ".join(self.output_parameter_names)
+        return f"Job({inp}) -> ({outp})"
 
 
 class Cache(Generic[FunParams, FunResult]):
