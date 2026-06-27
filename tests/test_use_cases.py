@@ -142,12 +142,18 @@ class TestUseCases(TestCase):
             datetime.datetime.fromisoformat(job_timestamp_s)
 
     def test_use_chain_of_jobs_w_storage(self):
-        """TODO"""
+        """TODO
+
+        In build tools like snakemake, we need to know node ids in advance.
+        Using cache, we still have to dump/load every step
+        So we create a sequenceof steps, with middle node ids generated
+        dynamically with hashsums
+
+        """
         storage = MemoryDataStorage()
 
         data1 = b"[1, 2]"
-        key1 = "result1"
-        key2 = "result2"
+
         fid_convert = "function://convert1"
         fid_bytes2json = "bytes2json"
 
@@ -166,8 +172,12 @@ class TestUseCases(TestCase):
             convert, {"output": json.dumps}, {"data": loads}, skip_finished=True
         )
 
+        key1 = f"generated_{job_generate.get_job_hashsum()}.json"
         job_generate(output=key1)
-        job_generate(key1)  # does nothing
+        job_generate(key1)  # does nothing, because already created
+
+        # dynamically create id for next step (use same arguments as in actuall)
+        key2 = f"converted_{job_convert.get_job_hashsum(data=key1)}.json"
         job_convert(output=key2, data=key1)
 
         # check metadata
