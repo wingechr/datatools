@@ -12,8 +12,10 @@ dependencies = [
     "httpx>=0.28.1",
     "jsonpath-ng>=1.8.0",
     "pandas>=2.3.3",
+    "pulp<2.8",                  # for snakemake on older pythons
     "pydantic>=2.13.4",
     "rdflib>=7.6.0",
+    "snakemake>=7.32.4",
     "sqlalchemy>=2.0.51",
     "typing-extensions>=4.15.0",
     "tzlocal>=5.4.3",

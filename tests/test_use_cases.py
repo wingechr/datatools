@@ -7,6 +7,7 @@ import pickle
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 
+from datatools.job.classes import FunctionWrapper
 from datatools.storage.classes import MemoryDataStorage
 from tests import start_http_server
 
@@ -147,18 +148,39 @@ class TestUseCases(TestCase):
         data1 = b"[1, 2]"
         key1 = "result1"
         key2 = "result2"
+        fid_convert = "function://convert1"
+        fid_bytes2json = "bytes2json"
 
         def generate1() -> bytes:
             return data1
 
+        @FunctionWrapper.wrap(function_id=fid_convert)
         def convert(data: list) -> list:
             return [x + 1 for x in data]
 
+        loads = FunctionWrapper(json.loads, function_id=fid_bytes2json)
+
         job_generate = storage.job(generate1, {"output": None}, check_done=True)
         job_convert = storage.job(
-            convert, {"output": json.dumps}, {"data": json.loads}, check_done=True
+            convert, {"output": json.dumps}, {"data": loads}, check_done=True
         )
 
         job_generate(output=key1)
         job_generate(key1)  # does nothing
         job_convert(output=key2, data=key1)
+
+        # check metadata
+        self.assertEqual(
+            get_item_or_first(storage.metadata(key1)["origin.converter"]),
+            "identity",  # nothings
+        )
+        self.assertEqual(
+            get_item_or_first(storage.metadata(key2)["origin.function.@id"]),
+            fid_convert,
+        )
+        self.assertEqual(
+            get_item_or_first(
+                storage.metadata(key2)["origin.parameter.data.converter"]
+            ),
+            fid_bytes2json,
+        )
