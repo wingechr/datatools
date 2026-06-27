@@ -45,25 +45,28 @@ from datatools.utils import (
     TextFile,
     identity,
     is_file_uri_or_path,
+    json_dumps_for_print,
+    jsonpath_get,
+    jsonpath_update,
     reverse_prints,
     try_parse_json_str,
     uri_or_path_to_path,
 )
 
-metadata = MetaData()
+sql_base = MetaData()
 
 table_data = Table(
     "data",
-    metadata,
+    sql_base,
     Column("uid", VARCHAR, primary_key=True),
     Column("data", VARBINARY),
 )
+
 table_metadata = Table(
     "metadata",
-    metadata,
-    Column("uid", VARCHAR),
-    Column("attribute", VARCHAR),
-    Column("value", VARCHAR),
+    sql_base,
+    Column("uid", VARCHAR, primary_key=True),
+    Column("metadata", VARCHAR),  # or use JSON
 )
 
 
@@ -77,7 +80,15 @@ class MetadataStorage(ABC):  # TODO: subclass AbstractContextManager ?
     def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None: ...
 
     def _match(self, **filters: MetadataValue) -> bool:
-        return all(value in self[attribute] for attribute, value in filters.items())
+        # FIXME: implement betetr operators
+        does_match = all(
+            value in self[attribute] for attribute, value in filters.items()
+        )
+        for attribute, value in filters.items():
+            values = self[attribute]
+            logging.error((attribute, value, values))
+
+        return does_match
 
     def __getitem__(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
         return self._getitem(attribute=attribute)
@@ -110,7 +121,17 @@ class DataStorage(ABC):
     def _metadata(self, uid: UID) -> MetadataStorage: ...
 
     @abstractmethod
-    def _list(self, **filters: MetadataValue) -> Iterable[UID]: ...
+    def _list(self) -> Iterable[UID]: ...
+
+    def _find(self, **filters: MetadataValue) -> Iterable[UID]:
+        """primitive implementation"""
+        for uid in self._list():
+            if filters:
+                metadata = self._metadata(uid)
+                if not metadata._match(**filters):
+                    continue
+
+            yield uid
 
     @classmethod
     def _can_handle(cls, location: str) -> bool:
@@ -151,7 +172,7 @@ class DataStorage(ABC):
 
     def find(self, **filters: MetadataValue) -> Iterable[UID]:
         """list UIDs for given metadata query."""
-        return self._list(**filters)
+        return self._find(**filters)
 
     def _assert_valid_uid(self, uid: UID):
         valid_uid = self._get_valid_uid(uid)
@@ -312,62 +333,88 @@ class MemoryMetadataStorage(MetadataStorage):
         self._data = {} if data is None else data
 
     def _getitem(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
-        value = self._data.get(attribute)
-        if value is None:
-            return []
-        else:
-            return [value]
+        return jsonpath_get(data=self._data, key=attribute)
 
     def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
-        self._data[attribute] = value
+        jsonpath_update(data=self._data, key=attribute, val=value)
 
 
-class JsonLdFileMetadataStorage(MetadataStorage):
+class PersistentMemoryMetadataStorage(MemoryMetadataStorage):
+    """TODO"""
+
+    def __init__(self):
+        super().__init__(data=self._load_or_init())
+        self._changed = False
+
+    def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
+        super()._setitem(attribute=attribute, value=value)
+        self._changed = True
+
+    def __del__(self):
+        if self._changed:
+            self._dump(self._data)
+
+    @abstractmethod
+    def _load_or_init(self) -> dict | None: ...
+
+    @abstractmethod
+    def _dump(self, data: dict) -> None: ...
+
+
+class JsonFileMetadataStorage(PersistentMemoryMetadataStorage):
     """FIXME
 
     - we load data on init and save on __del__, which is uper unsafe.
     - but we also dont want to load file every time?
     """
 
-    def __init__(self, path: Path, uid: UID):
+    def __init__(self, path: Path):
         self._file = TextFile(path)
-        self._changed = False
-        self._graph = self._load_graph()
-        self._uid = uid
+        super().__init__()
 
-    def _load_graph(self) -> rdflib.Dataset:
-        graph = rdflib.Dataset()
+    def _load_or_init(self) -> dict | None:
         if self._file.exists():
-            graph.parse(self._file.path, format="json-ld")
-        return graph
+            data = self._file.load_json()
+            if not isinstance(data, dict):
+                raise ValueError("json file for metadata must be dict")
+            return data
 
-    def __del__(self):
-        if self._changed:
-            data_b = self._graph.serialize(
-                format="json-ld",
-                indent=2,
-                # auto_compact=True,
-                expand=True,
-                sort_keys=True,
-                encoding="utf-8",
-            )
+    def _dump(self, data: dict) -> None:
+        self._file.dump_json(data)
 
-            self._file.dump_bytes(data_b)
 
-    def _getitem(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
-        subj = self._as_uri(self._uid)
-        pred = self._as_uri(attribute)
-        for obj in self._graph.objects(subj, pred):
-            # TODO: smarter way convert result?
-            yield try_parse_json_str(str(obj))
+class JsonLdFileMetadataStorage(JsonFileMetadataStorage):
+    """FIXME
 
-    def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
-        subj = self._as_uri(self._uid)
-        pred = self._as_uri(attribute)
-        obj = self._as_uri_or_literal(value)
-        triple = (subj, pred, obj)
-        self._graph.add(triple)
-        self._changed = True
+    this is all still very experimental: clients expect to use
+    jsonpath queries, so we convert from / to json
+
+    for now, we just parse json as jsonld and back to see if its possible
+
+    """
+
+    def __init__(self, path: Path, uid: UID):
+        self.uid = uid
+        self.context = {"@vocab": "urn:dummy/"}
+        super().__init__(path)
+
+    def _load_or_init(self) -> dict | None:
+        data = super()._load_or_init()
+        if not data:
+            data = {"@id": self.uid, "@context": self.context}
+
+        return data
+
+    def _dump(self, data: dict) -> None:
+        # rdf roundtrip test
+
+        data_s = json.dumps(data)
+        g = rdflib.Graph()
+        g.parse(data=data_s, format="json-ld")
+        data_s_new = g.serialize(format="json-ld", context=self.context)
+        data_new = json.loads(data_s_new)
+
+        super()._dump(data_new)
 
     def _as_uri(self, x: str) -> rdflib.URIRef:
         """FIXME"""
@@ -378,44 +425,11 @@ class JsonLdFileMetadataStorage(MetadataStorage):
         return rdflib.Literal(x)
 
 
-class JsonFileMetadataStorage(MetadataStorage):
-    """FIXME
-
-    - we load data on init and save on __del__, which is uper unsafe.
-    - but we also dont want to load file every time?
-    """
-
-    def __init__(self, path: Path):
-        self._file = TextFile(path)
-        self._storage = MemoryMetadataStorage(self._load_data())
-        self._changed = False
-
-    def _load_data(self) -> dict:
-        if not self._file.exists():
-            data = {}
-        else:
-            data = self._file.load_json()
-            if not isinstance(data, dict):
-                raise ValueError("json file for metadata must be dict")
-        return data
-
-    def __del__(self):
-        if self._changed:
-            self._file.dump_json(self._storage._data)
-
-    def _getitem(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
-        return self._storage._getitem(attribute)
-
-    def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
-        self._changed = True
-        self._storage._setitem(attribute, value)
-
-
 class MemoryDataStorage(DataStorage):
     """TODO"""
 
     def __init__(self):
-        super().__init__(location=":memory")
+        super().__init__(location=None)
         self.__data: dict[UID, Any] = {}
         self.__metadata: dict[UID, MemoryMetadataStorage] = {}
 
@@ -432,14 +446,9 @@ class MemoryDataStorage(DataStorage):
         del self.__data[uid]
         # dont delete metadata
 
-    def _list(self, **filters: MetadataValue) -> Iterable[UID]:
-        for uid in self.__data:
-            if filters:
-                metadata = self._metadata(uid)
-                if not metadata._match(**filters):
-                    continue
-
-            yield uid
+    def _list(self) -> Iterable[UID]:
+        logging.error(self.__data.keys())
+        return self.__data.keys()
 
     def _metadata(self, uid: UID) -> MemoryMetadataStorage:
         if uid not in self.__metadata:
@@ -482,18 +491,13 @@ class FileDataStorage(DataStorage):
         logging.debug("Deleting %s", path)
         os.remove(path)
 
-    def _list(self, **filters: MetadataValue) -> Iterable[UID]:
+    def _list(self) -> Iterable[UID]:
         for root, _, fs in os.walk(self._location):
             for f in fs:
                 if f.endswith(self.metadata_sufix):
                     continue
                 path = Path(root) / str(f)
                 uid = str(path.relative_to(self._location))
-
-                if filters:
-                    metadata = self._metadata(uid)
-                    if not metadata._match(**filters):
-                        continue
 
                 yield uid
 
@@ -591,7 +595,10 @@ class HttpDataStorage(DataStorage):
     def _delitem(self, uid: UID) -> None:
         self._request(path=f"/{uid}", method="DELETE")
 
-    def _list(self, **filters: MetadataValue) -> Iterable[UID]:
+    def _list(self) -> Iterable[UID]:
+        return self._request(path="/").json()
+
+    def _find(self, **filters: MetadataValue) -> Iterable[UID]:
         filters_list = [f"{k}={v}" for k, v in filters.items()]
         return self._request(path="/", params={"q": filters_list}).json()
 
@@ -608,37 +615,58 @@ class HttpDataStorage(DataStorage):
         return info_client
 
 
-class SqlMetadataStorage(MetadataStorage):
+class SqlMetadataStorage(PersistentMemoryMetadataStorage):
     """TODO"""
 
     def __init__(self, engine: Engine, uid: UID):
         self._engine = engine
         self._uid = uid
+        super().__init__()
 
-    def _getitem(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
+    def _load_or_init(self) -> dict | None:
+        with self._engine.begin() as con:
+            rows = con.execute(
+                table_metadata.select()
+                .with_only_columns(table_metadata.c.metadata)
+                .where(
+                    table_metadata.c.uid == self._uid,
+                )
+            ).fetchall()
+        if rows:
+            data_s = rows[0][0]
+            return json.loads(data_s)
+
+    def _dump(self, data: dict) -> None:
+        data_s = json.dumps(data, ensure_ascii=False)
+        # check if row exists
         with self._engine.begin() as con:
             resp = con.execute(
                 table_metadata.select()
-                .with_only_columns(table_metadata.c.value)
-                .where(
-                    table_metadata.c.uid == self._uid,
-                    table_metadata.c.attribute == attribute,
-                )
+                .with_only_columns(table_metadata.c.uid)
+                .where(table_metadata.c.uid == self._uid)
             )
-            # todo: better parser
-            return [try_parse_json_str(x[0]) for x in resp.fetchall()]
-
-    def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
-        with self._engine.begin() as con:
-            con.execute(
-                table_metadata.insert().values(
-                    uid=self._uid, attribute=attribute, value=value
+            n_res = len(resp.fetchall())
+            if n_res:
+                # update
+                con.execute(
+                    table_metadata.update()
+                    .values(metadata=data_s)
+                    .where(table_metadata.c.uid == self._uid)
                 )
-            )
+            else:
+                # insert
+                con.execute(
+                    table_metadata.insert().values(uid=self._uid, metadata=data_s)
+                )
 
 
 class SqlDataStorage(DataStorage):
-    """TODO"""
+    """TODO
+
+    TODO: for faster query, we should split structured data
+    into triples? for now: we only use Json
+
+    """
 
     @classmethod
     def _can_handle(cls, location: str) -> bool:
@@ -648,7 +676,7 @@ class SqlDataStorage(DataStorage):
         super().__init__(location=location)
         self._engine = create_engine(location)
 
-        metadata.create_all(self._engine)
+        sql_base.create_all(self._engine)
 
     def _contains(self, uid: UID) -> bool:
         with self._engine.begin() as con:
@@ -680,21 +708,10 @@ class SqlDataStorage(DataStorage):
         with self._engine.begin() as con:
             con.execute(table_data.delete().where(table_data.c.uid == uid))
 
-    def _list(self, **filters: MetadataValue) -> Iterable[UID]:
+    def _list(self) -> Iterable[UID]:
         with self._engine.begin() as con:
             resp = con.execute(table_data.select().with_only_columns(table_data.c.uid))
             uids = {x[0] for x in resp.fetchall()}
-            # TODO query join directly in database
-            for a, v in filters.items():
-                print(con.execute(table_metadata.select()).fetchall())
-                resp = con.execute(
-                    table_metadata.select()
-                    .with_only_columns(table_metadata.c.uid)
-                    .where(table_metadata.c.attribute == a, table_metadata.c.value == v)
-                )
-                uids_filtered = {x[0] for x in resp.fetchall()}
-                uids = uids & uids_filtered
-
         return uids
 
     def _metadata(self, uid: UID) -> MetadataStorage:
@@ -710,11 +727,16 @@ class TestCliMetadataDataStorage(MetadataStorage):
 
     def _getitem(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
         data = self._request("metadata", "get", self._uid, str(attribute))
-        for text in reverse_prints(data):
-            yield try_parse_json_str(text)
+        logging.warning("cli meta get: %s", data)
+        return try_parse_json_str(data)
 
     def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
-        self._request("metadata", "set", self._uid, f"{attribute}={value}")
+        self._request(
+            "metadata",
+            "set",
+            self._uid,
+            f"{attribute}={json_dumps_for_print(value)}",
+        )
 
 
 class CliWrapperDataStorage(DataStorage):
@@ -736,6 +758,7 @@ class CliWrapperDataStorage(DataStorage):
         # stdout, _stderr = call_script(
         #    self._script, cmd, data
         # )
+        logging.debug("CLI " + " ".join(cmd))
         result = self._clirunner.invoke(self._storage_main_cli, cmd, input=data)
         if result.exit_code:
             raise SubprocessStatus(result.exit_code)
@@ -763,10 +786,13 @@ class CliWrapperDataStorage(DataStorage):
     def _metadata(self, uid: UID) -> MetadataStorage:
         return TestCliMetadataDataStorage(uid, self._request)
 
-    def _list(self, **filters: MetadataValue) -> Iterable[UID]:
+    def _find(self, **filters: MetadataValue) -> Iterable[UID]:
         filters_str = [f"{k}={v}" for k, v in filters.items()]
         data = self._request("find", *filters_str)
         return reverse_prints(data)
+
+    def _list(self) -> Iterable[UID]:
+        return self._find()
 
     def info(self) -> dict:
         """TODO"""

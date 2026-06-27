@@ -1,26 +1,36 @@
 """TODO"""
 
 from collections.abc import Callable, Iterable
+import datetime
+from functools import cache
 import hashlib
 import inspect
 from inspect import Parameter, Signature
 import json
 import logging
+import math
 import os
 from pathlib import Path
 import pickle
 import re
 import socket
+import subprocess
 import subprocess as sp
 import sys
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 from urllib.parse import unquote, urlparse
 from urllib.request import url2pathname
 
-from datatools.types import Json, SubCls, SubprocessStatus
+import jsonpath_ng
+import numpy as np
+import tzlocal
 
-if TYPE_CHECKING:
-    pass
+from datatools.types import Json, StrPath, SubCls, SubprocessStatus
+
+DATETIMETZ_FMT = "%Y-%m-%dT%H:%M:%S%z"
+DATE_FMT = "%Y-%m-%d"
+TIME_FMT = "%H:%M:%S"
+ANONYMOUS_USER = "ANONYMOUS"
 
 
 class TextFile:
@@ -110,7 +120,7 @@ def wrap_exception(function: Callable[[], None], debug: bool = True):
         sys.exit(1)
 
 
-def parse_cmd_vals(arguments: list[str]) -> dict[str, str]:
+def parse_cmd_vals(arguments: list[str]) -> dict[str, Json]:
     """TODO"""
     items = [kv.split("=", 1) for kv in arguments]
     return {k: try_parse_json_str(v) for k, v in items}
@@ -289,3 +299,138 @@ def call_script(
     if pop.returncode:
         raise SubprocessStatus(pop.returncode)
     return stdout, stderr
+
+
+def jsonpath_update(data: dict[str, Json], key: str, val: Json) -> None:
+    """TODO"""
+    path = jsonpath_ng.parse(key)
+    path.update_or_create(data, val)
+    logging.warning("jsonpath_update: %s %s %s, %s", key, val, type(val), data)
+
+
+def jsonpath_get(data: dict[str, Json], key: str) -> list[Json]:
+    """TODO"""
+    path = jsonpath_ng.parse(key)
+    match = path.find(data)
+    values = [x.value for x in match]
+    logging.warning("jsonpath_get: %s %s %s", key, values, data)
+    return values
+
+
+def isna(x: Any) -> bool:
+    """TODO"""
+    return bool(x is None or isinstance(x, float) and (math.isnan(x) or math.isinf(x)))
+
+
+def json_serialize(x: Any) -> Json:
+    """TODO"""
+    if isinstance(x, datetime.datetime):
+        return x.strftime(DATETIMETZ_FMT)
+    elif isinstance(x, datetime.date):
+        return x.strftime(DATE_FMT)
+    elif isinstance(x, datetime.time):
+        return x.strftime(TIME_FMT)
+    elif isna(x):
+        return None
+    elif isinstance(x, np.bool_):
+        return bool(x)
+    elif np.issubdtype(type(x), np.integer):  # type:ignore
+        return int(x)
+    elif np.issubdtype(type(x), np.floating):  # type:ignore
+        return float(x)
+    else:
+        raise NotImplementedError(f"{x.__class__}: {x}")
+
+
+def get_git_root(filepath: StrPath) -> Path:
+    """TODO"""
+    return next(path for path in Path(filepath).parents if (path / ".git").exists())
+
+
+@cache  # should not change during run
+def get_git_info(repo_path: StrPath) -> dict[str, Any]:
+    """get git branch,commit and is clean status
+
+    from a local git repository, given as a path
+    """
+
+    def _run_git_command(command: list[str], cwd: StrPath):
+        result = subprocess.run(command, cwd=cwd, capture_output=True, text=True)
+        if result.returncode != 0:
+            logging.warning(result.stderr.strip())
+            return None
+        return result.stdout.strip()
+
+    # Get the current branch name
+    branch = _run_git_command(["git", "rev-parse", "--abbrev-ref", "HEAD"], repo_path)
+
+    # Get the latest commit hash
+    commit = _run_git_command(["git", "rev-parse", "HEAD"], repo_path)
+
+    # Get the origin remote URL
+    origin_url = _run_git_command(
+        ["git", "config", "--get", "remote.origin.url"], repo_path
+    )
+
+    # Check if the repository is clean
+    status = _run_git_command(["git", "status", "--porcelain"], repo_path)
+    is_clean = None if status is None else len(status) == 0
+    if not is_clean:
+        logging.warning("git repo is not clean")
+
+    return {
+        "branch": branch,
+        "commit": commit,
+        "origin": origin_url,
+    }
+
+
+def get_now() -> datetime.datetime:
+    """TODO"""
+    # my local timezone, e.g.  DstTzInfo 'Europe/Berlin' LMT+0:53:00 STD
+    tz_local = tzlocal.get_localzone()
+    # timezone as current utc offset (does not know about dst),
+    # e.g. datetime.timezone(datetime.timedelta(seconds=3600))
+    now = datetime.datetime.now()
+    # convert unaware datetime to proper timezone...
+    now_tz = now.replace(tzinfo=tz_local)
+    return now_tz
+
+
+def get_now_str() -> str:
+    """TODO"""
+    now = get_now()
+    now_str = now.strftime(DATETIMETZ_FMT)
+    # add ":" in offset
+    now_str = re.sub("([+-][0-9]{2})([0-9]{2})$", r"\1:\2", now_str)
+    return now_str
+
+
+@cache
+def get_hostname() -> str:
+    """TODO"""
+    return socket.gethostname()
+
+
+@cache
+def get_fqhostname() -> str:
+    """fully qualified hostname (with domain)"""
+    return socket.getfqdn()
+
+
+@cache
+def get_username() -> str:
+    """TODO"""
+    # getpass.getuser() does not always work
+    return os.environ.get("USERNAME") or os.environ.get("USER") or ANONYMOUS_USER
+
+
+@cache
+def get_user_w_host() -> str:
+    """TODO"""
+    return f"{get_username()}@{get_fqhostname()}"
+
+
+def json_dumps_for_print(data: Json) -> str:
+    """TODO"""
+    return json.dumps(data, ensure_ascii=False)

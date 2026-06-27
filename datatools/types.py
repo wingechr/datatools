@@ -1,18 +1,20 @@
 """Abstract classes / interfaces, types"""
 
 from collections.abc import Iterable, Mapping
-from typing import ParamSpec, TypeVar
+from pathlib import Path
+from typing import ParamSpec, TypeAlias, TypeVar
 
-JsonPrimitive = str | float | int | bool | None
-Json = JsonPrimitive | list[JsonPrimitive] | dict[str, JsonPrimitive]
 FunParams = ParamSpec("FunParams")
 FunResult = TypeVar("FunResult")
 SubCls = TypeVar("SubCls")
+
+Json: TypeAlias = str | int | float | bool | None | list["Json"] | dict[str, "Json"]
+StrPath = Path | str
 UID = str
 ByteData = bytes
 MetadataAttribute = str
-MetadataValue = Json
-MetadataPairs = (
+MetadataValue: TypeAlias = Json
+MetadataPairs: TypeAlias = (
     Mapping[MetadataAttribute, MetadataValue]
     | Iterable[tuple[MetadataAttribute, MetadataValue]]
 )

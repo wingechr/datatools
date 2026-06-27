@@ -1,6 +1,5 @@
 """TODO"""
 
-import json
 import logging
 import sys
 
@@ -10,6 +9,7 @@ import uvicorn
 from datatools.storage.classes import DataStorage
 from datatools.storage.server import make_server_app
 from datatools.utils import (
+    json_dumps_for_print,
     parse_cmd_vals,
     subclasses_by_name,
     wrap_exception,
@@ -48,7 +48,7 @@ def main(ctx, location: str, storage_class=str | None) -> None:
 def info(ctx_data_storage: DataStorage) -> None:
     """TODO"""
     info = ctx_data_storage.info()
-    print(json.dumps(info, indent=2, ensure_ascii=False))
+    print(json_dumps_for_print(info))
 
 
 @main.command()
@@ -118,10 +118,9 @@ def metadata(ctx_data_storage: DataStorage) -> None:
 def metadata_get(ctx_data_storage: DataStorage, uid: str, attribute: str) -> None:
     """TODO"""
     metadata_storage = ctx_data_storage.metadata(uid)
-    values = metadata_storage[attribute]
-    for value in values:
-        # FIXME: maybe json dumps value first?
-        print(value)
+    values = list(metadata_storage[attribute])
+    logging.warning("cli metadata get: %s %s", attribute, values)
+    print(json_dumps_for_print(values))
 
 
 @metadata.command("set")
@@ -134,6 +133,8 @@ def metadata_set(
     """TODO"""
     metadata_storage = ctx_data_storage.metadata(uid)
     attribute_values_dct = parse_cmd_vals(attribute_values)
+    # TODO: set all at once?
+    logging.warning("cli metadata_set: %s", attribute_values_dct)
     for attribute, value in attribute_values_dct.items():
         metadata_storage[attribute] = value
 

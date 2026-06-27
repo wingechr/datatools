@@ -10,10 +10,13 @@ dependencies = [
     "coloredlogs>=15.0",
     "fastapi>=0.138.0",
     "httpx>=0.28.1",
+    "jsonpath-ng>=1.8.0",
     "pandas>=2.3.3",
     "pydantic>=2.13.4",
     "rdflib>=7.6.0",
     "sqlalchemy>=2.0.51",
+    "typing-extensions>=4.15.0",
+    "tzlocal>=5.4.3",
     "uvicorn>=0.49.0",
 ]
 [dependency-groups]

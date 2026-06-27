@@ -1,5 +1,6 @@
 """TODO"""
 
+import logging
 from tempfile import TemporaryDirectory
 from threading import Thread
 from unittest import TestCase
@@ -21,8 +22,23 @@ from datatools.types import (
     StorageFileNotFoundError,
     StorageInvalidUidError,
 )
-from datatools.utils import get_free_port
+from datatools.utils import get_free_port, get_now_str
 from tests import TempdirTestCase
+
+
+def _test_action_sequence_metadata(self: TestCase, storage: DataStorage):
+    metadata = storage.metadata("test")
+
+    uri = "http://example.com"
+    # describe file origin
+    metadata["origin"] = {
+        "function": {"name": "download"},
+        "parameters": {"uri": {"value": uri}},
+        "timestamp": get_now_str(),
+    }
+    values = list(metadata["origin.parameters.uri.value"])
+    logging.info(values)
+    self.assertEqual(values[0], uri)
 
 
 def _test_action_sequence(self: TestCase, storage: DataStorage):
@@ -64,6 +80,9 @@ def _test_action_sequence(self: TestCase, storage: DataStorage):
 
     # try if exception is raised
     self.assertRaises(StorageFileNotFoundError, storage.__delitem__, uid1)
+
+    # additional tests
+    _test_action_sequence_metadata(self, storage)
 
 
 class TestStorageMemory(TestCase):

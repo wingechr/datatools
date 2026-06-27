@@ -2,15 +2,20 @@
 
 from abc import ABC, abstractmethod
 import re
-from typing import Any, override
+from typing import Any
 from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 import httpx
 import pandas as pd
 import sqlalchemy as sa
+from typing_extensions import override
 
 from datatools.types import UID
-from datatools.utils import is_file_uri_or_path, subclasses_by_name, uri_or_path_to_path
+from datatools.utils import (
+    is_file_uri_or_path,
+    subclasses_by_name,
+    uri_or_path_to_path,
+)
 
 
 class Importer(ABC):
