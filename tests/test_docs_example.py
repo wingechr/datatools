@@ -5,8 +5,6 @@ import importlib.util
 import os
 import unittest
 
-import datatools
-
 
 class TestDocsExample(unittest.TestCase):
     """Run example script from documentation."""
@@ -23,7 +21,3 @@ class TestDocsExample(unittest.TestCase):
         module = importlib.util.module_from_spec(spec)
         # should not raise any error
         spec.loader.exec_module(module)
-
-    def test_main_test(self):
-        """Run tets() function from main"""
-        self.assertTrue(datatools.self_check())

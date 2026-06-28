@@ -141,14 +141,15 @@ def metadata_set(
 
 @main.command("import")
 @click.pass_obj
-@click.argument("uri")
+@click.argument("uid")
+@click.argument("uri", required=False)
 @click.argument("options", nargs=-1)
 def import_from_uri(
-    ctx_data_storage: DataStorage, uri: str, options: list[str]
+    ctx_data_storage: DataStorage, uid: str, uri: str, options: list[str]
 ) -> None:
     """TODO"""
     options_dict = parse_cmd_vals(options)
-    uid = ctx_data_storage.import_from_uri(uri, **options_dict)
+    ctx_data_storage.import_from_uri(uid, uri, **options_dict)
     logging.info(uid)
 
 

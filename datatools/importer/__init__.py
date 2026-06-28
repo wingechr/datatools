@@ -3,7 +3,6 @@
 from abc import ABC, abstractmethod
 import re
 from typing import Any
-from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 import httpx
 import pandas as pd
@@ -12,6 +11,7 @@ from typing_extensions import override
 
 from datatools.types import UID
 from datatools.utils import (
+    get_uid_from_uri,
     is_file_uri_or_path,
     subclasses_by_name,
     uri_or_path_to_path,
@@ -27,8 +27,9 @@ class Importer(ABC):
         return False
 
     @classmethod
-    @abstractmethod
-    def get_output_uid(cls, uri: str, **options) -> str: ...
+    def get_output_uid(cls, uri: str, **options) -> str:
+        """TODO"""
+        return get_uid_from_uri(uri)
 
     @classmethod
     @abstractmethod
@@ -44,7 +45,7 @@ def infer_importer_class(uri: str, **options) -> type[Importer]:
     """TODO"""
 
     for cls in subclasses_by_name(Importer).values():
-        if cls.can_handle(uri, **options):
+        if cls.can_handle(uri):
             return cls
     raise NotImplementedError(f"Cannot infer Importer class for {uri}")
 
@@ -64,14 +65,6 @@ class HttpImporter(Importer):
         resp.raise_for_status()
         data = resp.content
         return data
-
-    @classmethod
-    def get_output_uid(cls, uri: str, **options) -> UID:
-        """FIXME"""
-        parts = urlsplit(uri)
-        name = f"{parts.netloc}/{parts.path.strip('/')}"
-        name = name.strip("/")
-        return name
 
 
 class FileImporter(Importer):
@@ -106,33 +99,9 @@ class SqlImporter(Importer):
         return bool(re.match(r"^.*sql.*://", uri))
 
     @classmethod
-    def get_output_uid(cls, uri: str, **options) -> UID:
-        """FIXME"""
-        _cs, _query, uid = cls._get_cs_query_uid(uri, **options)
-        return uid
-
-    @classmethod
-    def _get_cs_query_uid(cls, uri: str, **options) -> tuple[str, str, UID]:
-        parts = urlsplit(uri)
-        _fragment = parts.fragment
-        _query = parse_qs(parts.query)
-        parts = parts._replace(fragment=None, query=None)
-
-        query = _query["q"][0]
-
-        cs = urlunsplit(parts)
-        # special case sqlite:
-        if cs == "sqlite:/:memory:":
-            cs = "sqlite:///:memory:"
-
-        uid = "data.csv"  # FIXME
-
-        return cs, query, uid
-
-    @classmethod
-    def get_data(cls, uri: str, **options):
+    def get_data(cls, uri: str, query: str, **options):
         """TODO"""
-        cs, query, uid = cls._get_cs_query_uid(uri, **options)
+        cs = uri
 
         eng = sa.create_engine(cs)
         with eng.connect() as con:

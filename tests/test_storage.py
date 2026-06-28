@@ -3,6 +3,7 @@
 import logging
 from tempfile import TemporaryDirectory
 from threading import Thread
+import time
 from unittest import TestCase
 
 import uvicorn
@@ -154,11 +155,14 @@ class TestStorageHttpServer(TestCase):
         host = "127.0.0.1"
         port = get_free_port()
         app = make_server_app(data_storage=remote_storage)
-        server_thread = Thread(
-            target=uvicorn.run,
-            kwargs={"app": app, "host": host, "port": port},
-            daemon=True,
-        )
-        server_thread.start()
+
+        config = uvicorn.Config(app, host=host, port=port)
+        server = uvicorn.Server(config)
+        thread = Thread(target=server.run, daemon=True)
+        thread.start()
+
+        while not server.started:
+            time.sleep(0.01)
+
         storage = HttpDataStorage(f"http://{host}:{port}")
         _test_action_sequence(self, storage)

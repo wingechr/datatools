@@ -51,6 +51,8 @@ from datatools.utils import (
     uri_or_path_to_path,
 )
 
+_OUTPUT_PARAM_NAME = "__output"  # any name, must not collide with parameters
+
 sql_base = MetaData()
 
 table_data = Table(
@@ -72,7 +74,7 @@ class MetadataStorage(ABC):  # TODO: subclass AbstractContextManager ?
     """Abstract metadata storage."""
 
     @abstractmethod
-    def _getitem(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]: ...
+    def _getitem(self, attribute: MetadataAttribute) -> list[MetadataValue]: ...
 
     @abstractmethod
     def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None: ...
@@ -88,7 +90,7 @@ class MetadataStorage(ABC):  # TODO: subclass AbstractContextManager ?
 
         return does_match
 
-    def __getitem__(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
+    def __getitem__(self, attribute: MetadataAttribute) -> list[MetadataValue]:
         return self._getitem(attribute=attribute)
 
     def __setitem__(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
@@ -186,18 +188,17 @@ class DataStorage(ABC):
         """TODO"""
         return {"Location": str(self._location), "Class": str(self.__class__.__name__)}
 
-    def import_from_uri(self, uri: str, **options) -> UID:
+    def import_from_uri(self, uri: str, uid: UID | None = None, **options) -> UID:
         """TODO"""
-        _output_param_name = "__output"  # any name, must not collide with parameters
 
         importer_class = infer_importer_class(uri, **options)
-        uid = importer_class.get_output_uid(uri, **options)
+        uid = uid or importer_class.get_output_uid(uri, **options)
 
         # logging.error((uri, uid, options))
 
         job = self.job(
             function=importer_class.get_data,
-            output_converters={_output_param_name: importer_class.output_to_bytes},
+            output_converters={_OUTPUT_PARAM_NAME: importer_class.output_to_bytes},
         )
         job(uid, uri, **options)
         return uid
@@ -245,14 +246,17 @@ class DataStorage(ABC):
     def job(
         self,
         function: Callable,
-        output_converters: dict[str, Callable[[bytes], Any] | None],
-        input_converters: dict[str, Callable[[Any], bytes] | None] | None = None,
+        output_converters: dict[str, Callable[[Any], bytes] | None]
+        | Callable[[bytes], Any],
+        input_converters: dict[str, Callable[[bytes], Any] | None] | None = None,
         get_job_hashsum: Callable[..., str] = default_get_job_hashsum,
         skip_finished: bool = False,
     ) -> Job:
         """TODO"""
 
         wrapped_function = FunctionWrapper.assert_wrapped(function)
+        if not isinstance(output_converters, dict):
+            output_converters = {_OUTPUT_PARAM_NAME: output_converters}
 
         # update metadata before running job
         # so output handlers can use it

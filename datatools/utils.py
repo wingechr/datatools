@@ -2,8 +2,9 @@
 
 from collections.abc import Callable, Iterable
 import datetime
-from functools import cache
+from functools import cache, partial
 import hashlib
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import inspect
 from inspect import Parameter, Signature
 import json
@@ -17,8 +18,9 @@ import socket
 import subprocess
 import subprocess as sp
 import sys
+from threading import Thread
 from typing import Any, Literal
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote, urlparse, urlsplit
 from urllib.request import url2pathname
 
 import jsonpath_ng
@@ -434,3 +436,42 @@ def get_user_w_host() -> str:
 def json_dumps_for_print(data: Json) -> str:
     """TODO"""
     return json.dumps(data, ensure_ascii=False)
+
+
+def start_http_server(
+    directory: str | Path = ".", port: int | None = None, host: str = "127.0.0.1"
+) -> str:
+    """TODO"""
+    port = port or get_free_port()
+    server = ThreadingHTTPServer(
+        (host, port),
+        partial(SimpleHTTPRequestHandler, directory=directory),
+    )
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    url = f"http://{host}:{port}"
+    return url
+
+
+def remove_credentials_from_netloc(netloc: str) -> str:
+    """FIXME: not implemented yet"""
+    logging.error("FIXME: not implemented yet")
+    return netloc
+
+
+def remove_port_from_netloc(netloc: str) -> str:
+    """FIXME: not implemented yet"""
+    if m := re.match(r"^(.*):[0-9]+$", netloc):
+        netloc = m.groups()[0]
+    return netloc
+
+
+def get_uid_from_uri(uri: str) -> str:
+    """TODO"""
+    parts = urlsplit(uri)
+    netloc = remove_credentials_from_netloc(parts.netloc)
+    netloc = remove_port_from_netloc(parts.netloc)
+    path = parts.path
+    name = f"{netloc.strip('/')}/{path.strip('/')}"
+    name = name.strip("/")
+    return name

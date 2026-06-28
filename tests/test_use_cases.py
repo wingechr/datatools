@@ -9,7 +9,7 @@ from unittest import TestCase
 
 from datatools.job.classes import FunctionWrapper
 from datatools.storage.classes import MemoryDataStorage
-from tests import start_http_server
+from datatools.utils import start_http_server
 
 
 def get_item_or_first(x):
@@ -57,8 +57,8 @@ class TestUseCases(TestCase):
 
             # import from sql
             query = "select 1 as a"
-            uri = f"sqlite:///:memory:?q={query}"
-            uid = storage.import_from_uri(uri)
+            uri = "sqlite:///:memory:"
+            uid = storage.import_from_uri(uri, query=query)
             self.assertEqual(storage[uid].replace(b"\r", b""), b"a\n1\n")
             # TODO add query?
             self.assertEqual(
@@ -169,7 +169,10 @@ class TestUseCases(TestCase):
         # "output": None -> already bytes
         job_generate = storage.job(generate1, {"output": None}, skip_finished=True)
         job_convert = storage.job(
-            convert, {"output": json.dumps}, {"data": loads}, skip_finished=True
+            convert,
+            {"output": lambda x: json.dumps(x).encode()},
+            {"data": loads},
+            skip_finished=True,
         )
 
         key1 = f"generated_{job_generate.get_job_hashsum()}.json"
