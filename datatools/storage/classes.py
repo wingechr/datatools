@@ -265,16 +265,19 @@ class DataStorage(ABC):
         metadata_origin = {
             "timestamp": timestamp,
             "parameter": {},  # will be filled by input handlers
-            "function": {"@id": wrapped_function.get_function_id()},
+            "function": {
+                "@id": wrapped_function.get_function_id(),
+                "description": wrapped_function.description,
+            },
         }
 
         def wrap_input_handler(name: str, handler: Callable):
             def handle_(uid: UID):
+                handler_w = FunctionWrapper.assert_wrapped(handler)
                 metadata_origin["parameter"][name] = {
                     "@value": uid,
-                    "converter": FunctionWrapper.assert_wrapped(
-                        handler
-                    ).get_function_id(),
+                    "@id": handler_w.get_function_id(),
+                    "description": handler_w.description,
                 }
                 bdata = self[uid]
                 return handler(bdata)
@@ -289,14 +292,17 @@ class DataStorage(ABC):
             return handle_
 
         def wrap_output_handler(handler: Callable):
+            handler_w = FunctionWrapper.assert_wrapped(handler)
+
             def handle_(data: Any, uid: UID):
                 bdata = handler(data)
                 self[uid] = bdata
                 metadata = self.metadata(uid)
                 metadata["origin"] = metadata_origin | {
-                    "converter": FunctionWrapper.assert_wrapped(
-                        handler
-                    ).get_function_id(),
+                    "conversion": {
+                        "@id": handler_w.get_function_id(),
+                        "description": handler_w.description,
+                    },
                 }
 
             return handle_

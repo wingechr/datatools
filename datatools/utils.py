@@ -1,10 +1,13 @@
 """TODO"""
 
 from collections.abc import Callable, Iterable
+import csv
 import datetime
 from functools import cache, partial
 import hashlib
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+import importlib
+import importlib.util
 import inspect
 from inspect import Parameter, Signature
 import json
@@ -23,8 +26,12 @@ from typing import Any, Literal
 from urllib.parse import unquote, urlparse, urlsplit
 from urllib.request import url2pathname
 
+import chardet
 import jsonpath_ng
 import numpy as np
+import pandas as pd
+from pyodbc import Cursor
+import sqlparse
 import tzlocal
 
 from datatools.types import Json, StrPath, SubCls, SubprocessStatus
@@ -344,49 +351,6 @@ def json_serialize(x: Any) -> Json:
         raise NotImplementedError(f"{x.__class__}: {x}")
 
 
-def get_git_root(filepath: StrPath) -> Path:
-    """TODO"""
-    return next(path for path in Path(filepath).parents if (path / ".git").exists())
-
-
-@cache  # should not change during run
-def get_git_info(repo_path: StrPath) -> dict[str, Any]:
-    """get git branch,commit and is clean status
-
-    from a local git repository, given as a path
-    """
-
-    def _run_git_command(command: list[str], cwd: StrPath):
-        result = subprocess.run(command, cwd=cwd, capture_output=True, text=True)
-        if result.returncode != 0:
-            logging.warning(result.stderr.strip())
-            return None
-        return result.stdout.strip()
-
-    # Get the current branch name
-    branch = _run_git_command(["git", "rev-parse", "--abbrev-ref", "HEAD"], repo_path)
-
-    # Get the latest commit hash
-    commit = _run_git_command(["git", "rev-parse", "HEAD"], repo_path)
-
-    # Get the origin remote URL
-    origin_url = _run_git_command(
-        ["git", "config", "--get", "remote.origin.url"], repo_path
-    )
-
-    # Check if the repository is clean
-    status = _run_git_command(["git", "status", "--porcelain"], repo_path)
-    is_clean = None if status is None else len(status) == 0
-    if not is_clean:
-        logging.warning("git repo is not clean")
-
-    return {
-        "branch": branch,
-        "commit": commit,
-        "origin": origin_url,
-    }
-
-
 def get_now() -> datetime.datetime:
     """TODO"""
     # my local timezone, e.g.  DstTzInfo 'Europe/Berlin' LMT+0:53:00 STD
@@ -455,8 +419,7 @@ def start_http_server(
 
 def remove_credentials_from_netloc(netloc: str) -> str:
     """FIXME: not implemented yet"""
-    logging.error("FIXME: not implemented yet")
-    return netloc
+    return re.sub("[^/@]+@", "", netloc)
 
 
 def remove_port_from_netloc(netloc: str) -> str:
@@ -475,3 +438,183 @@ def get_uid_from_uri(uri: str) -> str:
     name = f"{netloc.strip('/')}/{path.strip('/')}"
     name = name.strip("/")
     return name
+
+
+def import_module_from_path(name: str, filepath: StrPath):
+    """TODO"""
+    spec = importlib.util.spec_from_file_location(name, filepath)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot load module '{name}' from '{filepath}'")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+@cache
+def normalize_sql_query(query: str) -> str:
+    """TODO"""
+    """
+    Prettify an SQL query.
+
+    Args:
+        query (str): The SQL query to be prettified.
+
+    Returns:
+        str: The prettified SQL query.
+    """
+    query = sqlparse.format(  # type:ignore
+        query,
+        reindent=False,
+        keyword_case="upper",
+        strip_comments=True,
+        strip_whitespace=True,
+    )
+    return query
+
+
+def detect_encoding(sample_data: bytes) -> str:
+    """TODO"""
+    result = chardet.detect(sample_data)
+    if result["confidence"] < 1:
+        logging.warning("Chardet encoding detection < 100%: %s", result)
+    return str(result["encoding"])
+
+
+def detect_csv_dialect(sample_data: str) -> dict[str, Any]:
+    """TODO"""
+    dialect = csv.Sniffer().sniff(sample_data)
+    dialect_dict = {
+        k: v
+        for k, v in dialect.__dict__.items()
+        if k
+        in [
+            "lineterminator",
+            "quoting",
+            "doublequote",
+            "delimiter",
+            "quotechar",
+            "skipinitialspace",
+        ]
+    }
+    return dialect_dict
+
+
+def get_sql_table_schema(cursor: Cursor) -> dict[str, Any]:
+    """TODO"""
+    fields: list[dict[str, Any]] = [
+        {"name": name, "data_type": data_type, "is_nullable": is_nullable}
+        for (
+            name,
+            data_type,
+            _display_size,
+            _internal_size,
+            _precision,
+            _scale,
+            is_nullable,
+        ) in cursor.description
+    ]
+    return {"fields": fields}
+
+
+def get_df_table_schema(df: pd.DataFrame) -> dict[str, Any]:
+    """TODO"""
+    fields: list[dict[str, Any]] = []
+    for cname in df.columns:
+        fields.append(
+            {
+                "name": cname,
+                "data_type": df[cname].dtype.name,
+                "is_nullable": (df[cname].isna() | df[cname].isnull()).any(),
+            }
+        )
+    return {"fields": fields}
+
+
+@cache  # should not change during run
+def get_git_info(repo_path: StrPath) -> dict[str, Any]:
+    """TODO"""
+
+    """get git branch,commit and is clean status
+    from a local git repository, given as a path"""
+
+    def run_git_command(command: list[str], cwd: StrPath):
+        result = subprocess.run(command, cwd=cwd, capture_output=True, text=True)
+        if result.returncode != 0:
+            logging.warning(result.stderr.strip())
+            return None
+        return result.stdout.strip()
+
+    # Get the current branch name
+    branch = run_git_command(["git", "rev-parse", "--abbrev-ref", "HEAD"], repo_path)
+
+    # Get the latest commit hash
+    commit = run_git_command(["git", "rev-parse", "HEAD"], repo_path)
+
+    # Get the origin remote URL
+    origin_url = run_git_command(
+        ["git", "config", "--get", "remote.origin.url"], repo_path
+    )
+
+    # Check if the repository is clean
+    status = run_git_command(["git", "status", "--porcelain"], repo_path)
+    is_clean = None if status is None else len(status) == 0
+    if not is_clean:
+        logging.warning("git repo is not clean")
+
+    return {
+        "branch": branch,
+        "commit": commit,
+        "origin": origin_url,
+    }
+
+
+def get_function_description(function: Callable[..., Any]) -> str | None:
+    """TODO"""
+    return function.__doc__
+
+
+def get_function_name(function: Callable[..., Any]) -> str | None:
+    """TODO"""
+    return function.__name__
+
+
+def get_module_version(func: Callable[..., Any]) -> str | None:
+    """TODO"""
+    # get module version (or parent module version)
+    version = None
+    try:
+        mod = inspect.getmodule(func)
+        mod_path = mod.__name__.split(".")  # type: ignore
+        while mod_path and not version:
+            mod_name = ".".join(mod_path)
+            mod = importlib.import_module(mod_name)
+            try:
+                version = mod.__version__
+                version = f"{mod_name} {version}"
+            except AttributeError:
+                pass
+            mod_path = mod_path[:-1]
+    except Exception:  # noqa: S110
+        pass
+
+
+def get_function_filepath(function: Callable[..., Any]) -> str:
+    """TODO"""
+    try:
+        return function.__file__
+    except AttributeError:
+        return inspect.getfile(function)
+
+
+def get_git_root(filepath: StrPath) -> Path:
+    """TODO"""
+    return next(path for path in Path(filepath).parents if (path / ".git").exists())
+
+
+def get_function_git_id(fun: Callable):
+    pass
+
+
+def get_function_id():
+    pass

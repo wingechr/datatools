@@ -10,6 +10,7 @@ from datatools.types import FunParams, FunResult, Json
 from datatools.utils import (
     function_get_defaults,
     function_get_regular_params,
+    get_function_description,
     names_get_argument_dict,
 )
 
@@ -21,6 +22,7 @@ class FunctionWrapper(Generic[FunParams, FunResult]):
         self,
         fun: Callable[FunParams, FunResult],
         function_id: str | None = None,
+        description: str | None = None,
         **params,
     ):
         # TODO: is this still a problem?
@@ -31,6 +33,9 @@ class FunctionWrapper(Generic[FunParams, FunResult]):
         self.fun_defaults = function_get_defaults(fun)
         self.fun_parameter_names = function_get_regular_params(fun)
         self.function_id: str = function_id or fun.__name__
+        self.description = (
+            get_function_description(fun) if description is None else description
+        )
 
     def __call__(self, *args: FunParams.args, **kwargs: FunParams.kwargs) -> FunResult:  # noqa
         return self.fun(*args, **kwargs)
@@ -39,6 +44,7 @@ class FunctionWrapper(Generic[FunParams, FunResult]):
     def wrap(
         cls,
         function_id: str | None = None,
+        description: str | None = None,
         **params,
     ):
         """TODO"""
@@ -47,6 +53,7 @@ class FunctionWrapper(Generic[FunParams, FunResult]):
             return FunctionWrapper(
                 fun,
                 function_id=function_id,
+                description=description,
                 **params,
             )
 

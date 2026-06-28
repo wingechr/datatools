@@ -40,6 +40,7 @@ with TemporaryDirectory() as tempdir:
         return pd.read_csv(BytesIO(data))
 
     def sum_values(value1: int, value2: int, value3: pd.DataFrame) -> int:
+        """sum of input values"""
         return value1 + value2 + int(value3["value"].sum())
 
     # define a job
@@ -70,3 +71,5 @@ with TemporaryDirectory() as tempdir:
     assert st.metadata(uid4)["origin.parameter.value1.@value"][0] == uid1
     assert st.metadata(uid4)["origin.parameter.value2.@value"][0] == uid2
     assert st.metadata(uid4)["origin.parameter.value3.@value"][0] == uid3
+
+    raise Exception(st.metadata(uid4)["origin"])
