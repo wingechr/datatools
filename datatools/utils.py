@@ -574,9 +574,15 @@ def get_function_description(function: Callable[..., Any]) -> str | None:
     return function.__doc__
 
 
-def get_function_name(function: Callable[..., Any]) -> str | None:
+def get_function_name(function: Callable[..., Any]) -> str:
     """TODO"""
-    return function.__name__
+    return function.__name__ or str(function)
+
+
+def get_module(func: Callable[..., Any]) -> str | None:
+    """TODO"""
+    mod = inspect.getmodule(func)
+    return mod.__name__ if mod else None
 
 
 def get_module_version(func: Callable[..., Any]) -> str | None:
@@ -612,9 +618,27 @@ def get_git_root(filepath: StrPath) -> Path:
     return next(path for path in Path(filepath).parents if (path / ".git").exists())
 
 
-def get_function_git_id(fun: Callable):
-    pass
+def get_function_git_id(fun: Callable) -> str:
+    """TODO"""
+    filepath = get_function_filepath(fun)
 
 
-def get_function_id():
-    pass
+def get_function_module_id(fun: Callable) -> str:
+    """TODO"""
+    mod = get_module(fun)
+    return  f""
+
+
+def get_function_id(fun: Callable) -> str:
+    """TODO"""
+    try:
+        return get_function_git_id(fun)
+    except Exception:  # noqa: S110
+        pass
+
+    try:
+        return get_function_module_id(fun)
+    except Exception:  # noqa: S110
+        pass
+
+    return get_function_name(fun)
