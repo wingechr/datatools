@@ -16,4 +16,11 @@ class TestDocstests(unittest.TestCase):
         for file in glob.glob("datatools/*.py"):
             module_name = os.path.splitext(file)[0].replace(os.sep, ".")
             module = importlib.import_module(module_name)
-            doctest.testmod(module, verbose=True, raise_on_error=True)
+            failed, _attempted = doctest.testmod(
+                module,
+                verbose=False,
+                raise_on_error=False,
+                optionflags=doctest.REPORT_NDIFF,
+            )
+            if failed:
+                raise Exception(failed)

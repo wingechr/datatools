@@ -417,12 +417,30 @@ def start_http_server(
 
 
 def remove_credentials_from_netloc(netloc: str) -> str:
-    """FIXME: not implemented yet"""
+    """TODO
+
+    Example:
+
+    >>> remove_credentials_from_netloc('name:pw@example.com:80')
+    'example.com:80'
+    >>> remove_credentials_from_netloc('example.com:80')
+    'example.com:80'
+
+    """
     return re.sub("[^/@]+@", "", netloc)
 
 
 def remove_port_from_netloc(netloc: str) -> str:
-    """FIXME: not implemented yet"""
+    """TODO
+
+    Example:
+
+    >>> remove_port_from_netloc('name:pw@example.com:80')
+    'name:pw@example.com'
+    >>> remove_port_from_netloc('name:pw@example.com')
+    'name:pw@example.com'
+
+    """
     if m := re.match(r"^(.*):[0-9]+$", netloc):
         netloc = m.groups()[0]
     return netloc
@@ -574,12 +592,27 @@ def get_function_description(function: Callable[..., Any]) -> str | None:
 
 
 def get_function_name(function: Callable[..., Any]) -> str:
-    """TODO"""
+    """TODO
+
+    Example:
+
+    >>> get_function_name(get_function_name)
+    'get_function_name'
+
+
+    """
     return function.__name__ or str(function)
 
 
 def get_module(func: Callable[..., Any]) -> str | None:
-    """TODO"""
+    """TODO
+
+    Example:
+
+    >>> get_module(get_module)
+    'datatools.utils'
+
+    """
     mod = inspect.getmodule(func)
     return mod.__name__ if mod else None
 
@@ -618,16 +651,35 @@ def get_git_root(filepath: StrPath) -> Path:
 
 
 def get_function_git_id(fun: Callable) -> str:
-    """TODO"""
+    """TODO
+
+    Example:
+
+
+    >>> import re
+    >>> name = get_function_git_id(get_function_git_id)
+    >>> bool(re.match(
+    ... r'^(git@|https://)github.com[:/]wingechr/datatools[./].*/datatools/utils.py',
+    ... name)) or name
+    True
+
+    """
     filepath = get_function_filepath(fun)
     git_root = get_git_root(filepath)
     git_info = get_git_info(git_root)
-    path = filepath.relative_to(git_root)
+    path = filepath.relative_to(git_root).as_posix()
     return f"{git_info['origin']}/{git_info['commit']}/{path}:{fun.__name__}"
 
 
 def get_function_module_id(fun: Callable) -> str:
-    """TODO"""
+    """TODO
+
+    Example:
+
+    >>> get_function_module_id(get_function_module_id)
+    'datatools.utils:get_function_module_id'
+
+    """
     mod = get_module(fun)
     return f"{mod}:{fun.__name__}"
 
