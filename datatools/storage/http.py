@@ -22,7 +22,7 @@ def catch_exceptions(fun):
         try:
             return fun(*args, **kwargs)
         except StorageFileNotFoundError as err:
-            raise HTTPException(status_code=404) from err
+            raise HTTPException(status_code=404, detail=str(err)) from err
         except StorageException as err:
             # return info of exception
             raise HTTPException(status_code=400, detail=str(err)) from err
@@ -124,26 +124,23 @@ class HttpDataStorage(DataStorage):
     ):
         url = self._location + path
         resp = httpx.request(method=method, url=url, params=params, content=data)
-        resp.raise_for_status()
 
-        # if resp.is_error:
-        #    if resp.status_code == 404:
-        #        raise StorageFileNotFoundError()
-        #    elif resp.status_code < 500:
-        #        raise StorageException(resp.json()["detail"])
-        #    else:
-        #        raise Exception(resp.content)
-        #
+        if resp.is_error:
+            if resp.status_code == 404:
+                raise StorageFileNotFoundError()
+            elif resp.status_code < 500:
+                raise StorageException(resp.content)
+            else:
+                raise Exception(resp.content)  # pragma: no cover
+
         return resp
 
     def _contains(self, uid: UID) -> bool:
         try:
-            resp = self._request(path=f"/data/{uid}", method="HEAD")
-            return resp.is_success
-        except httpx.HTTPStatusError as exc:
-            if not exc.response.status_code == 404:
-                raise
-        return False
+            self._request(path=f"/data/{uid}", method="HEAD")
+            return True
+        except StorageFileNotFoundError:
+            return False
 
     def _getitem(self, uid: UID) -> bytes:
         resp = self._request(path=f"/data/{uid}", method="GET")

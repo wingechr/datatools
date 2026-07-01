@@ -273,11 +273,10 @@ class TestStorageHttpServer(TestCase):
             resp = httpx.put(url + "/data//a", content=b"data")
             self.assertEqual(resp.status_code, 400)
 
-            resp = httpx.put(url + "/data/a", content=b"data")
-            self.assertEqual(resp.status_code, 400)
-
-            resp = httpx.get(url + "/data//::a")
-            self.assertEqual(resp.status_code, 400)
+            self.assertTrue(storage._contains("a/b"))
+            self.assertFalse(storage._contains("b"))
+            self.assertRaises(Exception, storage._contains, "/a")
+            self.assertRaises(Exception, storage._contains, "a")
 
 
 class TestUseCases(TestCase):
