@@ -11,8 +11,8 @@ import rdflib
 from datatools.exceptions import StorageInvalidUidError
 from datatools.storage.base import DataStorage
 from datatools.storage.memory import PersistentMemoryMetadataStorage
-from datatools.types import UID, MetadataValue
-from datatools.utils import TextFile, is_file_uri_or_path, uri_or_path_to_path
+from datatools.types import UID
+from datatools.utils import TextFile, uri_or_path_to_path
 
 
 class JsonFileMetadataStorage(PersistentMemoryMetadataStorage):
@@ -70,14 +70,6 @@ class JsonLdFileMetadataStorage(JsonFileMetadataStorage):
 
         super()._dump(data_new)
 
-    def _as_uri(self, x: str) -> rdflib.URIRef:
-        """FIXME"""
-        return rdflib.URIRef("urn:" + x)
-
-    def _as_uri_or_literal(self, x: MetadataValue) -> rdflib.URIRef | rdflib.Literal:
-        """FIXME"""
-        return rdflib.Literal(x)
-
 
 class FileDataStorage(DataStorage):
     """TODO"""
@@ -87,7 +79,7 @@ class FileDataStorage(DataStorage):
     @classmethod
     def _can_handle(cls, location: str) -> bool:
         """Either file:// protocol or no protocol"""
-        return is_file_uri_or_path(location)
+        return Path(location).is_dir()
 
     def __init__(self, location: str = "."):
         path = uri_or_path_to_path(location).resolve()
@@ -141,7 +133,7 @@ class FileDataStorage(DataStorage):
                 f"Cannot use uid outside of storage location: {uid}", uid=UID()
             )
         if abs_path.exists() and not abs_path.is_file():
-            raise StorageInvalidUidError(f"uid is cannot be a file: {uid}", uid=UID())
+            raise StorageInvalidUidError(f"uid must be a file: {uid}", uid=UID())
         return abs_path.relative_to(self._location).as_posix()
 
 

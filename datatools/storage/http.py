@@ -8,13 +8,13 @@ from typing import Literal
 from fastapi import Body, FastAPI, HTTPException, Query, Response
 import httpx
 
-from datatools.exceptions import StorageFileNotFoundError
+from datatools.exceptions import StorageException, StorageFileNotFoundError
 from datatools.storage.base import DataStorage, MetadataStorage
 from datatools.types import UID, MetadataAttribute, MetadataValue
 from datatools.utils import parse_cmd_vals
 
 
-def catch_StorageFileNotFoundError(fun):
+def catch_exceptions(fun):
     """on StorageFileNotFoundError, return 404"""
 
     @functools.wraps(fun)
@@ -23,6 +23,11 @@ def catch_StorageFileNotFoundError(fun):
             return fun(*args, **kwargs)
         except StorageFileNotFoundError as err:
             raise HTTPException(status_code=404) from err
+        except StorageException as err:
+            # return info of exception
+            raise HTTPException(status_code=400, detail=str(err)) from err
+        except Exception as err:
+            raise HTTPException(status_code=500) from err
 
     return _fun
 
@@ -32,40 +37,45 @@ def make_server_app(data_storage: DataStorage) -> FastAPI:
     app = FastAPI()
 
     @app.get("/info")
+    @catch_exceptions
     def info():
         return data_storage.info()
 
     @app.get("/")
+    @catch_exceptions
     def find(q: list[str] = Query(default=[])):  # noqa: B008
         filters_dict = parse_cmd_vals(q)
         return data_storage.find(**filters_dict)
 
     @app.head("/{uid}")
+    @catch_exceptions
     def has(uid: str):
         if uid not in data_storage:
-            raise HTTPException(status_code=404)
+            raise StorageFileNotFoundError(uid)
 
     @app.delete("/{uid}")
-    @catch_StorageFileNotFoundError
+    @catch_exceptions
     def delete(uid: str):
         del data_storage[uid]
 
     @app.get("/{uid}")
-    @catch_StorageFileNotFoundError
+    @catch_exceptions
     def get(uid: str):
         data = data_storage[uid]
         return Response(content=data)
 
     @app.put("/{uid}")
-    @catch_StorageFileNotFoundError
+    @catch_exceptions
     def put(uid: str, data: bytes = Body(...)):
         data_storage[uid] = data
 
     @app.get("/{uid}/metadata/")
+    @catch_exceptions
     def metadata_get(uid, a: str):
         return data_storage.metadata(uid)[a]
 
     @app.post("/{uid}/metadata/")
+    @catch_exceptions
     def metadata_set(uid, data: dict):
         metadata = data_storage.metadata(uid)
         for k, v in data.items():

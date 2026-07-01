@@ -14,6 +14,7 @@ from sqlalchemy import (
     create_engine,
 )
 
+from datatools.exceptions import StorageFileNotFoundError
 from datatools.storage.base import DataStorage, MetadataStorage
 from datatools.storage.memory import PersistentMemoryMetadataStorage
 from datatools.types import UID
@@ -117,7 +118,7 @@ class SqlDataStorage(DataStorage):
             )
             row = resp.fetchone()
             if not row:
-                raise Exception()
+                raise StorageFileNotFoundError(f"Not found: {uid}")
             return row[0]
 
     def _setitem(self, uid: UID, data: bytes) -> None:

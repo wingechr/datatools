@@ -39,8 +39,8 @@ def infer_storage_class(location: str, storage_class=str | None) -> type[DataSto
 def main(ctx, location: str, storage_class=str | None) -> None:
     """TODO"""
     StorageClass = infer_storage_class(location, storage_class=storage_class)
-    logging.debug(f"Starting {StorageClass}({location})")
     data_storage = StorageClass(location)
+    logging.debug(f"Starting {data_storage}")
     ctx.obj = data_storage
 
 

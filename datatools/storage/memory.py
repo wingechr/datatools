@@ -26,8 +26,8 @@ class PersistentMemoryMetadataStorage(MemoryMetadataStorage):
     """TODO"""
 
     def __init__(self):
-        super().__init__(data=self._load_or_init())
         self._changed = False
+        super().__init__(data=self._load_or_init())
 
     def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
         super()._setitem(attribute=attribute, value=value)

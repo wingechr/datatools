@@ -22,11 +22,13 @@ import subprocess
 import subprocess as sp
 import sys
 from threading import Thread
+import time
 from typing import Any, Literal
 from urllib.parse import unquote, urlparse, urlsplit
 from urllib.request import url2pathname
 
 import chardet
+import httpx
 import jsonpath_ng
 import numpy as np
 import pandas as pd
@@ -697,3 +699,18 @@ def get_function_id(fun: Callable) -> str:
         pass
 
     return get_function_name(fun)
+
+
+def wait_for_url(url: str, timeout_s=30):
+    """TODO"""
+    t_start = time.time()
+
+    while True:
+        timeout_left = timeout_s + t_start - time.time()
+        if timeout_left <= 0:
+            raise TimeoutError()
+        try:
+            httpx.head(url, timeout=timeout_left)
+            break
+        except httpx.NetworkError:
+            continue
