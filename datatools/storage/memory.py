@@ -47,7 +47,8 @@ class PersistentMemoryMetadataStorage(MemoryMetadataStorage):
 class MemoryDataStorage(DataStorage):
     """TODO"""
 
-    def __init__(self):
+    def __init__(self, location=None):
+        # _location: unused - only for harmonized interface
         super().__init__(location=None)
         self.__data: dict[UID, Any] = {}
         self.__metadata: dict[UID, MemoryMetadataStorage] = {}

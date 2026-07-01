@@ -70,12 +70,6 @@ class FunctionWrapper(Generic[FunParams, FunResult]):
         """TODO"""
         return self.function_id
 
-    def get_argument_dict(self, *args, **kwargs) -> dict[str, Any]:
-        """TODO"""
-        return names_get_argument_dict(
-            self.fun_parameter_names, self.fun_defaults, *args, **kwargs
-        )
-
 
 def get_job_input_parameters(job: "Job", *args, **kwargs) -> dict:
     """TODO"""

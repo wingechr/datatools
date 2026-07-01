@@ -39,6 +39,7 @@ def infer_storage_class(location: str, storage_class=str | None) -> type[DataSto
 def main(ctx, location: str, storage_class=str | None) -> None:
     """TODO"""
     StorageClass = infer_storage_class(location, storage_class=storage_class)
+    logging.debug(f"Starting {StorageClass}({location})")
     data_storage = StorageClass(location)
     ctx.obj = data_storage
 
@@ -170,5 +171,5 @@ def serve(ctx_data_storage: DataStorage, host: str, port: int) -> None:
     uvicorn.run(app, host=host, port=port)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     wrap_exception(main)

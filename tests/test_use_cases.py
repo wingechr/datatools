@@ -7,6 +7,9 @@ import pickle
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 
+from click.testing import CliRunner
+
+from datatools.__main__ import main
 from datatools.job.job import FunctionWrapper
 from datatools.storage.memory import MemoryDataStorage
 from datatools.utils import start_http_server
@@ -21,6 +24,11 @@ def get_item_or_first(x):
 
 class TestUseCases(TestCase):
     """TODO"""
+
+    def test_main_script(self):
+        """TODO"""
+        resp = CliRunner().invoke(main, ["storage", "--help"])
+        self.assertEqual(resp.stderr, "")
 
     def test_use_case_import_data(self):
         """TODO"""

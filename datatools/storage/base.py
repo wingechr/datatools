@@ -91,7 +91,7 @@ class DataStorage(ABC):
         return False
 
     def _get_valid_uid(self, uid: UID) -> UID:
-        return UID(uid)
+        return UID(uid).strip()
 
     def __iter__(self) -> Iterator[UID]:
         return iter(self._list())

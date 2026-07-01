@@ -134,6 +134,7 @@ class FileDataStorage(DataStorage):
 
     def _get_valid_uid(self, uid: UID) -> UID:
         """should be a relative path"""
+        uid = uid.strip()
         abs_path = self._get_abs_path(uid)
         if not abs_path.is_relative_to(self._location):
             raise StorageInvalidUidError(

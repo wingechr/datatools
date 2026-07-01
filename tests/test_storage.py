@@ -1,11 +1,13 @@
 """TODO"""
 
 import logging
+from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Thread
 import time
 from unittest import TestCase
 
+from click.testing import CliRunner
 import uvicorn
 
 from datatools.exceptions import (
@@ -13,6 +15,7 @@ from datatools.exceptions import (
     StorageFileNotFoundError,
     StorageInvalidUidError,
 )
+from datatools.storage.__main__ import main as storage_main
 from datatools.storage.base import DataStorage
 from datatools.storage.cli import CliWrapperDataStorage
 from datatools.storage.file import FileDataStorage, FileDataStorageWithRdfMetadata
@@ -47,6 +50,9 @@ def _test_action_sequence(self: TestCase, storage: DataStorage):
 
     storage.info()
 
+    # prevent invalid uid
+    self.assertRaises(StorageInvalidUidError, storage.__setitem__, "\n" + uid1, data1)
+
     storage[uid1] = data1
     # now it exists
     self.assertTrue(uid1 in storage)
@@ -68,6 +74,9 @@ def _test_action_sequence(self: TestCase, storage: DataStorage):
     self.assertEqual(storage[uid2], data2)
     # list all uids:
     self.assertEqual(set(storage.find()), {uid1, uid2})
+    # list via iterator
+    self.assertEqual(set(storage), {uid1, uid2})
+
     # filter by metadata
     self.assertEqual(set(storage.find(**{mdata2_key: mdata2_val})), {uid2})
 
@@ -76,7 +85,13 @@ def _test_action_sequence(self: TestCase, storage: DataStorage):
     self.assertFalse(uid1 in storage)
 
     # try if exception is raised
+    self.assertRaises(StorageFileNotFoundError, storage.__getitem__, uid1)
     self.assertRaises(StorageFileNotFoundError, storage.__delitem__, uid1)
+
+    # change/update metadata
+    storage.metadata(uid2)[mdata2_key] = "CHANGED"
+    # and can retrieve it
+    self.assertEqual(next(iter(storage.metadata(uid2)[mdata2_key])), "CHANGED")
 
     # additional tests
     _test_action_sequence_metadata(self, storage)
@@ -140,6 +155,33 @@ class TestCliWrapperDataStorage(TestCase):
         with TemporaryDirectory() as tmpdir:
             storage = CliWrapperDataStorage(location=tmpdir)
             _test_action_sequence(self, storage)
+
+    def test_cli_server(self):
+        """Start server from cli"""
+        with TemporaryDirectory() as tmpdir:
+            # test file
+            path = Path(tmpdir) / "data"
+            path.write_bytes(b"test")
+
+            port = get_free_port()
+            runner = CliRunner()
+            # serve memory storage
+            thread = Thread(
+                target=runner.invoke,
+                args=(
+                    storage_main,
+                    ["-c", "MemoryDataStorage", "serve", "-p", str(port)],
+                ),
+                daemon=True,
+            )
+            thread.start()
+
+            # import the test file via client
+            runner2 = CliRunner()
+            runner2.invoke(
+                storage_main,
+                ["-l", f"http://localhost:{port}", "import", str(path), "data"],
+            )
 
 
 class TestStorageHttpServer(TestCase):
