@@ -94,7 +94,6 @@ def default_get_hash_data(job: "Job", input_params: dict) -> Json:
 
 def default_get_hashsum(hash_data: Json) -> str:
     """TODO"""
-    logging.error("HASHSUM for %s", hash_data)
     hash_data_s = json.dumps(hash_data, ensure_ascii=False, indent=0, sort_keys=True)
     hash_data_b = hash_data_s.encode("utf-8")
     hashsum = hashlib.md5(hash_data_b).hexdigest()  # noqa:S324

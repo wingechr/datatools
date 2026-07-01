@@ -314,7 +314,6 @@ def jsonpath_update(data: dict[str, Json], key: str, val: Json) -> None:
     """TODO"""
     path = jsonpath_ng.parse(key)
     path.update_or_create(data, val)
-    logging.warning("jsonpath_update: %s %s %s, %s", key, val, type(val), data)
 
 
 def jsonpath_get(data: dict[str, Json], key: str) -> list[Json]:
@@ -322,7 +321,6 @@ def jsonpath_get(data: dict[str, Json], key: str) -> list[Json]:
     path = jsonpath_ng.parse(key)
     match = path.find(data)
     values = [x.value for x in match]
-    logging.warning("jsonpath_get: %s %s %s", key, values, data)
     return values
 
 
@@ -605,12 +603,12 @@ def get_module_version(func: Callable[..., Any]) -> str | None:
         pass
 
 
-def get_function_filepath(function: Callable[..., Any]) -> str:
+def get_function_filepath(function: Callable[..., Any]) -> Path:
     """TODO"""
     try:
         return function.__file__
     except AttributeError:
-        return inspect.getfile(function)
+        return Path(inspect.getfile(function))
 
 
 def get_git_root(filepath: StrPath) -> Path:
@@ -621,12 +619,16 @@ def get_git_root(filepath: StrPath) -> Path:
 def get_function_git_id(fun: Callable) -> str:
     """TODO"""
     filepath = get_function_filepath(fun)
+    git_root = get_git_root(filepath)
+    git_info = get_git_info(git_root)
+    path = filepath.relative_to(git_root)
+    return f"{git_info['origin']}/{git_info['commit']}/{path}:{fun.__name__}"
 
 
 def get_function_module_id(fun: Callable) -> str:
     """TODO"""
     mod = get_module(fun)
-    return  f""
+    return f"{mod}:{fun.__name__}"
 
 
 def get_function_id(fun: Callable) -> str:

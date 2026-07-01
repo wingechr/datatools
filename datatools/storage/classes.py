@@ -80,14 +80,10 @@ class MetadataStorage(ABC):  # TODO: subclass AbstractContextManager ?
     def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None: ...
 
     def _match(self, **filters: MetadataValue) -> bool:
-        # FIXME: implement betetr operators
+        # FIXME: implement better operators
         does_match = all(
             value in self[attribute] for attribute, value in filters.items()
         )
-        for attribute, value in filters.items():
-            values = self[attribute]
-            logging.error((attribute, value, values))
-
         return does_match
 
     def __getitem__(self, attribute: MetadataAttribute) -> list[MetadataValue]:
@@ -456,7 +452,6 @@ class MemoryDataStorage(DataStorage):
         # dont delete metadata
 
     def _list(self) -> Iterable[UID]:
-        logging.error(self.__data.keys())
         return self.__data.keys()
 
     def _metadata(self, uid: UID) -> MemoryMetadataStorage:
@@ -736,7 +731,6 @@ class TestCliMetadataDataStorage(MetadataStorage):
 
     def _getitem(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
         data = self._request("metadata", "get", self._uid, str(attribute))
-        logging.warning("cli meta get: %s", data)
         return try_parse_json_str(data)
 
     def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
@@ -806,7 +800,6 @@ class CliWrapperDataStorage(DataStorage):
     def info(self) -> dict:
         """TODO"""
         info_remote = self._request("info")
-        logging.error(info_remote)
         info_remote = json.loads(info_remote)
         info_client = super().info()
         info_client.update({"remote": info_remote})

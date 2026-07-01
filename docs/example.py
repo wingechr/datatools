@@ -71,5 +71,3 @@ with TemporaryDirectory() as tempdir:
     assert st.metadata(uid4)["origin.parameter.value1.@value"][0] == uid1
     assert st.metadata(uid4)["origin.parameter.value2.@value"][0] == uid2
     assert st.metadata(uid4)["origin.parameter.value3.@value"][0] == uid3
-
-    raise Exception(st.metadata(uid4)["origin"])

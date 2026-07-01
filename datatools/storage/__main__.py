@@ -119,7 +119,6 @@ def metadata_get(ctx_data_storage: DataStorage, uid: str, attribute: str) -> Non
     """TODO"""
     metadata_storage = ctx_data_storage.metadata(uid)
     values = list(metadata_storage[attribute])
-    logging.warning("cli metadata get: %s %s", attribute, values)
     print(json_dumps_for_print(values))
 
 
@@ -133,8 +132,6 @@ def metadata_set(
     """TODO"""
     metadata_storage = ctx_data_storage.metadata(uid)
     attribute_values_dct = parse_cmd_vals(attribute_values)
-    # TODO: set all at once?
-    logging.warning("cli metadata_set: %s", attribute_values_dct)
     for attribute, value in attribute_values_dct.items():
         metadata_storage[attribute] = value
 

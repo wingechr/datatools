@@ -185,7 +185,7 @@ class TestUseCases(TestCase):
 
         # check metadata
         self.assertEqual(
-            get_item_or_first(storage.metadata(key1)["origin.converter"]),
+            get_item_or_first(storage.metadata(key1)["origin.conversion.@id"]),
             "identity",  # nothings
         )
         self.assertEqual(
@@ -193,8 +193,6 @@ class TestUseCases(TestCase):
             fid_convert,
         )
         self.assertEqual(
-            get_item_or_first(
-                storage.metadata(key2)["origin.parameter.data.converter"]
-            ),
+            get_item_or_first(storage.metadata(key2)["origin.parameter.data.@id"]),
             fid_bytes2json,
         )
