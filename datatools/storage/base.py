@@ -22,7 +22,7 @@ from datatools.types import (
     MetadataAttribute,
     MetadataValue,
 )
-from datatools.utils import identity
+from datatools.utils import get_user_w_host, identity
 
 _OUTPUT_PARAM_NAME = "__output"
 
@@ -222,6 +222,7 @@ class DataStorage(ABC):
                 "@id": wrapped_function.get_function_id(),
                 "description": wrapped_function.description,
             },
+            "user": get_user_w_host(),
         }
 
         def wrap_input_handler(name: str, handler: Callable):

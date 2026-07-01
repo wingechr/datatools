@@ -15,7 +15,6 @@ import logging
 import math
 import os
 from pathlib import Path
-import pickle
 import re
 import socket
 import subprocess
@@ -169,7 +168,18 @@ def reverse_prints(stdout_data: bytes) -> list[str]:
 
 
 def try_parse_json_str(s: str) -> Any:
-    """TODO"""
+    """TODO
+
+    Example:
+
+    >>> try_parse_json_str("s")
+    's'
+    >>> try_parse_json_str('"s"')
+    's'
+    >>> try_parse_json_str(1)
+    1
+
+    """
     try:
         return json.loads(s)
     except Exception:
@@ -177,7 +187,18 @@ def try_parse_json_str(s: str) -> Any:
 
 
 def is_file_uri_or_path(x: str | Path) -> bool:
-    """TODO"""
+    """TODO
+
+    Example:
+
+    >>> is_file_uri_or_path(Path("."))
+    True
+    >>> is_file_uri_or_path("file:///path")
+    True
+    >>> is_file_uri_or_path("http:///path")
+    False
+
+    """
     if isinstance(x, Path):
         return True
     return bool(re.match(r"file://", x)) or "://" not in x
@@ -219,14 +240,6 @@ def function_get_regular_params(func: Callable) -> list[str]:
 
     sig = inspect.signature(func)
     return list(sig.parameters)
-
-
-def function_get_argument_dict(f: Callable, *args, **kwargs) -> dict[str, Any]:
-    """TODO"""
-    sig = inspect.signature(f)
-    bound = sig.bind(*args, **kwargs)  # or bind_partial()
-    bound.apply_defaults()
-    return bound.arguments
 
 
 def names_get_argument_dict(
@@ -280,19 +293,6 @@ def assert_unique(iterable: Iterable):
         if x in uq:
             raise KeyError("Duplicate key: %s", x)
         uq.add(x)
-
-
-def pickle_dump_to_path(data: Any, path: Path) -> None:
-    """TODO"""
-    path.parent.mkdir(exist_ok=True, parents=True)
-    with path.open("wb") as file:
-        return pickle.dump(data, file)
-
-
-def pickle_load_from_path(path: Path) -> Any:
-    """TODO"""
-    with path.open("rb") as file:
-        return pickle.load(file)  # noqa:S301
 
 
 def identity(x):
@@ -481,6 +481,12 @@ def normalize_sql_query(query: str) -> str:
 
     Returns:
         str: The prettified SQL query.
+
+    Example:
+
+    >>> normalize_sql_query("select  1 as a;")
+    'SELECT 1 AS a; '
+
     """
     query = sqlparse.format(  # type:ignore
         query,

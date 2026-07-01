@@ -7,7 +7,6 @@ from pathlib import Path
 import pickle
 from tempfile import TemporaryDirectory
 from threading import Thread
-import time
 from unittest import TestCase
 
 from click.testing import CliRunner
@@ -233,9 +232,7 @@ class TestCliWrapperDataStorage(TestCase):
 class TestStorageHttpServer(TestCase):
     """TODO"""
 
-    def test_action_sequence(self):
-        """TODO"""
-        remote_storage = MemoryDataStorage()
+    def _start_server(self, remote_storage: DataStorage) -> str:
         host = "127.0.0.1"
         port = get_free_port()
         app = make_server_app(data_storage=remote_storage)
@@ -245,17 +242,42 @@ class TestStorageHttpServer(TestCase):
         thread = Thread(target=server.run, daemon=True)
         thread.start()
 
-        while not server.started:
-            time.sleep(0.01)
-
         url = f"http://{host}:{port}"
-        storage = HttpDataStorage(url)
 
+        wait_for_url(url)
+        return url
+
+    def test_action_sequence_w_memory_backend(self):
+        """TODO"""
+        remote_storage = MemoryDataStorage()
+        url = self._start_server(remote_storage)
+        storage = HttpDataStorage(url)
         _test_action_sequence(self, storage)
 
-        # some additional tests (bypass base functions)
-        resp = httpx.post(url)
-        self.assertEqual(resp.status_code, 405)  # Method Not Allowed
+    def test_action_sequence_w_file_backend(self):
+        """TODO"""
+        with TemporaryDirectory() as tempdir:
+            remote_storage = FileDataStorage(tempdir)
+            url = self._start_server(remote_storage)
+            storage = HttpDataStorage(url)
+            _test_action_sequence(self, storage)
+
+            # some additional tests (bypass base functions)
+            resp = httpx.post(url + "/data")
+            self.assertEqual(resp.status_code, 405)  # Method Not Allowed
+
+            # add data
+            resp = httpx.put(url + "/data/a/b", content=b"data")
+            resp.raise_for_status()
+            # invalid requests
+            resp = httpx.put(url + "/data//a", content=b"data")
+            self.assertEqual(resp.status_code, 400)
+
+            resp = httpx.put(url + "/data/a", content=b"data")
+            self.assertEqual(resp.status_code, 400)
+
+            resp = httpx.get(url + "/data//::a")
+            self.assertEqual(resp.status_code, 400)
 
 
 class TestUseCases(TestCase):

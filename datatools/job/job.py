@@ -1,8 +1,6 @@
 """Abstract classes / interfaces, types"""
 
 from collections.abc import Callable
-import hashlib
-import json
 import logging
 from typing import Any, Generic
 
@@ -11,6 +9,7 @@ from datatools.utils import (
     function_get_defaults,
     function_get_regular_params,
     get_function_description,
+    get_md5_hash,
     names_get_argument_dict,
 )
 
@@ -86,19 +85,11 @@ def default_get_hash_data(job: "Job", input_params: dict) -> Json:
     return {"function": function_id, "parameters": input_params}
 
 
-def default_get_hashsum(hash_data: Json) -> str:
-    """TODO"""
-    hash_data_s = json.dumps(hash_data, ensure_ascii=False, indent=0, sort_keys=True)
-    hash_data_b = hash_data_s.encode("utf-8")
-    hashsum = hashlib.md5(hash_data_b).hexdigest()  # noqa:S324
-    return hashsum
-
-
 def default_get_job_hashsum(job: "Job", *args, **kwargs) -> str:
     """TODO"""
     input_params = get_job_input_parameters(job, *args, **kwargs)
     hash_data = default_get_hash_data(job, input_params)
-    hashsum = default_get_hashsum(hash_data)
+    hashsum = get_md5_hash(hash_data)
     return hashsum
 
 
