@@ -472,8 +472,8 @@ def import_module_from_path(name: str, filepath: StrPath):
 
 @cache
 def normalize_sql_query(query: str) -> str:
-    """TODO"""
-    """
+    """TODO
+
     Prettify an SQL query.
 
     Args:
@@ -485,7 +485,7 @@ def normalize_sql_query(query: str) -> str:
     Example:
 
     >>> normalize_sql_query("select  1 as a;")
-    'SELECT 1 AS a; '
+    'SELECT 1 AS a;'
 
     """
     query = sqlparse.format(  # type:ignore
