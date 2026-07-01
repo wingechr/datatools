@@ -1,184 +1,337 @@
-import base64
+"""TODO"""
+
+from collections.abc import Callable, Iterable
 import csv
 import datetime
-import functools
+from functools import cache, partial
+import hashlib
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import importlib
 import importlib.util
 import inspect
+from inspect import Parameter, Signature
 import json
 import logging
 import math
 import os
-import re
-import shutil
-import socket
-import stat
-import subprocess
-import sys
-import time
-from io import BufferedReader
 from pathlib import Path
-from typing import Any, Callable, Iterable, List, Optional, Tuple, Union, get_args
-from urllib.parse import quote, unquote, unquote_plus, urlsplit
+import pickle
+import re
+import socket
+import subprocess
+import subprocess as sp
+import sys
+from threading import Thread
+from typing import Any, Literal
+from urllib.parse import unquote, urlparse, urlsplit
+from urllib.request import url2pathname
 
 import chardet
 import jsonpath_ng
 import numpy as np
 import pandas as pd
-import requests
-import sqlalchemy as sa
+from pyodbc import Cursor
 import sqlparse
 import tzlocal
-import unidecode
-from jsonpath_ng import jsonpath
-from pyodbc import Cursor
 
-from datatools.base import (
-    ANONYMOUS_USER,
-    DATE_FMT,
-    DATETIMETZ_FMT,
-    DEFAULT_BUFFER_SIZE,
-    FILEMOD_WRITE,
-    LOCALHOST,
-    PARAM_SQL_QUERY,
-    TIME_FMT,
-    ParameterKey,
-    StrPath,
-    Type,
-)
+from datatools.exceptions import SubprocessStatus
+from datatools.types import Json, StrPath, SubCls
+
+DATETIMETZ_FMT = "%Y-%m-%dT%H:%M:%S%z"
+DATE_FMT = "%Y-%m-%d"
+TIME_FMT = "%H:%M:%S"
+ANONYMOUS_USER = "ANONYMOUS"
 
 
-def cache(func: Callable[..., Any]) -> Callable[..., Any]:
-    """Update cache decorator that preserves metadata.
+class TextFile:
+    """TODO"""
 
-    Parameters
-    ----------
-    func : Callable
-        original function
+    def __init__(
+        self,
+        path: str | Path,
+        encoding="utf-8",
+        errors: Literal["strict", "replace", "ignore"] = "strict",
+        ensure_ascii=False,
+        sort_keys=False,
+        indent=2,
+    ):
+        self.path = Path(path)
+        self.encoding = encoding
+        self.errors = errors
+        self.ensure_ascii = ensure_ascii
+        self.sort_keys = sort_keys
+        self.indent = indent
 
-    Returns
-    -------
-    Callable
-        cache decorated function
-    """
+    def exists(self) -> bool:
+        """TODO"""
+        return self.path.exists()
 
-    result = func
-    result = functools.cache(func)
-    # none of these work for IDE intellisense:
-    result = functools.wraps(func)(result)
-    # copy_signature(result, func)
+    def load_bytes(self) -> bytes:
+        """TODO"""
+        logging.debug("Reading %s", self.path)
+        with self.path.open("rb") as file:
+            return file.read()
+
+    def load_str(self) -> str:
+        """TODO"""
+        data_b = self.load_bytes()
+        data_s = data_b.decode(encoding=self.encoding, errors=self.errors)
+        return data_s
+
+    def load_json(self) -> Any:
+        """TODO"""
+        data_s = self.load_str()
+        return json.loads(data_s)
+
+    def dump_bytes(self, data: bytes) -> None:
+        """TODO"""
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        logging.debug("Writing %s", self.path)
+        with self.path.open("wb") as file:
+            file.write(data)
+
+    def dump_str(self, data: str) -> None:
+        """TODO"""
+        data_b = data.encode(encoding=self.encoding, errors=self.errors)
+        self.dump_bytes(data_b)
+
+    def dump_json(self, data: Any) -> None:
+        """TODO"""
+        data_s = json.dumps(
+            data,
+            ensure_ascii=self.ensure_ascii,
+            sort_keys=self.sort_keys,
+            indent=self.indent,
+        )
+        self.dump_str(data_s)
+
+
+def find_subclass(base_cls, name: str):
+    """TODO"""
+    for cls in base_cls.__subclasses__():
+        if cls.__name__ == name:
+            return cls
+        found = find_subclass(cls, name)
+        if found:
+            return found
+    return None
+
+
+def wrap_exception(function: Callable[[], None], debug: bool = True):
+    """TODO"""
+    try:
+        # your logic here
+        function()
+    except Exception as e:
+        if debug:
+            logging.exception(e)  # includes stack trace
+        else:
+            logging.error(e)
+        sys.exit(1)
+
+
+def parse_cmd_vals(arguments: list[str]) -> dict[str, Json]:
+    """TODO"""
+    items = [kv.split("=", 1) for kv in arguments]
+    return {k: try_parse_json_str(v) for k, v in items}
+
+
+def get_free_port() -> int:
+    """TODO"""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("localhost", 0))  # 0 = let the OS choose
+        port = s.getsockname()[1]
+    return port
+
+
+def file_uri_to_path(uri: str) -> Path:
+    """TODO"""
+    parts = urlparse(uri)
+    if parts.netloc:
+        raise NotImplementedError(uri)
+    elif parts.path.startswith("/./") or parts.path.startswith("/../"):
+        # relative path (not standard file:// schema)
+        path_s = Path(os.getcwd()).as_posix() + parts.path
+    else:
+        path_s = url2pathname(unquote(parts.path))
+    path = Path(path_s)
+
+    return path
+
+
+def reverse_prints(stdout_data: bytes) -> list[str]:
+    """TODO"""
+    text = stdout_data.decode(sys.stdout.encoding, errors="replace")
+    lines = text.splitlines(keepends=False)[::-1]
+    return lines
+
+
+def try_parse_json_str(s: str) -> Any:
+    """TODO"""
+    try:
+        return json.loads(s)
+    except Exception:
+        return s
+
+
+def is_file_uri_or_path(x: str | Path) -> bool:
+    """TODO"""
+    if isinstance(x, Path):
+        return True
+    return bool(re.match(r"file://", x)) or "://" not in x
+
+
+def uri_or_path_to_path(x: str | Path) -> Path:
+    """TODO"""
+    if isinstance(x, Path):
+        return x
+    elif re.match(r"file://", x):
+        return file_uri_to_path(x)
+    else:
+        return Path(x)
+
+
+def function_get_defaults(func: Callable):
+    """TODO"""
+    sig = inspect.signature(func)
+    return {
+        name: param.default
+        for name, param in sig.parameters.items()
+        if param.default is not inspect._empty
+    }
+
+
+def function_has_varargs(func: Callable) -> bool:
+    """TODO"""
+    sig = inspect.signature(func)
+    has_args = any(p.kind == Parameter.VAR_POSITIONAL for p in sig.parameters.values())
+    has_kwargs = any(p.kind == Parameter.VAR_KEYWORD for p in sig.parameters.values())
+    return has_args or has_kwargs
+
+
+def function_get_regular_params(func: Callable) -> list[str]:
+    """TODO"""
+    # is this now possible?
+    # if function_has_varargs(func):
+    #     raise TypeError("Function cannot have *args or **kwargs")
+
+    sig = inspect.signature(func)
+    return list(sig.parameters)
+
+
+def function_get_argument_dict(f: Callable, *args, **kwargs) -> dict[str, Any]:
+    """TODO"""
+    sig = inspect.signature(f)
+    bound = sig.bind(*args, **kwargs)  # or bind_partial()
+    bound.apply_defaults()
+    return bound.arguments
+
+
+def names_get_argument_dict(
+    params: list[str], defaults: dict, *args, **kwargs
+) -> dict[str, Any]:
+    """TODO"""
+
+    # we need to add defaults, otherwise sig.bind fails
+    sig = Signature(
+        [
+            Parameter(name, Parameter.POSITIONAL_OR_KEYWORD, default=defaults.get(name))
+            for name in params
+        ]
+    )
+
+    bound = sig.bind(*args, **kwargs)
+    bound.apply_defaults()
+
+    result = bound.arguments
+
+    # logging.error(("names_get_argument_dict", sig.parameters, args, kwargs, result))
+
     return result
 
 
-@cache
-def get_type_name(cls: Type) -> str:
-    if cls is None:
-        return "Any"
-    if isinstance(cls, str):
-        return cls
-    if cls.__module__ == "typing":
-        return str(cls)
-
-    # remove leading underscore from module name
-    modulename = str(cls.__module__).lstrip("_")
-    classname = cls.__qualname__
-
-    return f"{modulename}.{classname}"
+def iter_subclasses(cls: type[SubCls]) -> Iterable[type[SubCls]]:
+    """TODO"""
+    yield cls
+    for subcls in cls.__subclasses__():
+        yield from iter_subclasses(subcls)
 
 
-@cache
-def get_filetype_from_filename(filename: Union[Path, str]) -> Type:
-    """returns something like .txt"""
-    suffix = str(filename).split(".")[-1]
-    return f".{suffix}"
+def subclasses_by_name(cls: type[SubCls]) -> dict[str, type[SubCls]]:
+    """TODO"""
+    return {c.__name__: c for c in list(iter_subclasses(cls))}
 
 
-def get_args_kwargs_from_dict(
-    data: dict[ParameterKey, Any],
-) -> tuple[list[Any], dict[str, Any]]:
-    args_d: dict[int, Any] = {}
-    kwargs: dict[str, Any] = {}
-    if None in data:  # primitive: must be the only one
-        args = [data[None]]
-    else:
-        for k, v in data.items():
-            if isinstance(k, int):
-                args_d[k] = v
-            elif isinstance(k, str):
-                kwargs[k] = v
-            else:
-                raise TypeError(k)
-        if args_d:
-            # fill missing positionals with None
-            args = [args_d.get(i, None) for i in range(max(args_d) + 1)]
-        else:
-            args = []
-
-    return args, kwargs
+def get_md5_hash(hash_data: Json) -> str:
+    """TODO"""
+    hash_data_s = json.dumps(hash_data, ensure_ascii=False, indent=0, sort_keys=True)
+    hash_data_b = hash_data_s.encode("utf-8")
+    hashsum = hashlib.md5(hash_data_b).hexdigest()  # noqa:S324
+    # logging.error("%s %s", hashsum, hash_data)
+    return hashsum
 
 
-@cache
-def get_value_type(dtype: Type) -> Type:
-    # dict[Any, int] -> int
-    # list[int] -> int
-    return get_args(dtype)[-1]
+def assert_unique(iterable: Iterable):
+    """TODO"""
+    uq = set()
+    for x in iterable:
+        if x in uq:
+            raise KeyError("Duplicate key: %s", x)
+        uq.add(x)
 
 
-def get_function_datatype(function: Callable[..., Any]) -> Type:
-    sig = inspect.signature(function)
-    return_type = sig.return_annotation
-    if not return_type:
-        return_type = None
-    return return_type
+def pickle_dump_to_path(data: Any, path: Path) -> None:
+    """TODO"""
+    path.parent.mkdir(exist_ok=True, parents=True)
+    with path.open("wb") as file:
+        return pickle.dump(data, file)
 
 
-def get_function_parameters_datatypes(function: Callable[..., Any]) -> dict[str, Any]:
-    sig = inspect.signature(function)
-    # hints = get_type_hints(function)  # does not work with my decorated classes
-    # parameter_types = {
-    #    name: hints.get(name, None) for name, param in sig.parameters.items()
-    # }
-    parameter_types = {name: param.annotation for name, param in sig.parameters.items()}
-    return parameter_types
+def pickle_load_from_path(path: Path) -> Any:
+    """TODO"""
+    with path.open("rb") as file:
+        return pickle.load(file)  # noqa:S301
 
 
-def get_keyword_only_parameters_types(
-    function: Callable[..., Any], min_idx: int = 0
-) -> list[str]:
-    parameters = inspect.signature(function).parameters
-    return [
-        name
-        for idx, (name, param) in enumerate(parameters.items())
-        if idx >= min_idx
-        and param.kind
-        in {inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD}
-    ]
+def identity(x):
+    """TODO"""
+    return x
 
 
-def is_type_class(x: Any) -> bool:
-    """Check if x is a type."""
-    # return isinstance(x, type)
-    if inspect.isclass(x):
-        return True
-    # special case: typping classes are not real classes
-    if type(x).__module__ in {"typing", "types"}:
-        return True
-    return False
+def call_script(
+    script: Path | str, args: list[str], data: bytes | None = None
+) -> tuple[bytes, bytes]:
+    """Call python script."""
+    cmd = [sys.executable, str(script)] + list(args)
+    logging.debug(cmd)
+    pop = sp.Popen(cmd, stdin=sp.PIPE, stdout=sp.PIPE)
+    stdout, stderr = pop.communicate(data)
+    if pop.returncode:
+        raise SubprocessStatus(pop.returncode)
+    return stdout, stderr
+
+
+def jsonpath_update(data: dict[str, Json], key: str, val: Json) -> None:
+    """TODO"""
+    path = jsonpath_ng.parse(key)
+    path.update_or_create(data, val)
+
+
+def jsonpath_get(data: dict[str, Json], key: str) -> list[Json]:
+    """TODO"""
+    path = jsonpath_ng.parse(key)
+    match = path.find(data)
+    values = [x.value for x in match]
+    return values
 
 
 def isna(x: Any) -> bool:
-    if x is None:
-        return True
-    elif isinstance(x, float):
-        if math.isnan(x):
-            return True
-        elif math.isinf(x):
-            return True
-
-    return False
+    """TODO"""
+    return bool(x is None or isinstance(x, float) and (math.isnan(x) or math.isinf(x)))
 
 
-def json_serialize(x: Any) -> Any:
+def json_serialize(x: Any) -> Json:
+    """TODO"""
     if isinstance(x, datetime.datetime):
         return x.strftime(DATETIMETZ_FMT)
     elif isinstance(x, datetime.date):
@@ -193,44 +346,119 @@ def json_serialize(x: Any) -> Any:
         return int(x)
     elif np.issubdtype(type(x), np.floating):  # type:ignore
         return float(x)
-    elif is_type_class(x):
-        return get_type_name(x)
-    elif np.issubdtype(type(x), bytes):  # type:ignore
-        # bytes to str:
-        return base64.b64encode(x).decode("utf-8")
     else:
         raise NotImplementedError(f"{x.__class__}: {x}")
 
 
-def jsonpath_update(data: dict[str, Any], key: str, val: Any) -> None:
-    key_pattern: jsonpath.Fields = jsonpath_ng.parse(key)  # type: ignore
-    # NOTE: for some reason, update_or_create in jsonpath_ng  does not
-    # work with types that cannot be serialized to JSON
-    try:
-        val = json_serialize(val)
-    except NotImplementedError:
-        pass
-    key_pattern.update_or_create(data, val)  # type: ignore
+def get_now() -> datetime.datetime:
+    """TODO"""
+    # my local timezone, e.g.  DstTzInfo 'Europe/Berlin' LMT+0:53:00 STD
+    tz_local = tzlocal.get_localzone()
+    # timezone as current utc offset (does not know about dst),
+    # e.g. datetime.timezone(datetime.timedelta(seconds=3600))
+    now = datetime.datetime.now()
+    # convert unaware datetime to proper timezone...
+    now_tz = now.replace(tzinfo=tz_local)
+    return now_tz
 
 
-def jsonpath_get(data: dict[Any, Any], key: str) -> Union[Any, list[Any]]:
-    key_pattern: jsonpath.Fields = jsonpath_ng.parse(key)  # type: ignore
-    match: list[Any] = key_pattern.find(data)  # type: ignore
-    values: list[Any] = [x.value for x in match]  # type: ignore
-    # TODO: we always get a list (multiple matches),
-    # but most of the time, we want only one
-    if len(values) == 0:
-        result = None
-    elif len(values) == 1:
-        result = values[0]
-    else:
-        logging.info("multiple results in metadata found for %s", key)
-        result = values
+def get_now_str() -> str:
+    """TODO"""
+    now = get_now()
+    now_str = now.strftime(DATETIMETZ_FMT)
+    # add ":" in offset
+    now_str = re.sub("([+-][0-9]{2})([0-9]{2})$", r"\1:\2", now_str)
+    return now_str
 
-    return result
+
+@cache
+def get_hostname() -> str:
+    """TODO"""
+    return socket.gethostname()
+
+
+@cache
+def get_fqhostname() -> str:
+    """fully qualified hostname (with domain)"""
+    return socket.getfqdn()
+
+
+@cache
+def get_username() -> str:
+    """TODO"""
+    # getpass.getuser() does not always work
+    return os.environ.get("USERNAME") or os.environ.get("USER") or ANONYMOUS_USER
+
+
+@cache
+def get_user_w_host() -> str:
+    """TODO"""
+    return f"{get_username()}@{get_fqhostname()}"
+
+
+def json_dumps_for_print(data: Json) -> str:
+    """TODO"""
+    return json.dumps(data, ensure_ascii=False)
+
+
+def start_http_server(
+    directory: str | Path = ".", port: int | None = None, host: str = "127.0.0.1"
+) -> str:
+    """TODO"""
+    port = port or get_free_port()
+    server = ThreadingHTTPServer(
+        (host, port),
+        partial(SimpleHTTPRequestHandler, directory=directory),
+    )
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    url = f"http://{host}:{port}"
+    return url
+
+
+def remove_credentials_from_netloc(netloc: str) -> str:
+    """TODO
+
+    Example:
+
+    >>> remove_credentials_from_netloc('name:pw@example.com:80')
+    'example.com:80'
+    >>> remove_credentials_from_netloc('example.com:80')
+    'example.com:80'
+
+    """
+    return re.sub("[^/@]+@", "", netloc)
+
+
+def remove_port_from_netloc(netloc: str) -> str:
+    """TODO
+
+    Example:
+
+    >>> remove_port_from_netloc('name:pw@example.com:80')
+    'name:pw@example.com'
+    >>> remove_port_from_netloc('name:pw@example.com')
+    'name:pw@example.com'
+
+    """
+    if m := re.match(r"^(.*):[0-9]+$", netloc):
+        netloc = m.groups()[0]
+    return netloc
+
+
+def get_uid_from_uri(uri: str) -> str:
+    """TODO"""
+    parts = urlsplit(uri)
+    netloc = remove_credentials_from_netloc(parts.netloc)
+    netloc = remove_port_from_netloc(parts.netloc)
+    path = parts.path
+    name = f"{netloc.strip('/')}/{path.strip('/')}"
+    name = name.strip("/")
+    return name
 
 
 def import_module_from_path(name: str, filepath: StrPath):
+    """TODO"""
     spec = importlib.util.spec_from_file_location(name, filepath)
     if spec is None or spec.loader is None:
         raise ImportError(f"Cannot load module '{name}' from '{filepath}'")
@@ -240,30 +468,9 @@ def import_module_from_path(name: str, filepath: StrPath):
     return module
 
 
-def copy_signature(self: object, other: Callable[..., Any]) -> None:
-
-    setattr(self, "__signature__", inspect.signature(other))
-    setattr(self, "__name__", get_function_name(other))
-    setattr(self, "__doc__", get_function_description(other))
-    setattr(self, "__file__", get_function_filepath(other))
-    setattr(self, "__annotations__", other.__annotations__)
-
-
-def passthrough(x: Any) -> Any:
-    return x
-
-
-# ========================================================================================
-# TODO: old, partially unused functions
-# ========================================================================================
-
-
-def get_pandas_version() -> tuple[int, ...]:
-    return tuple(int(x) for x in pd.__version__.split("."))
-
-
 @cache
 def normalize_sql_query(query: str) -> str:
+    """TODO"""
     """
     Prettify an SQL query.
 
@@ -283,342 +490,8 @@ def normalize_sql_query(query: str) -> str:
     return query
 
 
-def get_free_port() -> int:
-    """Get a free port by binding to port 0 and releasing it.
-
-    Returns:
-        int: free port
-    """
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.bind((LOCALHOST, 0))
-    _, port = sock.getsockname()
-    sock.close()
-    return port
-
-
-def wait_for_server(url: str, timeout_s: Optional[int] = 30) -> None:
-    """Wait for server to be responsive"""
-    wait_s = 0.5
-
-    time_start = time.time()
-    while True:
-        try:
-            requests.head(url)  # type: ignore
-            logging.debug("Server is online: %s", url)
-            return
-        except requests.exceptions.ConnectionError:
-            pass
-
-        time_waited = time.time() - time_start
-        logging.debug("checking server (%s): %s", time_waited, url)
-        if timeout_s is not None and time_waited >= timeout_s:
-            break
-        time.sleep(wait_s)
-    raise Exception("Timeout")
-
-
-@cache
-def uri_to_data_path(uri: str) -> str:
-    url_parts = urlsplit(uri)
-
-    # start with netloc
-    path = url_parts.netloc or ""
-    if path:
-        path = remove_port_from_url_netloc(path)
-        path = remove_auth_from_url_netloc(path)
-
-    # add actual path
-    path = path + (url_parts.path or "")
-
-    # add fragment
-    path = path + (url_parts.fragment or "")
-
-    path = unquote_plus(path)
-
-    return path
-
-
-def clean_name(name: str) -> str:
-    name = name.lower()
-    name = unquote(name)
-    for cin, cout in [
-        ("ä", "ae"),
-        ("ö", "oe"),
-        ("ü", "ue"),
-        ("ß", "ss"),
-    ]:
-        name = name.replace(cin, cout)
-    name = unidecode.unidecode(name)
-    name = re.sub(r":", "", name)
-    name = re.sub(r"[^a-z0-9]+", " ", name)
-    name = name.strip()
-    name = re.sub(r"\s+", "_", name)
-    return name
-
-
-@cache
-def get_resource_path_name(path: str) -> str:
-    """should be all lowercase ascii
-    * uri: remove query
-
-    """
-    _path = path
-
-    path = path.lower()
-    path = unquote(path)
-    for cin, cout in [
-        ("ä", "ae"),
-        ("ö", "oe"),
-        ("ü", "ue"),
-        ("ß", "ss"),
-    ]:
-        path = path.replace(cin, cout)
-    path = unidecode.unidecode(path)
-    path = re.sub(r":", "", path)
-    path = re.sub(r"[^a-z0-9/_.\-]+", " ", path)
-    path = path.strip()
-    path = re.sub(r"\s+", "_", path)
-    path = re.sub(r"_+", "_", path)
-    path = re.sub(r"/+", "/", path)
-    path = path.strip("/")
-
-    if not path:
-        raise ValueError(_path)
-
-    return path
-
-
-def get_query_arg(kwargs: dict[str, list[str]], key: str, default: str = "") -> str:
-    """query args only come as lists, we want single value"""
-    values = kwargs.get(key)
-    if not values:
-        return default
-    if len(values) > 1:
-        logging.warning("multiple values defined")
-    value = values[0]
-    return unquote_plus(value)
-
-
-@cache
-def get_hostname() -> str:
-    return socket.gethostname()
-
-
-@cache
-def get_fqhostname() -> str:
-    """fully qualified hostname (with domain)"""
-    return socket.getfqdn()
-
-
-@cache
-def get_username() -> str:
-    # getpass.getuser() does not always work
-    return os.environ.get("USERNAME") or os.environ.get("USER") or ANONYMOUS_USER
-
-
-@cache
-def get_user_w_host() -> str:
-    return f"{get_username()}@{get_fqhostname()}"
-
-
-def get_now() -> datetime.datetime:
-    # my local timezone, e.g.  DstTzInfo 'Europe/Berlin' LMT+0:53:00 STD
-    tz_local = tzlocal.get_localzone()
-    # timezone as current utc offset (does not know about dst),
-    # e.g. datetime.timezone(datetime.timedelta(seconds=3600))
-    now = datetime.datetime.now()
-    # convert unaware datetime to proper timezone...
-    now_tz = now.replace(tzinfo=tz_local)
-    return now_tz
-
-
-def get_now_str() -> str:
-    now = get_now()
-    now_str = now.strftime(DATETIMETZ_FMT)
-    # add ":" in offset
-    now_str = re.sub("([+-][0-9]{2})([0-9]{2})$", r"\1:\2", now_str)
-    return now_str
-
-
-@cache
-def platform_is_windows() -> bool:
-    # os.name: 'posix', 'nt', 'java'
-    return os.name == "nt"
-
-
-@cache
-def platform_is_unix() -> bool:
-    return not platform_is_windows()
-
-
-def make_file_readonly(file_path: str) -> None:
-    """Note: in WIndows, this also prevents delete
-    but not in Linux
-    """
-    current_permissions = os.stat(file_path).st_mode
-    readonly_permissions = current_permissions & ~FILEMOD_WRITE
-    os.chmod(file_path, readonly_permissions)
-
-
-def is_file_readonly(file_path: str) -> bool:
-    current_permissions = os.stat(file_path).st_mode
-    return not (current_permissions & FILEMOD_WRITE)
-
-
-def make_file_writable(file_path: str) -> None:
-    current_permissions = os.stat(file_path).st_mode
-    readonly_permissions = current_permissions | FILEMOD_WRITE
-    os.chmod(file_path, readonly_permissions)
-
-
-def is_uri(source: str):
-    return bool(re.match(".+://", source))
-
-
-def as_uri(source: str) -> str:
-    if not is_uri(source):
-        # assume local path
-        # uri must be absolute path
-        filepath_abs = Path(source).absolute()
-        uri = filepath_abs_to_uri(filepath_abs=filepath_abs)
-    else:
-        uri = source
-    return uri
-
-
-def filepath_abs_to_uri(filepath_abs: Path) -> str:
-    """
-    Args:
-        abspath(Path): must be already absolute path!
-    """
-    uri = filepath_abs.as_uri()
-    url_parts = urlsplit(uri)
-
-    if not url_parts.netloc:
-        url_parts = url_parts._replace(netloc=get_hostname())
-
-    uri = url_parts.geturl()  # unsplit
-
-    # we dont want it quoted
-    uri = unquote(uri)
-
-    return uri
-
-
-def uri_to_filepath_abs(uri: str) -> str:
-    url = urlsplit(uri)
-
-    # if url.scheme != "file":
-    #    raise Exception(f"Not a file path: {uri}")
-
-    is_local = url.netloc == get_hostname()
-    is_win = re.match("/[a-zA-Z]:/", url.path) or (not is_local)
-
-    filepath_abs = url.path
-    if is_win:
-        if is_local:
-            # remove starting /
-            filepath_abs = filepath_abs.lstrip("/")
-
-        else:  # unc share
-            filepath_abs = f"//{url.netloc}{filepath_abs}"
-        filepath_abs = filepath_abs.replace("/", "\\")
-    else:  # posix
-        if not is_local:
-            raise NotImplementedError(f"unc share in posix: {uri}")
-        pass
-
-    return filepath_abs
-
-
-def remove_auth_from_uri_or_path(uri_or_path: str) -> str:
-    """remove username:password@ from uri"""
-    if not is_uri(uri_or_path):
-        return uri_or_path
-    url_parts = urlsplit(uri_or_path)
-    if url_parts.netloc:
-        url_parts = url_parts._replace(
-            netloc=remove_auth_from_url_netloc(url_parts.netloc)
-        )
-    if not url_parts.netloc:
-        # usually, netloc is empty, and so geturl() drops the "//"" at the beginning
-        url_parts = url_parts._replace(path="//" + url_parts.path)
-    return url_parts.geturl()
-
-
-def remove_auth_from_url_netloc(url_netloc: str) -> str:
-    """
-
-    url_path(str): path part of url
-    """
-    return re.sub("[^/@]+@", "", url_netloc)
-
-
-def remove_port_from_url_netloc(url_netloc: str) -> str:
-    """
-
-    url_path(str): path part of url
-    """
-    return re.sub(":[0-9]+$", "", url_netloc)
-
-
-def parse_cli_metadata(metadata_key_vals: List[str]) -> dict[str, Any]:
-    """cli: list of key=value"""
-    metadata: dict[str, Any] = {}
-    for key_value in metadata_key_vals:
-        parts = key_value.split("=")
-        key = parts[0]
-        value = "=".join(parts[1:])
-        key = key.strip()
-        value = value.strip()
-        try:
-            value = json.loads(value)
-        except Exception:
-            pass
-        metadata[key] = value
-    return metadata
-
-
-def parse_content_type(ctype: str) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    parts = [x.strip() for x in ctype.split(";")]
-    result["mediatype"] = parts[0]
-    for key_value in parts[1:]:
-        try:
-            key, value = key_value.split("=")
-            key = key.strip()
-            key = {"charset": "encoding"}.get(key, key)
-            value = value.strip()
-            result[key] = value
-        except Exception:
-            logging.warning("cannot parse %s", key_value)
-
-    return result
-
-
-def as_byte_iterator(
-    data: Union[bytes, Iterable[bytes], BufferedReader, Any],
-) -> Iterable[bytes]:
-    if isinstance(data, bytes):
-        yield data
-    elif isinstance(data, BufferedReader):
-        while True:
-            chunk = data.read(DEFAULT_BUFFER_SIZE)
-            logging.debug("read %s bytes", len(chunk))
-            if not chunk:
-                break
-            yield chunk
-        try:
-            data.close()
-        except Exception as exc:
-            logging.warning("could not close BufferedReader: %s", exc)
-    elif isinstance(data, Iterable):
-        yield from data  # type: ignore
-    else:
-        raise NotImplementedError(type(data))  # type: ignore
-
-
 def detect_encoding(sample_data: bytes) -> str:
+    """TODO"""
     result = chardet.detect(sample_data)
     if result["confidence"] < 1:
         logging.warning("Chardet encoding detection < 100%: %s", result)
@@ -626,9 +499,10 @@ def detect_encoding(sample_data: bytes) -> str:
 
 
 def detect_csv_dialect(sample_data: str) -> dict[str, Any]:
+    """TODO"""
     dialect = csv.Sniffer().sniff(sample_data)
-    dialect_dict = dict(
-        (k, v)
+    dialect_dict = {
+        k: v
         for k, v in dialect.__dict__.items()
         if k
         in [
@@ -639,11 +513,12 @@ def detect_csv_dialect(sample_data: str) -> dict[str, Any]:
             "quotechar",
             "skipinitialspace",
         ]
-    )
+    }
     return dialect_dict
 
 
 def get_sql_table_schema(cursor: Cursor) -> dict[str, Any]:
+    """TODO"""
     fields: list[dict[str, Any]] = [
         {"name": name, "data_type": data_type, "is_nullable": is_nullable}
         for (
@@ -660,6 +535,7 @@ def get_sql_table_schema(cursor: Cursor) -> dict[str, Any]:
 
 
 def get_df_table_schema(df: pd.DataFrame) -> dict[str, Any]:
+    """TODO"""
     fields: list[dict[str, Any]] = []
     for cname in df.columns:
         fields.append(
@@ -672,109 +548,15 @@ def get_df_table_schema(df: pd.DataFrame) -> dict[str, Any]:
     return {"fields": fields}
 
 
-def delete_file(filepath: str) -> None:
-    if not os.path.exists(filepath):
-        return
-    logging.debug("deleting %s", filepath)
-    make_file_writable(file_path=filepath)
-    os.remove(filepath)
-
-
-def get_sql_uri(
-    connection_string_uri: str, sql_query: str, fragment_name: Union[str, None] = None
-) -> str:
-    sql_query = normalize_sql_query(sql_query)
-
-    if "?" in connection_string_uri:
-        connection_string_uri += "&"
-    else:
-        connection_string_uri += "?"
-    uri = connection_string_uri + PARAM_SQL_QUERY + "=" + quote(sql_query)
-    if fragment_name:
-        uri = f"{uri}#{fragment_name}"
-    return uri
-
-
-def get_suffix(path: str) -> str:
-    path = re.sub("[^a-z0-9-.]+", "/", path).split("/")[-1]
-    return re.sub("^[^.]*", "", path)
-
-
-def df_to_values(df: pd.DataFrame) -> list[Any]:
-    """get values from DataFrame, replace nans with None
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        data
-
-    Returns
-    -------
-    list
-        list of dicts
-    """
-    df = df.astype(object)  # None values need object type # type:ignore
-    df = df.where(~df.isna(), other=None)  # type:ignore
-    data = df.to_dict(orient="records")  # type:ignore
-    return data
-
-
-def get_err_message(err: Exception) -> str:
-    try:
-        return err["message"]  # type:ignore
-    except Exception:
-        pass
-
-    try:
-        return err.message  # type:ignore
-    except Exception:
-        pass
-
-    return str(err)
-
-
-def sa_create_engine(connection_string: str) -> sa.Engine:
-    kwargs = {}
-    # on sql server: special argument, otherwise reflect does not work
-    if connection_string.startswith("mssql+"):
-        kwargs["use_setinputsizes"] = False
-    engine = sa.create_engine(connection_string, echo=False, **kwargs)  # type:ignore
-    return engine
-
-
-def get_connection_string_uri_mssql_pyodbc(server: str, database: str = "master"):
-    return f"mssql+pyodbc://?odbc_connect=driver=sql server;server={server};database={database}"  # noqa
-
-
-def get_default_media_data_type_by_name(name: str) -> Tuple[str, Type]:
-    # defaults, only dependent on name (suffix)
-    if re.match(r"^.*\.json$", name):
-        return ("application/json", object)
-    elif re.match(r"^.*\.(pkl|pickle)$", name):
-        return ("application/x-pickle", object)
-    elif re.match(r"^.*\.(csv)$", name):
-        return ("text/csv", list)
-    # default: binary
-    return ("application/octet-stream", bytes)
-
-
-def get_default_suffix(media_type: str) -> str:
-    return {
-        "application/json": ".json",
-        "application/x-pickle": ".pickle",
-        "text/csv": ".csv",
-    }.get(media_type, "")
-
-
 @cache  # should not change during run
 def get_git_info(repo_path: StrPath) -> dict[str, Any]:
+    """TODO"""
+
     """get git branch,commit and is clean status
     from a local git repository, given as a path"""
 
     def run_git_command(command: list[str], cwd: StrPath):
-        result = subprocess.run(
-            command, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-        )
+        result = subprocess.run(command, cwd=cwd, capture_output=True, text=True)
         if result.returncode != 0:
             logging.warning(result.stderr.strip())
             return None
@@ -804,15 +586,39 @@ def get_git_info(repo_path: StrPath) -> dict[str, Any]:
     }
 
 
-def get_function_description(function: Callable[..., Any]) -> Union[str, None]:
+def get_function_description(function: Callable[..., Any]) -> str | None:
+    """TODO"""
     return function.__doc__
 
 
-def get_function_name(function: Callable[..., Any]) -> Union[str, None]:
-    return function.__name__
+def get_function_name(function: Callable[..., Any]) -> str:
+    """TODO
+
+    Example:
+
+    >>> get_function_name(get_function_name)
+    'get_function_name'
 
 
-def get_module_version(func: Callable[..., Any]) -> Union[str, None]:
+    """
+    return function.__name__ or str(function)
+
+
+def get_module(func: Callable[..., Any]) -> str | None:
+    """TODO
+
+    Example:
+
+    >>> get_module(get_module)
+    'datatools.utils'
+
+    """
+    mod = inspect.getmodule(func)
+    return mod.__name__ if mod else None
+
+
+def get_module_version(func: Callable[..., Any]) -> str | None:
+    """TODO"""
     # get module version (or parent module version)
     version = None
     try:
@@ -822,72 +628,72 @@ def get_module_version(func: Callable[..., Any]) -> Union[str, None]:
             mod_name = ".".join(mod_path)
             mod = importlib.import_module(mod_name)
             try:
-                version = getattr(mod, "__version__")
+                version = mod.__version__
                 version = f"{mod_name} {version}"
             except AttributeError:
                 pass
             mod_path = mod_path[:-1]
-    except Exception:
+    except Exception:  # noqa: S110
         pass
 
 
-def get_function_filepath(function: Callable[..., Any]) -> str:
+def get_function_filepath(function: Callable[..., Any]) -> Path:
+    """TODO"""
     try:
-        return getattr(function, "__file__")
+        return function.__file__
     except AttributeError:
-        return inspect.getfile(function)
+        return Path(inspect.getfile(function))
 
 
 def get_git_root(filepath: StrPath) -> Path:
+    """TODO"""
     return next(path for path in Path(filepath).parents if (path / ".git").exists())
 
 
-def rmtree_readonly(path: str) -> None:
-    """Delete recursively (inckl. readonly)"""
+def get_function_git_id(fun: Callable) -> str:
+    """TODO
 
-    def delete_rw(action: Any, name: str, exc: Any):
-        """action if shutil rm fails"""
-        os.chmod(name, stat.S_IWRITE)
-        os.remove(name)
-
-    shutil.rmtree(path, onerror=delete_rw)
+    Example:
 
 
-def is_callable(obj: Any) -> bool:
-    return isinstance(obj, Callable)
+    >>> import re
+    >>> name = get_function_git_id(get_function_git_id)
+    >>> bool(re.match(
+    ... r'^(git@|https://)github.com[:/]wingechr/datatools[./].*/datatools/utils.py',
+    ... name)) or name
+    True
+
+    """
+    filepath = get_function_filepath(fun)
+    git_root = get_git_root(filepath)
+    git_info = get_git_info(git_root)
+    path = filepath.relative_to(git_root).as_posix()
+    return f"{git_info['origin']}/{git_info['commit']}/{path}:{fun.__name__}"
 
 
-def get_sqlite_connection_string(location: Optional[str] = None) -> str:
-    if location is None or location == ":memory:":
-        result = "sqlite:///:memory:"
-    else:
-        result = as_uri(location)
-        # replace scheme and host
-        result = re.sub("^file://[^/]*/", "sqlite:///", result)
+def get_function_module_id(fun: Callable) -> str:
+    """TODO
 
-    return result
+    Example:
 
+    >>> get_function_module_id(get_function_module_id)
+    'datatools.utils:get_function_module_id'
 
-def filepath_from_uri(file_uri: str) -> Path:
-    # TODO: handle windows UNC paths
-    parts = urlsplit(file_uri)
-    path = parts.path
-    # in windows (with drive name): drop leading path
-    if re.match("^/[^/]+:", path):
-        path = path.lstrip("/")
-    return Path(path)
+    """
+    mod = get_module(fun)
+    return f"{mod}:{fun.__name__}"
 
 
-def get_sqlite_query_uri(
-    location: Union[str, None] = None,
-    sql_query: Union[str, None] = None,
-    fragment_name: Union[str, None] = None,
-) -> str:
-    cs = get_sqlite_connection_string(location=location)
-    return get_sql_uri(
-        connection_string_uri=cs, sql_query=sql_query or "", fragment_name=fragment_name
-    )
+def get_function_id(fun: Callable) -> str:
+    """TODO"""
+    try:
+        return get_function_git_id(fun)
+    except Exception:  # noqa: S110
+        pass
 
+    try:
+        return get_function_module_id(fun)
+    except Exception:  # noqa: S110
+        pass
 
-def get_uri_scheme(uri: str) -> str:
-    return uri.split(":")[0] + ":"
+    return get_function_name(fun)

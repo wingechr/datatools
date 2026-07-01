@@ -14,4 +14,9 @@ build
 site
 _archive
 __pycache__
-*.lock
+.pytest_cache
+coverage.xml
+.coverage
+htmlcov
+.snakemake
+.ruff_cache
