@@ -107,17 +107,6 @@ class TextFile:
         self.dump_str(data_s)
 
 
-def find_subclass(base_cls, name: str):
-    """TODO"""
-    for cls in base_cls.__subclasses__():
-        if cls.__name__ == name:
-            return cls
-        found = find_subclass(cls, name)
-        if found:
-            return found
-    return None
-
-
 def wrap_exception(function: Callable[[], None], debug: bool = True):
     """TODO"""
     try:
@@ -225,7 +214,25 @@ def function_get_defaults(func: Callable):
 
 
 def function_has_varargs(func: Callable) -> bool:
-    """TODO"""
+    """TODO
+
+    >>> def f():
+    ...     pass
+    >>> function_has_varargs(f)
+    False
+    >>> def f(a, b=1):
+    ...     pass
+    >>> function_has_varargs(f)
+    False
+    >>> def f(a, *args):
+    ...     pass
+    >>> function_has_varargs(f)
+    True
+    >>> def f(a, **kwargs):
+    ...     pass
+    >>> function_has_varargs(f)
+    True
+    """
     sig = inspect.signature(func)
     has_args = any(p.kind == Parameter.VAR_POSITIONAL for p in sig.parameters.values())
     has_kwargs = any(p.kind == Parameter.VAR_KEYWORD for p in sig.parameters.values())
@@ -279,7 +286,9 @@ def subclasses_by_name(cls: type[SubCls]) -> dict[str, type[SubCls]]:
 
 def get_md5_hash(hash_data: Json) -> str:
     """TODO"""
-    hash_data_s = json.dumps(hash_data, ensure_ascii=False, indent=0, sort_keys=True)
+    hash_data_s = json.dumps(
+        hash_data, ensure_ascii=False, indent=0, sort_keys=True, default=json_serialize
+    )
     hash_data_b = hash_data_s.encode("utf-8")
     hashsum = hashlib.md5(hash_data_b).hexdigest()  # noqa:S324
     # logging.error("%s %s", hashsum, hash_data)
@@ -287,11 +296,21 @@ def get_md5_hash(hash_data: Json) -> str:
 
 
 def assert_unique(iterable: Iterable):
-    """TODO"""
+    """TODO
+
+    Example:
+
+    >>> assert_unique(range(10))
+    >>> assert_unique(iter([1, 2, 1]))
+    Traceback (most recent call last):
+    ...
+    KeyError: 'Duplicate key: 1'
+
+    """
     uq = set()
     for x in iterable:
         if x in uq:
-            raise KeyError("Duplicate key: %s", x)
+            raise KeyError(f"Duplicate key: {x}")
         uq.add(x)
 
 
@@ -328,12 +347,38 @@ def jsonpath_get(data: dict[str, Json], key: str) -> list[Json]:
 
 
 def isna(x: Any) -> bool:
-    """TODO"""
+    """TODO
+
+    Example:
+
+    >>> isna(0)
+    False
+    >>> isna("")
+    False
+    >>> isna(float("nan"))
+    True
+    >>> isna(float("inf"))
+    True
+    >>> isna(None)
+    True
+
+    """
     return bool(x is None or isinstance(x, float) and (math.isnan(x) or math.isinf(x)))
 
 
 def json_serialize(x: Any) -> Json:
-    """TODO"""
+    """TODO
+
+    Example:
+
+    >>> import json
+    >>> import datetime
+    >>> json.dumps(datetime.date(2000,1,1), default=json_serialize)
+    '"2000-01-01"'
+    >>> json.dumps(datetime.datetime(2000,1,1), default=json_serialize)
+    '"2000-01-01T00:00:00"'
+
+    """
     if isinstance(x, datetime.datetime):
         return x.strftime(DATETIMETZ_FMT)
     elif isinstance(x, datetime.date):
@@ -459,17 +504,6 @@ def get_uid_from_uri(uri: str) -> str:
     return name
 
 
-def import_module_from_path(name: str, filepath: StrPath):
-    """TODO"""
-    spec = importlib.util.spec_from_file_location(name, filepath)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Cannot load module '{name}' from '{filepath}'")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
 @cache
 def normalize_sql_query(query: str) -> str:
     """TODO
@@ -499,15 +533,30 @@ def normalize_sql_query(query: str) -> str:
 
 
 def detect_encoding(sample_data: bytes) -> str:
-    """TODO"""
+    """TODO
+
+    Example:
+
+    >>> b = "Ünicöde".encode(encoding="windows-1252")
+    >>> detect_encoding(b).lower()
+    'windows-1252'
+
+    """
     result = chardet.detect(sample_data)
-    if result["confidence"] < 1:
-        logging.warning("Chardet encoding detection < 100%: %s", result)
     return str(result["encoding"])
 
 
 def detect_csv_dialect(sample_data: str) -> dict[str, Any]:
-    """TODO"""
+    r"""TODO
+
+    Example:
+
+    >>> d = detect_csv_dialect('A;B;C\n1;2;3')
+    >>> d["delimiter"]
+    ';'
+
+
+    """
     dialect = csv.Sniffer().sniff(sample_data)
     dialect_dict = {
         k: v
@@ -543,14 +592,21 @@ def get_sql_table_schema(cursor: Cursor) -> dict[str, Any]:
 
 
 def get_df_table_schema(df: pd.DataFrame) -> dict[str, Any]:
-    """TODO"""
+    """TODO
+
+    >>> from pandas import DataFrame
+    >>> df = DataFrame([{"f1": 1, "f2": "x"}, {"f1": 2}])
+    >>> get_df_table_schema(df)
+    {'fields': [{'name': 'f1', 'data_type': 'int64', 'is_nullable': False}, {'name': 'f2', 'data_type': 'str', 'is_nullable': True}]}
+
+    """  # noqa W501
     fields: list[dict[str, Any]] = []
     for cname in df.columns:
         fields.append(
             {
                 "name": cname,
                 "data_type": df[cname].dtype.name,
-                "is_nullable": (df[cname].isna() | df[cname].isnull()).any(),
+                "is_nullable": bool((df[cname].isna() | df[cname].isnull()).any()),
             }
         )
     return {"fields": fields}
@@ -626,7 +682,17 @@ def get_module(func: Callable[..., Any]) -> str | None:
 
 
 def get_module_version(func: Callable[..., Any]) -> str | None:
-    """TODO"""
+    """TODO
+
+    Example:
+
+    >>> from datatools import __version__
+    >>> v = get_module_version(get_module_version)
+    >>> v == __version__
+    True
+
+
+    """
     # get module version (or parent module version)
     version = None
     try:
@@ -637,7 +703,7 @@ def get_module_version(func: Callable[..., Any]) -> str | None:
             mod = importlib.import_module(mod_name)
             try:
                 version = mod.__version__
-                version = f"{mod_name} {version}"
+                return version
             except AttributeError:
                 pass
             mod_path = mod_path[:-1]
