@@ -7,8 +7,8 @@ import pickle
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 
-from datatools.job.classes import FunctionWrapper
-from datatools.storage.classes import MemoryDataStorage
+from datatools.job.job import FunctionWrapper
+from datatools.storage.memory import MemoryDataStorage
 from datatools.utils import start_http_server
 
 

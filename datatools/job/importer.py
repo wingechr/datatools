@@ -1,4 +1,4 @@
-"""init"""
+"""Abstract classes / interfaces, types"""
 
 from abc import ABC, abstractmethod
 import re

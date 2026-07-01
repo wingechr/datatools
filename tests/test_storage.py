@@ -8,23 +8,19 @@ from unittest import TestCase
 
 import uvicorn
 
-from datatools.storage.classes import (
-    CliWrapperDataStorage,
-    DataStorage,
-    FileDataStorage,
-    FileDataStorageWithRdfMetadata,
-    HttpDataStorage,
-    MemoryDataStorage,
-    SqlDataStorage,
-)
-from datatools.storage.server import make_server_app
-from datatools.types import (
+from datatools.exceptions import (
     StorageFileExistsError,
     StorageFileNotFoundError,
     StorageInvalidUidError,
 )
+from datatools.storage.base import DataStorage
+from datatools.storage.cli import CliWrapperDataStorage
+from datatools.storage.file import FileDataStorage, FileDataStorageWithRdfMetadata
+from datatools.storage.http import HttpDataStorage, make_server_app
+from datatools.storage.memory import MemoryDataStorage
+from datatools.storage.sql import SqlDataStorage
 from datatools.utils import get_free_port, get_now_str
-from tests import TempdirTestCase
+from tests.base import TempdirTestCase
 
 
 def _test_action_sequence_metadata(self: TestCase, storage: DataStorage):

@@ -4,8 +4,8 @@ import os
 from pathlib import Path
 import subprocess
 
-from datatools.storage.classes import FileDataStorage
-from tests import TempdirTestCase
+from datatools.storage.file import FileDataStorage
+from tests.base import TempdirTestCase
 
 
 class TestSnakemake(TempdirTestCase):

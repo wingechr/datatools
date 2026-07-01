@@ -2,7 +2,7 @@
 
 from unittest import TestCase
 
-from datatools.importer import infer_importer_class
+from datatools.job.importer import infer_importer_class
 
 
 class TestImporter(TestCase):

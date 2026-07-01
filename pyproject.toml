@@ -53,7 +53,7 @@ build-backend = "setuptools.build_meta"
 datatools = "datatools.__main__:main"
 
 [tool.tox]
-envlist = ["py311", "py313"]
+envlist = ["py311", "py312", "py313"]
 
 [tool.tox.env_run_base]
 runner = "uv-venv-lock-runner" # use tox-uv

@@ -1,7 +1,7 @@
 import os
 import sys
 import json
-from datatools.storage.classes import FileDataStorage
+from datatools import FileDataStorage
 
 # example functions
 def generate() -> bytes:

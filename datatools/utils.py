@@ -34,7 +34,8 @@ from pyodbc import Cursor
 import sqlparse
 import tzlocal
 
-from datatools.types import Json, StrPath, SubCls, SubprocessStatus
+from datatools.exceptions import SubprocessStatus
+from datatools.types import Json, StrPath, SubCls
 
 DATETIMETZ_FMT = "%Y-%m-%dT%H:%M:%S%z"
 DATE_FMT = "%Y-%m-%d"

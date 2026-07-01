@@ -6,8 +6,8 @@ import sys
 import click
 import uvicorn
 
-from datatools.storage.classes import DataStorage
-from datatools.storage.server import make_server_app
+from datatools.storage.base import DataStorage
+from datatools.storage.http import make_server_app
 from datatools.utils import (
     json_dumps_for_print,
     parse_cmd_vals,
