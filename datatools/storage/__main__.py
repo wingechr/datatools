@@ -12,7 +12,6 @@ from datatools.utils import (
     json_dumps_for_print,
     parse_cmd_vals,
     subclasses_by_name,
-    wrap_exception,
 )
 
 # we need to use print()
@@ -172,4 +171,4 @@ def serve(ctx_data_storage: DataStorage, host: str, port: int) -> None:
 
 
 if __name__ == "__main__":  # pragma: no cover
-    wrap_exception(main)
+    main()

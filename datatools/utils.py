@@ -7,7 +7,6 @@ from functools import cache, partial
 import hashlib
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import importlib
-import importlib.util
 import inspect
 from inspect import Parameter, Signature
 import json
@@ -16,13 +15,13 @@ import math
 import os
 from pathlib import Path
 import re
+import site
 import socket
 import subprocess
-import subprocess as sp
 import sys
 from threading import Thread
 import time
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import unquote, urlparse, urlsplit
 from urllib.request import url2pathname
 
@@ -31,12 +30,14 @@ import httpx
 import jsonpath_ng
 import numpy as np
 import pandas as pd
-from pyodbc import Cursor
 import sqlparse
 import tzlocal
 
-from datatools.exceptions import SubprocessStatus
 from datatools.types import Json, StrPath, SubCls
+
+if TYPE_CHECKING:
+    from sqlalchemy.engine import CursorResult
+
 
 DATETIMETZ_FMT = "%Y-%m-%dT%H:%M:%S%z"
 DATE_FMT = "%Y-%m-%d"
@@ -107,19 +108,6 @@ class TextFile:
         self.dump_str(data_s)
 
 
-def wrap_exception(function: Callable[[], None], debug: bool = True):
-    """TODO"""
-    try:
-        # your logic here
-        function()
-    except Exception as e:
-        if debug:
-            logging.exception(e)  # includes stack trace
-        else:
-            logging.error(e)
-        sys.exit(1)
-
-
 def parse_cmd_vals(arguments: list[str]) -> dict[str, Json]:
     """TODO"""
     items = [kv.split("=", 1) for kv in arguments]
@@ -135,7 +123,20 @@ def get_free_port() -> int:
 
 
 def file_uri_to_path(uri: str) -> Path:
-    """TODO"""
+    """TODO
+
+    Example:
+
+    >>> file_uri_to_path("file:///absolue/path").as_posix()
+    '/absolue/path'
+    >>> file_uri_to_path("file:///./relative/path").relative_to(os.getcwd()).as_posix()
+    'relative/path'
+    >>> file_uri_to_path("file://host/path").as_posix()
+    Traceback (most recent call last):
+        ...
+    NotImplementedError:
+
+    """
     parts = urlparse(uri)
     if parts.netloc:
         raise NotImplementedError(uri)
@@ -194,7 +195,18 @@ def is_file_uri_or_path(x: str | Path) -> bool:
 
 
 def uri_or_path_to_path(x: str | Path) -> Path:
-    """TODO"""
+    """TODO
+
+    Example:
+    >>> from pathlib import Path
+    >>> uri_or_path_to_path(Path(".")).as_posix()
+    '.'
+    >>> uri_or_path_to_path(".").resolve().relative_to(os.getcwd()).as_posix()
+    '.'
+    >>> uri_or_path_to_path("file:///./").relative_to(os.getcwd()).as_posix()
+    '.'
+
+    """
     if isinstance(x, Path):
         return x
     elif re.match(r"file://", x):
@@ -304,7 +316,7 @@ def assert_unique(iterable: Iterable):
     >>> assert_unique(iter([1, 2, 1]))
     Traceback (most recent call last):
     ...
-    KeyError: 'Duplicate key: 1'
+    KeyError:
 
     """
     uq = set()
@@ -317,19 +329,6 @@ def assert_unique(iterable: Iterable):
 def identity(x):
     """TODO"""
     return x
-
-
-def call_script(
-    script: Path | str, args: list[str], data: bytes | None = None
-) -> tuple[bytes, bytes]:
-    """Call python script."""
-    cmd = [sys.executable, str(script)] + list(args)
-    logging.debug(cmd)
-    pop = sp.Popen(cmd, stdin=sp.PIPE, stdout=sp.PIPE)
-    stdout, stderr = pop.communicate(data)
-    if pop.returncode:
-        raise SubprocessStatus(pop.returncode)
-    return stdout, stderr
 
 
 def jsonpath_update(data: dict[str, Json], key: str, val: Json) -> None:
@@ -351,6 +350,8 @@ def isna(x: Any) -> bool:
 
     Example:
 
+    >>> import pandas as pd
+    >>> import numpy as np
     >>> isna(0)
     False
     >>> isna("")
@@ -361,9 +362,18 @@ def isna(x: Any) -> bool:
     True
     >>> isna(None)
     True
+    >>> isna(pd.NA)
+    True
+    >>> isna(np.nan)
+    True
 
     """
-    return bool(x is None or isinstance(x, float) and (math.isnan(x) or math.isinf(x)))
+    return bool(
+        x is None
+        or isinstance(x, float)
+        and (math.isnan(x) or math.isinf(x))
+        or pd.isna(x)
+    )
 
 
 def json_serialize(x: Any) -> Json:
@@ -372,11 +382,33 @@ def json_serialize(x: Any) -> Json:
     Example:
 
     >>> import json
+    >>> import numpy as np
     >>> import datetime
-    >>> json.dumps(datetime.date(2000,1,1), default=json_serialize)
-    '"2000-01-01"'
-    >>> json.dumps(datetime.datetime(2000,1,1), default=json_serialize)
-    '"2000-01-01T00:00:00"'
+    >>> json.dumps(datetime.date(2001,2,3), default=json_serialize)
+    '"2001-02-03"'
+    >>> json.dumps(datetime.time(4,5,6), default=json_serialize)
+    '"04:05:06"'
+    >>> json.dumps(datetime.datetime(2001,2,3,4,5,6), default=json_serialize)
+    '"2001-02-03T04:05:06"'
+    >>> json.dumps(np.nan, allow_nan=True, default=json_serialize)
+    'NaN'
+    >>> repr(json_serialize(np.nan))
+    'None'
+    >>> json.dumps(float('nan'), allow_nan=True, default=json_serialize)
+    'NaN'
+    >>> repr(json_serialize(float('nan')))
+    'None'
+    >>> json.dumps(np.int64(0), default=json_serialize)
+    '0'
+    >>> json_serialize(np.float64(0.5))
+    0.5
+    >>> json.dumps(np.bool(0), default=json_serialize)
+    'false'
+    >>> json.dumps(object(), default=json_serialize)
+    Traceback (most recent call last):
+    ...
+    NotImplementedError:
+
 
     """
     if isinstance(x, datetime.datetime):
@@ -386,6 +418,8 @@ def json_serialize(x: Any) -> Json:
     elif isinstance(x, datetime.time):
         return x.strftime(TIME_FMT)
     elif isna(x):
+        # FIXME: when using json.dumps(default=json_serialize), nan will NOT
+        # be forwarded to this function
         return None
     elif isinstance(x, np.bool_):
         return bool(x)
@@ -416,12 +450,6 @@ def get_now_str() -> str:
     # add ":" in offset
     now_str = re.sub("([+-][0-9]{2})([0-9]{2})$", r"\1:\2", now_str)
     return now_str
-
-
-@cache
-def get_hostname() -> str:
-    """TODO"""
-    return socket.gethostname()
 
 
 @cache
@@ -574,8 +602,22 @@ def detect_csv_dialect(sample_data: str) -> dict[str, Any]:
     return dialect_dict
 
 
-def get_sql_table_schema(cursor: Cursor) -> dict[str, Any]:
-    """TODO"""
+def get_sql_table_schema(result: "CursorResult") -> dict[str, Any]:
+    """TODO
+
+    Example:
+
+    >>> import sqlalchemy as sa
+    >>> eng = sa.create_engine('sqlite:///:memory:')
+    >>> res = eng.connect().execute(sa.text(
+    ... "select 1 as a, 'x' as b UNION select 2 as a, NULL as b"))
+    >>> [x["name"] for x in get_sql_table_schema(res)["fields"]]
+    ['a', 'b']
+
+    """
+    if result.cursor is None:
+        raise Exception("Query returned nothing")  # pragma: no cover
+
     fields: list[dict[str, Any]] = [
         {"name": name, "data_type": data_type, "is_nullable": is_nullable}
         for (
@@ -586,7 +628,7 @@ def get_sql_table_schema(cursor: Cursor) -> dict[str, Any]:
             _precision,
             _scale,
             is_nullable,
-        ) in cursor.description
+        ) in result.cursor.description
     ]
     return {"fields": fields}
 
@@ -622,8 +664,8 @@ def get_git_info(repo_path: StrPath) -> dict[str, Any]:
     def run_git_command(command: list[str], cwd: StrPath):
         result = subprocess.run(command, cwd=cwd, capture_output=True, text=True)
         if result.returncode != 0:
-            logging.warning(result.stderr.strip())
-            return None
+            logging.warning(result.stderr.strip())  # pragma: no cover
+            return None  # pragma: no cover
         return result.stdout.strip()
 
     # Get the current branch name
@@ -707,8 +749,8 @@ def get_module_version(func: Callable[..., Any]) -> str | None:
             except AttributeError:
                 pass
             mod_path = mod_path[:-1]
-    except Exception:  # noqa: S110
-        pass
+    except Exception:  # noqa: S110 # pragma: no cover
+        pass  # pragma: no cover
 
 
 def get_function_filepath(function: Callable[..., Any]) -> Path:
@@ -738,9 +780,15 @@ def get_function_git_id(fun: Callable) -> str:
     True
 
     """
-    filepath = get_function_filepath(fun)
+    filepath = get_function_filepath(fun).absolute()
+    if any(str(filepath).startswith(p) for p in site.getsitepackages()):
+        raise Exception("is site-package")
+
     git_root = get_git_root(filepath)
     git_info = get_git_info(git_root)
+    if not git_info:
+        raise Exception("git not found")
+
     path = filepath.relative_to(git_root).as_posix()
     return f"{git_info['origin']}/{git_info['commit']}/{path}:{fun.__name__}"
 
@@ -758,23 +806,56 @@ def get_function_module_id(fun: Callable) -> str:
     return f"{mod}:{fun.__name__}"
 
 
+def is_lambda(fun: Callable):
+    """TODO
+
+    Example:
+
+    >>> is_lambda(is_lambda)
+    False
+    >>> is_lambda(lambda x: x)
+    True
+
+    """
+    return getattr(fun, "__name__", None) == "<lambda>"
+
+
 def get_function_id(fun: Callable) -> str:
-    """TODO"""
-    try:
-        return get_function_git_id(fun)
-    except Exception:  # noqa: S110
-        pass
+    """Example:
 
-    try:
-        return get_function_module_id(fun)
-    except Exception:  # noqa: S110
-        pass
+    >>> get_function_id(get_function_id).endswith('get_function_id')
+    True
+    >>> get_function_id(lambda x:x)
+    '<lambda>'
+    >>> from pandas import DataFrame
+    >>> get_function_id(DataFrame)
+    'pandas:DataFrame'
+    >>> get_function_id(open)
+    'io:open'
 
-    return get_function_name(fun)
+    """
+    if is_lambda(fun):
+        return "<lambda>"
+    for get_id in [get_function_git_id, get_function_module_id, get_function_name]:
+        try:
+            return get_id(fun)
+        except Exception:  # noqa: S112
+            continue
+    return str(fun)
 
 
 def wait_for_url(url: str, timeout_s=30):
-    """TODO"""
+    """TODO
+
+    Example:
+
+    >>> port = get_free_port()
+    >>> wait_for_url(f"http://localhost:{port}", timeout_s=0.1)
+    Traceback (most recent call last):
+    ...
+    TimeoutError:
+
+    """
     t_start = time.time()
 
     while True:
@@ -784,5 +865,5 @@ def wait_for_url(url: str, timeout_s=30):
         try:
             httpx.head(url, timeout=timeout_left)
             break
-        except httpx.NetworkError:
+        except Exception:  # noqa: S112
             continue

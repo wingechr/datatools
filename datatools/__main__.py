@@ -7,7 +7,6 @@ import coloredlogs
 
 from datatools import __version__
 from datatools.storage.__main__ import main as storage_main
-from datatools.utils import wrap_exception
 
 LOGLEVELS_COLORS = {
     "debug": "blue",
@@ -39,4 +38,4 @@ main.add_command(storage_main, name="storage")
 
 
 if __name__ == "__main__":  # pragma: no cover
-    wrap_exception(main)
+    main()
