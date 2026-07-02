@@ -736,9 +736,17 @@ def get_module(func: Callable) -> str | None:
     >>> get_module(get_module)
     'datatools.utils'
 
+    >>> get_module(open)
+    'io'
+
     """
     mod = inspect.getmodule(func)
-    return mod.__name__ if mod else None
+    if mod is not None:
+        mod = mod.__name__
+        # system mods sometimes start with "_"
+        mod = mod.lstrip("_")
+
+    return mod
 
 
 def get_module_version(func: Callable) -> str | None:
