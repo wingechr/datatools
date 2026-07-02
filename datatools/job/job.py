@@ -4,7 +4,7 @@ from collections.abc import Callable
 import logging
 from typing import Any, Generic
 
-from datatools.types import FunParams, FunResult, Json
+from datatools.types import FunHashsum, FunParams, FunResult, Json
 from datatools.utils import (
     function_get_defaults,
     function_get_regular_params,
@@ -102,7 +102,7 @@ class Job:
         output_writers: dict[str, Callable[[Any, str], Any]],
         input_readers: dict[str, Callable[[Any], Any]] | None = None,
         check_done: Callable[..., bool] | None = None,
-        get_job_hashsum: Callable[..., str] = default_get_job_hashsum,
+        get_job_hashsum: FunHashsum = default_get_job_hashsum,
     ):
         self.function = FunctionWrapper.assert_wrapped(function)
         self.output_writers = output_writers

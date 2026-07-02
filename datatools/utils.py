@@ -692,12 +692,12 @@ def get_git_info(repo_path: StrPath) -> dict[str, Any]:
     }
 
 
-def get_function_description(function: Callable[..., Any]) -> str | None:
+def get_function_description(function: Callable) -> str | None:
     """TODO"""
     return function.__doc__
 
 
-def get_function_name(function: Callable[..., Any]) -> str:
+def get_function_name(function: Callable) -> str:
     """TODO
 
     Example:
@@ -710,7 +710,7 @@ def get_function_name(function: Callable[..., Any]) -> str:
     return function.__name__ or str(function)
 
 
-def get_module(func: Callable[..., Any]) -> str | None:
+def get_module(func: Callable) -> str | None:
     """TODO
 
     Example:
@@ -723,7 +723,7 @@ def get_module(func: Callable[..., Any]) -> str | None:
     return mod.__name__ if mod else None
 
 
-def get_module_version(func: Callable[..., Any]) -> str | None:
+def get_module_version(func: Callable) -> str | None:
     """TODO
 
     Example:
@@ -753,7 +753,7 @@ def get_module_version(func: Callable[..., Any]) -> str | None:
         pass  # pragma: no cover
 
 
-def get_function_filepath(function: Callable[..., Any]) -> Path:
+def get_function_filepath(function: Callable) -> Path:
     """TODO"""
     try:
         return function.__file__

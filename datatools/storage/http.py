@@ -3,14 +3,13 @@
 from collections.abc import Iterable
 import functools
 import re
-from typing import Literal
 
 from fastapi import Body, FastAPI, HTTPException, Query, Response
 import httpx
 
 from datatools.exceptions import StorageException, StorageFileNotFoundError
 from datatools.storage.base import DataStorage, MetadataStorage
-from datatools.types import UID, MetadataAttribute, MetadataValue
+from datatools.types import HTTP_METHOD, UID, MetadataAttribute, MetadataValue
 from datatools.utils import parse_cmd_vals
 
 
@@ -90,7 +89,8 @@ class HttpMetadataStorage(MetadataStorage):
 
     def _request(
         self,
-        method: Literal["GET", "PUT", "POST", "DELETE", "HEAD", "PATCH"] = "GET",
+        path: str = "/",
+        method: HTTP_METHOD = "GET",
         params: dict | None = None,
         data: dict | None = None,
     ):
@@ -118,7 +118,7 @@ class HttpDataStorage(DataStorage):
     def _request(
         self,
         path: str = "/",
-        method: Literal["GET", "PUT", "POST", "DELETE", "HEAD", "PATCH"] = "GET",
+        method: HTTP_METHOD = "GET",
         params: dict | None = None,
         data: bytes | None = None,
     ):

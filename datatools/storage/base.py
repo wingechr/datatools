@@ -15,16 +15,18 @@ from datatools.exceptions import (
 from datatools.job.importer import infer_importer_class
 from datatools.job.job import FunctionWrapper, Job, default_get_job_hashsum
 from datatools.types import (
+    SINGLE_OUTPUT_PARAM_NAME,
     UID,
     ByteData,
+    FunFromBytes,
+    FunHashsum,
     FunParams,
     FunResult,
+    FunToBytes,
     MetadataAttribute,
     MetadataValue,
 )
 from datatools.utils import get_user_w_host, identity
-
-_OUTPUT_PARAM_NAME = "__output"
 
 
 class MetadataStorage(ABC):  # TODO: subclass AbstractContextManager ?
@@ -151,29 +153,28 @@ class DataStorage(ABC):
 
         job = self.job(
             function=importer_class.get_data,
-            output_converters={_OUTPUT_PARAM_NAME: importer_class.output_to_bytes},
+            output_converters={
+                SINGLE_OUTPUT_PARAM_NAME: importer_class.output_to_bytes
+            },
         )
         job(uid, uri, **options)
         return uid
 
     def cache(
         self,
-        output_to_bytes: Callable[[Any], bytes] = pickle.dumps,
-        output_from_bytes: Callable[[bytes], Any] = pickle.loads,
+        output_to_bytes: FunToBytes = pickle.dumps,
+        output_from_bytes: FunFromBytes = pickle.loads,
         get_uid_from_hash: Callable[[str], str] = identity,
-        get_job_hashsum: Callable[..., str] = default_get_job_hashsum,
+        get_job_hashsum: FunHashsum = default_get_job_hashsum,
     ) -> Callable:
         """TODO"""
 
         def decorator(function: Callable[FunParams, FunResult]) -> Callable:
             """TODO"""
 
-            # any name, must not collide with parameters
-            _single_output_param_name = "__output"
-
             job = self.job(
                 function=function,
-                output_converters={_single_output_param_name: output_to_bytes},
+                output_converters={SINGLE_OUTPUT_PARAM_NAME: output_to_bytes},
                 get_job_hashsum=get_job_hashsum,
             )
 
@@ -199,17 +200,16 @@ class DataStorage(ABC):
     def job(
         self,
         function: Callable,
-        output_converters: dict[str, Callable[[Any], bytes] | None]
-        | Callable[[bytes], Any],
-        input_converters: dict[str, Callable[[bytes], Any] | None] | None = None,
-        get_job_hashsum: Callable[..., str] = default_get_job_hashsum,
+        output_converters: dict[str, FunToBytes | None] | FunToBytes,
+        input_converters: dict[str, FunFromBytes | None] | None = None,
+        get_job_hashsum: FunHashsum = default_get_job_hashsum,
         skip_finished: bool = False,
     ) -> Job:
         """TODO"""
 
         wrapped_function = FunctionWrapper.assert_wrapped(function)
         if not isinstance(output_converters, dict):
-            output_converters = {_OUTPUT_PARAM_NAME: output_converters}
+            output_converters = {SINGLE_OUTPUT_PARAM_NAME: output_converters}
 
         # update metadata before running job
         # so output handlers can use it
