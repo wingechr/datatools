@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 import re
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 import pandas as pd
@@ -45,7 +46,7 @@ def infer_importer_class(uri: str, **options) -> type[Importer]:
     """TODO"""
 
     for cls in subclasses_by_name(Importer).values():
-        if cls.can_handle(uri):
+        if cls.can_handle(uri, **options):
             return cls
     raise NotImplementedError(f"Cannot infer Importer class for {uri}")
 
@@ -55,13 +56,13 @@ class HttpImporter(Importer):
 
     @classmethod
     @override
-    def can_handle(cls, uri: str) -> bool:
+    def can_handle(cls, uri: str, **options) -> bool:
         return bool(re.match(r"^https?://", uri))
 
     @classmethod
     def get_data(cls, uri: str, **options):
         """TODO"""
-        resp = httpx.get(uri)
+        resp = httpx.get(uri, follow_redirects=True)
         resp.raise_for_status()
         data = resp.content
         return data
@@ -71,7 +72,7 @@ class FileImporter(Importer):
     """TODO"""
 
     @classmethod
-    def can_handle(cls, uri: str) -> bool:
+    def can_handle(cls, uri: str, **options) -> bool:
         """Either file:// protocol or no protocol"""
         return is_file_uri_or_path(uri)
 
@@ -84,10 +85,18 @@ class FileImporter(Importer):
 
     @classmethod
     def get_output_uid(cls, uri: str, **options) -> UID:
-        """FIXME"""
+        """TODO"""
+
         path = uri_or_path_to_path(uri).resolve()
-        name = path.name
-        return name
+        # FIXME:
+        # we cant/dont want to use full path as UID
+        # but we may want to use more than just the file name
+        # but there is no good way to automatically determine what part
+        # of the path to keep.
+        # Maybe later, we can use a prefix option or something like that
+
+        uid = path.name
+        return uid
 
 
 class SqlImporter(Importer):
@@ -95,15 +104,14 @@ class SqlImporter(Importer):
 
     @classmethod
     @override
-    def can_handle(cls, uri: str) -> bool:
-        return bool(re.match(r"^.*sql.*://", uri))
+    def can_handle(cls, uri: str, **options) -> bool:
+        parsed = urlparse(uri)
+        return bool(parsed.scheme and "sql" in parsed.scheme.lower())
 
     @classmethod
     def get_data(cls, uri: str, query: str, **options):
         """TODO"""
-        cs = uri
-
-        eng = sa.create_engine(cs)
+        eng = sa.create_engine(uri)
         with eng.connect() as con:
             resp = con.execute(sa.text(query))
             data = resp.fetchall()

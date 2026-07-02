@@ -787,7 +787,7 @@ def get_function_git_id(fun: Callable) -> str:
     git_root = get_git_root(filepath)
     git_info = get_git_info(git_root)
     if not git_info:
-        raise Exception("git not found")
+        raise Exception("git not found")  # pragma: no cover
 
     path = filepath.relative_to(git_root).as_posix()
     return f"{git_info['origin']}/{git_info['commit']}/{path}:{fun.__name__}"
@@ -841,7 +841,7 @@ def get_function_id(fun: Callable) -> str:
             return get_id(fun)
         except Exception:  # noqa: S112
             continue
-    return str(fun)
+    return str(fun)  # pragma: no cover # fallback
 
 
 def wait_for_url(url: str, timeout_s=30):
