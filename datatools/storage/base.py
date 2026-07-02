@@ -10,13 +10,12 @@ from typing import Any
 from datatools.exceptions import (
     StorageFileExistsError,
     StorageFileNotFoundError,
-    StorageInvalidUidError,
+    StorageInvalidNameError,
 )
 from datatools.job.importer import infer_importer_class
 from datatools.job.job import FunctionWrapper, Job, default_get_job_hashsum
 from datatools.types import (
     SINGLE_OUTPUT_PARAM_NAME,
-    UID,
     ByteData,
     FunFromBytes,
     FunHashsum,
@@ -25,6 +24,7 @@ from datatools.types import (
     FunToBytes,
     MetadataAttribute,
     MetadataValue,
+    Name,
 )
 from datatools.utils import get_user_w_host, identity
 
@@ -61,79 +61,79 @@ class DataStorage(ABC):
         self._location = location
 
     @abstractmethod
-    def _contains(self, uid: UID) -> bool: ...
+    def _contains(self, name: Name) -> bool: ...
 
     @abstractmethod
-    def _getitem(self, uid: UID) -> ByteData: ...
+    def _getitem(self, name: Name) -> ByteData: ...
 
     @abstractmethod
-    def _setitem(self, uid: UID, data: ByteData) -> None: ...
+    def _setitem(self, name: Name, data: ByteData) -> None: ...
 
     @abstractmethod
-    def _delitem(self, uid: UID) -> None: ...
+    def _delitem(self, name: Name) -> None: ...
 
     @abstractmethod
-    def _metadata(self, uid: UID) -> MetadataStorage: ...
+    def _metadata(self, name: Name) -> MetadataStorage: ...
 
     @abstractmethod
-    def _list(self) -> Iterable[UID]: ...
+    def _list(self) -> Iterable[Name]: ...
 
-    def _find(self, **filters: MetadataValue) -> Iterable[UID]:
+    def _find(self, **filters: MetadataValue) -> Iterable[Name]:
         """primitive implementation"""
-        for uid in self._list():
+        for name in self._list():
             if filters:
-                metadata = self._metadata(uid)
+                metadata = self._metadata(name)
                 if not metadata._match(**filters):
                     continue
 
-            yield uid
+            yield name
 
     @classmethod
     def _can_handle(cls, location: str) -> bool:
         return False
 
-    def _get_valid_uid(self, uid: UID) -> UID:
-        return UID(uid).strip()
+    def _get_valid_name(self, name: Name) -> Name:
+        return Name(name).strip()
 
-    def __iter__(self) -> Iterator[UID]:
+    def __iter__(self) -> Iterator[Name]:
         return iter(self._list())
 
-    def __contains__(self, uid: UID) -> bool:
-        self._assert_valid_uid(uid=uid)
-        return self._contains(uid=uid)
+    def __contains__(self, name: Name) -> bool:
+        self._assert_valid_name(name=name)
+        return self._contains(name=name)
 
-    def __getitem__(self, uid: UID) -> ByteData:
-        self._assert_valid_uid(uid=uid)
-        if uid not in self:
-            raise StorageFileNotFoundError(f"Not found: {uid}")
-        return self._getitem(uid=uid)
+    def __getitem__(self, name: Name) -> ByteData:
+        self._assert_valid_name(name=name)
+        if name not in self:
+            raise StorageFileNotFoundError(f"Not found: {name}")
+        return self._getitem(name=name)
 
-    def __setitem__(self, uid: UID, data: ByteData) -> None:
-        self._assert_valid_uid(uid=uid)
-        if uid in self:
-            raise StorageFileExistsError(f"Already exists: {uid}")
-        return self._setitem(uid=uid, data=data)
+    def __setitem__(self, name: Name, data: ByteData) -> None:
+        self._assert_valid_name(name=name)
+        if name in self:
+            raise StorageFileExistsError(f"Already exists: {name}")
+        return self._setitem(name=name, data=data)
 
-    def __delitem__(self, uid: UID) -> None:
-        self._assert_valid_uid(uid=uid)
-        if uid not in self:
-            raise StorageFileNotFoundError(f"Not found: {uid}")
-        return self._delitem(uid=uid)
+    def __delitem__(self, name: Name) -> None:
+        self._assert_valid_name(name=name)
+        if name not in self:
+            raise StorageFileNotFoundError(f"Not found: {name}")
+        return self._delitem(name=name)
 
-    def metadata(self, uid: UID) -> MetadataStorage:
+    def metadata(self, name: Name) -> MetadataStorage:
         """Metadata container associated with data."""
-        self._assert_valid_uid(uid=uid)
-        return self._metadata(uid=uid)
+        self._assert_valid_name(name=name)
+        return self._metadata(name=name)
 
-    def find(self, **filters: MetadataValue) -> Iterable[UID]:
-        """list UIDs for given metadata query."""
+    def find(self, **filters: MetadataValue) -> Iterable[Name]:
+        """list names for given metadata query."""
         return self._find(**filters)
 
-    def _assert_valid_uid(self, uid: UID):
-        valid_uid = self._get_valid_uid(uid)
-        if uid != valid_uid:
-            raise StorageInvalidUidError(
-                f"Invalid uid: {uid} => {valid_uid}", uid=valid_uid
+    def _assert_valid_name(self, name: Name):
+        valid_name = self._get_valid_name(name)
+        if name != valid_name:
+            raise StorageInvalidNameError(
+                f"Invalid name: {name} => {valid_name}", name=valid_name
             )
 
     def __str__(self) -> str:
@@ -143,13 +143,13 @@ class DataStorage(ABC):
         """TODO"""
         return {"Location": str(self._location), "Class": str(self.__class__.__name__)}
 
-    def import_from_uri(self, uri: str, uid: UID | None = None, **options) -> UID:
+    def import_from_uri(self, uri: str, name: Name | None = None, **options) -> Name:
         """TODO"""
 
         importer_class = infer_importer_class(uri, **options)
-        uid = uid or importer_class.get_output_uid(uri, **options)
+        name = name or importer_class.get_output_name(uri, **options)
 
-        # logging.error((uri, uid, options))
+        # logging.error((uri, name, options))
 
         job = self.job(
             function=importer_class.get_data,
@@ -157,14 +157,14 @@ class DataStorage(ABC):
                 SINGLE_OUTPUT_PARAM_NAME: importer_class.output_to_bytes
             },
         )
-        job(uid, uri, **options)
-        return uid
+        job(name, uri, **options)
+        return name
 
     def cache(
         self,
         output_to_bytes: FunToBytes = pickle.dumps,
         output_from_bytes: FunFromBytes = pickle.loads,
-        get_uid_from_hash: Callable[[str], str] = identity,
+        get_name_from_hash: Callable[[str], str] = identity,
         get_job_hashsum: FunHashsum = default_get_job_hashsum,
     ) -> Callable:
         """TODO"""
@@ -181,15 +181,15 @@ class DataStorage(ABC):
             @functools.wraps(function)
             def _fun(*args, **kwargs):
                 hashsum = job.get_job_hashsum(*args, **kwargs)
-                output_uid = get_uid_from_hash(hashsum)
+                output_name = get_name_from_hash(hashsum)
                 # logging.error((hash_data, hashsum))
 
-                if output_uid not in self:
-                    # run job (first arg (_output_name) is uid)
-                    job(output_uid, *args, **kwargs)
+                if output_name not in self:
+                    # run job (first arg (_output_name) is name)
+                    job(output_name, *args, **kwargs)
 
                 # retrieval
-                data = self[output_uid]
+                data = self[output_name]
                 result = output_from_bytes(data)
                 return result
 
@@ -226,14 +226,14 @@ class DataStorage(ABC):
         }
 
         def wrap_input_handler(name: str, handler: Callable):
-            def handle_(uid: UID):
+            def handle_(name: Name):
                 handler_w = FunctionWrapper.assert_wrapped(handler)
                 metadata_origin["parameter"][name] = {
-                    "@value": uid,
+                    "@value": name,
                     "@id": handler_w.get_function_id(),
                     "description": handler_w.description,
                 }
-                bdata = self[uid]
+                bdata = self[name]
                 return handler(bdata)
 
             return handle_
@@ -248,10 +248,10 @@ class DataStorage(ABC):
         def wrap_output_handler(handler: Callable):
             handler_w = FunctionWrapper.assert_wrapped(handler)
 
-            def handle_(data: Any, uid: UID):
+            def handle_(data: Any, name: Name):
                 bdata = handler(data)
-                self[uid] = bdata
-                metadata = self.metadata(uid)
+                self[name] = bdata
+                metadata = self.metadata(name)
                 metadata["origin"] = metadata_origin | {
                     "conversion": {
                         "@id": handler_w.get_function_id(),
@@ -261,8 +261,8 @@ class DataStorage(ABC):
 
             return handle_
 
-        def check_uids_exist(**uids):
-            return all(uid in self for uid in uids.values())
+        def check_names_exist(**names):
+            return all(name in self for name in names.values())
 
         wrapped_output_handlers = {
             name: wrap_output_handler(conv or identity)
@@ -285,5 +285,5 @@ class DataStorage(ABC):
             output_writers=wrapped_output_handlers,
             input_readers=wrapped_input_handlers,
             get_job_hashsum=get_job_hashsum,
-            check_done=check_uids_exist if skip_finished else None,
+            check_done=check_names_exist if skip_finished else None,
         )

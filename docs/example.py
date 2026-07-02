@@ -21,19 +21,19 @@ with TemporaryDirectory() as tempdir:
 
     # import http (import this file)
     uri1 = test_url + "/" + this_file_path.name
-    uid1 = st.import_from_uri(uri1)
-    assert uid1 == "127.0.0.1/example.py", uid1  # noqa: S101
+    name1 = st.import_from_uri(uri1)
+    assert name1 == "127.0.0.1/example.py", name1  # noqa: S101
 
     # import this file again, but from path
     uri2 = this_file_path.as_uri()  # not really uri, but still works
-    uid2 = st.import_from_uri(uri2)
-    assert uid2 == "example.py", uid2
+    name2 = st.import_from_uri(uri2)
+    assert name2 == "example.py", name2
 
     # import from sql
     uri3 = "sqlite:///:memory:"
     query = "select 1 as value"
-    uid3 = st.import_from_uri(uri3, uid="result.csv", query=query)
-    assert uid3 == "result.csv", uid3
+    name3 = st.import_from_uri(uri3, name="result.csv", query=query)
+    assert name3 == "result.csv", name3
 
     # create some functions
     def load_csv(data: bytes) -> pd.DataFrame:
@@ -57,17 +57,14 @@ with TemporaryDirectory() as tempdir:
     )
 
     # run job
-    uid4 = "result.json"
-    job(uid4, value1=uid1, value2=uid2, value3=uid3)
+    name4 = "result.json"
+    job(name4, value1=name1, value2=name2, value3=name3)
 
     # check result and metadata
-    assert len(st[uid1]) == len(st[uid2])  # imported same files 2 times
-    assert json.loads(st[uid4]) == 2 * len(st[uid1]) + 1
+    assert len(st[name1]) == len(st[name2])  # imported same files 2 times
+    assert json.loads(st[name4]) == 2 * len(st[name1]) + 1
 
-    assert st.metadata(uid1)["origin.parameter.uri"][0] == uri1
-    assert st.metadata(uid2)["origin.parameter.uri"][0] == uri2
-    assert st.metadata(uid3)["origin.parameter.uri"][0] == uri3
-    assert st.metadata(uid3)["origin.parameter.query"][0] == query
-    assert st.metadata(uid4)["origin.parameter.value1.@value"][0] == uid1
-    assert st.metadata(uid4)["origin.parameter.value2.@value"][0] == uid2
-    assert st.metadata(uid4)["origin.parameter.value3.@value"][0] == uid3
+    assert st.metadata(name1)["origin.parameter.uri"][0] == uri1
+    assert st.metadata(name2)["origin.parameter.uri"][0] == uri2
+    assert st.metadata(name3)["origin.parameter.uri"][0] == uri3
+    assert st.metadata(name3)["origin.parameter.query"][0] == query

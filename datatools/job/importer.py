@@ -10,9 +10,9 @@ import pandas as pd
 import sqlalchemy as sa
 from typing_extensions import override
 
-from datatools.types import UID
+from datatools.types import Name
 from datatools.utils import (
-    get_uid_from_uri,
+    get_name_from_uri,
     is_file_uri_or_path,
     subclasses_by_name,
     uri_or_path_to_path,
@@ -28,9 +28,9 @@ class Importer(ABC):
         return False
 
     @classmethod
-    def get_output_uid(cls, uri: str, **options) -> str:
+    def get_output_name(cls, uri: str, **options) -> str:
         """TODO"""
-        return get_uid_from_uri(uri)
+        return get_name_from_uri(uri)
 
     @classmethod
     @abstractmethod
@@ -84,19 +84,19 @@ class FileImporter(Importer):
         return data
 
     @classmethod
-    def get_output_uid(cls, uri: str, **options) -> UID:
+    def get_output_name(cls, uri: str, **options) -> Name:
         """TODO"""
 
         path = uri_or_path_to_path(uri).resolve()
         # FIXME:
-        # we cant/dont want to use full path as UID
+        # we cant/dont want to use full path as Name
         # but we may want to use more than just the file name
         # but there is no good way to automatically determine what part
         # of the path to keep.
         # Maybe later, we can use a prefix option or something like that
 
-        uid = path.name
-        return uid
+        name = path.name
+        return name
 
 
 class SqlImporter(Importer):

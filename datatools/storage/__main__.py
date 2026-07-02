@@ -58,50 +58,50 @@ def find(ctx_data_storage: DataStorage, filters: list[str]) -> None:
     """TODO"""
     # FIXME: maybe json parse value first
     filters_dict = parse_cmd_vals(filters)
-    for uid in ctx_data_storage.find(**filters_dict):
-        print(uid)
+    for name in ctx_data_storage.find(**filters_dict):
+        print(name)
 
 
 @main.command()
 @click.pass_obj
-@click.argument("uid")
-def has(ctx_data_storage: DataStorage, uid: str) -> None:
+@click.argument("name")
+def has(ctx_data_storage: DataStorage, name: str) -> None:
     """TODO
 
-    just sets status code OK (0) if uid in ctx_data_storage
+    just sets status code OK (0) if name in ctx_data_storage
 
     """
-    if uid not in ctx_data_storage:
+    if name not in ctx_data_storage:
         sys.exit(1)
 
 
 @main.command()
 @click.pass_obj
-@click.argument("uid")
-def get(ctx_data_storage: DataStorage, uid: str) -> None:
+@click.argument("name")
+def get(ctx_data_storage: DataStorage, name: str) -> None:
     """TODO"""
-    bdata: bytes = ctx_data_storage[uid]
+    bdata: bytes = ctx_data_storage[name]
     sys.stdout.buffer.write(bdata)
     sys.stdout.buffer.flush()
 
 
 @main.command()
 @click.pass_obj
-@click.argument("uid")
-def put(ctx_data_storage: DataStorage, uid: str) -> None:
+@click.argument("name")
+def put(ctx_data_storage: DataStorage, name: str) -> None:
     """TODO"""
-    # FIXME: validate uid before actually reading data
+    # FIXME: validate name before actually reading data
     bdata: bytes = sys.stdin.buffer.read()
-    ctx_data_storage[uid] = bdata
+    ctx_data_storage[name] = bdata
 
 
 @main.command()
 @click.pass_obj
-@click.argument("uid")
-def delete(ctx_data_storage: DataStorage, uid: str) -> None:
+@click.argument("name")
+def delete(ctx_data_storage: DataStorage, name: str) -> None:
     """TODO"""
     # FIXME: confirm
-    del ctx_data_storage[uid]
+    del ctx_data_storage[name]
 
 
 @main.group()
@@ -113,24 +113,24 @@ def metadata(ctx_data_storage: DataStorage) -> None:
 
 @metadata.command("get")
 @click.pass_obj
-@click.argument("uid")
+@click.argument("name")
 @click.argument("attribute")
-def metadata_get(ctx_data_storage: DataStorage, uid: str, attribute: str) -> None:
+def metadata_get(ctx_data_storage: DataStorage, name: str, attribute: str) -> None:
     """TODO"""
-    metadata_storage = ctx_data_storage.metadata(uid)
+    metadata_storage = ctx_data_storage.metadata(name)
     values = list(metadata_storage[attribute])
     print(json_dumps_for_print(values))
 
 
 @metadata.command("set")
 @click.pass_obj
-@click.argument("uid")
+@click.argument("name")
 @click.argument("attribute_values", nargs=-1)
 def metadata_set(
-    ctx_data_storage: DataStorage, uid: str, attribute_values: list[str]
+    ctx_data_storage: DataStorage, name: str, attribute_values: list[str]
 ) -> None:
     """TODO"""
-    metadata_storage = ctx_data_storage.metadata(uid)
+    metadata_storage = ctx_data_storage.metadata(name)
     attribute_values_dct = parse_cmd_vals(attribute_values)
     for attribute, value in attribute_values_dct.items():
         metadata_storage[attribute] = value
@@ -138,16 +138,16 @@ def metadata_set(
 
 @main.command("import")
 @click.pass_obj
-@click.argument("uid")
+@click.argument("name")
 @click.argument("uri", required=False)
 @click.argument("options", nargs=-1)
 def import_from_uri(
-    ctx_data_storage: DataStorage, uid: str, uri: str, options: list[str]
+    ctx_data_storage: DataStorage, name: str, uri: str, options: list[str]
 ) -> None:
     """TODO"""
     options_dict = parse_cmd_vals(options)
-    ctx_data_storage.import_from_uri(uid, uri, **options_dict)
-    logging.info(uid)
+    ctx_data_storage.import_from_uri(name, uri, **options_dict)
+    logging.info(name)
 
 
 @main.command("serve")

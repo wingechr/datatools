@@ -151,9 +151,9 @@ class Job:
         """TODO"""
         # logging.error("orig_fun_parameter_names: %s", input_parameter_names)
 
-        output_uids, input_params = self.get_job_parameters(*args, **kwargs)
+        output_names, input_params = self.get_job_parameters(*args, **kwargs)
 
-        if self.check_done and self.check_done(**output_uids):
+        if self.check_done and self.check_done(**output_names):
             logging.info("Already done, %s", self)
             return
 
@@ -171,7 +171,7 @@ class Job:
         result = self.function(**input_param_values)
 
         for param, write in self.output_writers.items():
-            name = output_uids[param]
+            name = output_names[param]
             write(result, name)
 
     def get_job_parameters(

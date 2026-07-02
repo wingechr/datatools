@@ -21,10 +21,10 @@ class TestImporter(TestCase):
         def test_fun(a, b=1):
             return a + b
 
-        def dump_null(data, uid):
+        def dump_null(data, name):
             pass
 
-        def read_1(uid):
+        def read_1(name):
             return 1
 
         # works

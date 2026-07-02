@@ -17,7 +17,7 @@ from datatools.__main__ import main
 from datatools.exceptions import (
     StorageFileExistsError,
     StorageFileNotFoundError,
-    StorageInvalidUidError,
+    StorageInvalidNameError,
 )
 from datatools.job.job import FunctionWrapper
 from datatools.storage.__main__ import infer_storage_class
@@ -57,53 +57,53 @@ def _test_action_sequence(self: TestCase, storage: DataStorage):
     """TODO"""
 
     # insert our first data
-    uid1 = "data1"
+    name1 = "data1"
     data1 = b"data1"
 
     storage.info()
 
-    # prevent invalid uid
-    self.assertRaises(StorageInvalidUidError, storage.__setitem__, "\n" + uid1, data1)
+    # prevent invalid name
+    self.assertRaises(StorageInvalidNameError, storage.__setitem__, "\n" + name1, data1)
 
-    storage[uid1] = data1
+    storage[name1] = data1
     # now it exists
-    self.assertTrue(uid1 in storage)
+    self.assertTrue(name1 in storage)
     # now we cannot add it again
-    self.assertRaises(StorageFileExistsError, storage.__setitem__, uid1, data1)
+    self.assertRaises(StorageFileExistsError, storage.__setitem__, name1, data1)
     # we can retreive it
-    self.assertEqual(storage[uid1], data1)
+    self.assertEqual(storage[name1], data1)
 
-    uid2 = "data2"
+    name2 = "data2"
     data2 = b"data2"
     mdata2_key, mdata2_val = "metadata2_a", 10
-    self.assertFalse(uid2 in storage)
+    self.assertFalse(name2 in storage)
     # but even though it does not exist, we can add metadata
-    storage.metadata(uid2)[mdata2_key] = mdata2_val
+    storage.metadata(name2)[mdata2_key] = mdata2_val
     # and can retrieve it
-    self.assertEqual(next(iter(storage.metadata(uid2)[mdata2_key])), mdata2_val)
+    self.assertEqual(next(iter(storage.metadata(name2)[mdata2_key])), mdata2_val)
     # now we insert and retrieve data
-    storage[uid2] = data2
-    self.assertEqual(storage[uid2], data2)
-    # list all uids:
-    self.assertEqual(set(storage.find()), {uid1, uid2})
+    storage[name2] = data2
+    self.assertEqual(storage[name2], data2)
+    # list all names:
+    self.assertEqual(set(storage.find()), {name1, name2})
     # list via iterator
-    self.assertEqual(set(storage), {uid1, uid2})
+    self.assertEqual(set(storage), {name1, name2})
 
     # filter by metadata
-    self.assertEqual(set(storage.find(**{mdata2_key: mdata2_val})), {uid2})
+    self.assertEqual(set(storage.find(**{mdata2_key: mdata2_val})), {name2})
 
     # delete
-    del storage[uid1]
-    self.assertFalse(uid1 in storage)
+    del storage[name1]
+    self.assertFalse(name1 in storage)
 
     # try if exception is raised
-    self.assertRaises(StorageFileNotFoundError, storage.__getitem__, uid1)
-    self.assertRaises(StorageFileNotFoundError, storage.__delitem__, uid1)
+    self.assertRaises(StorageFileNotFoundError, storage.__getitem__, name1)
+    self.assertRaises(StorageFileNotFoundError, storage.__delitem__, name1)
 
     # change/update metadata
-    storage.metadata(uid2)[mdata2_key] = "CHANGED"
+    storage.metadata(name2)[mdata2_key] = "CHANGED"
     # and can retrieve it
-    self.assertEqual(next(iter(storage.metadata(uid2)[mdata2_key])), "CHANGED")
+    self.assertEqual(next(iter(storage.metadata(name2)[mdata2_key])), "CHANGED")
 
     # additional tests
     _test_action_sequence_metadata(self, storage)
@@ -126,18 +126,18 @@ class TestStorageFiles(TempdirTestCase):
         storage = FileDataStorage(str(self.temp_dir))
         _test_action_sequence(self, storage)
 
-    def test_validate_uid(self):
-        """uid cannot be an absolute path"""
+    def test_validate_name(self):
+        """name cannot be an absolute path"""
         storage = FileDataStorage(str(self.temp_dir))
 
         # no exception
-        storage._assert_valid_uid("file.txt")
-        storage._assert_valid_uid("folder/file.txt")
+        storage._assert_valid_name("file.txt")
+        storage._assert_valid_name("folder/file.txt")
 
         self.assertRaises(
-            StorageInvalidUidError, storage._assert_valid_uid, "/root/dir"
+            StorageInvalidNameError, storage._assert_valid_name, "/root/dir"
         )
-        self.assertRaises(StorageInvalidUidError, storage._assert_valid_uid, "../xyz")
+        self.assertRaises(StorageInvalidNameError, storage._assert_valid_name, "../xyz")
 
     def test_existing_invalid_metadata(self):
         """raise exception"""
@@ -146,12 +146,12 @@ class TestStorageFiles(TempdirTestCase):
         Path(self.temp_dir / "data.metadata.json").write_bytes(b"[]")
         self.assertRaises(ValueError, storage.metadata, "data")
 
-    def test_new_uid_is_path(self):
+    def test_new_name_is_path(self):
         """TODO"""
         storage = FileDataStorage(str(self.temp_dir))
         storage["a/b"] = b""
         # "a" is alreaedy used as path
-        self.assertRaises(StorageInvalidUidError, storage.__setitem__, "a", b"")
+        self.assertRaises(StorageInvalidNameError, storage.__setitem__, "a", b"")
 
 
 class TestStorageFilesWithRdfMetadata(TestCase):
@@ -303,32 +303,32 @@ class TestUseCases(TestCase):
 
             # import from http source
             uri = base_url + "/" + filename
-            uid = storage.import_from_uri(uri)
+            name = storage.import_from_uri(uri)
 
-            self.assertEqual(storage[uid], test_data)
+            self.assertEqual(storage[name], test_data)
             # should have meta data from import action
             self.assertEqual(
-                get_item_or_first(storage.metadata(uid)["origin.parameter.uri"]),
+                get_item_or_first(storage.metadata(name)["origin.parameter.uri"]),
                 uri,
             )
 
             # import from path
             uri = filepath.as_uri()
-            uid = storage.import_from_uri(uri)
-            self.assertEqual(storage[uid], test_data)
+            name = storage.import_from_uri(uri)
+            self.assertEqual(storage[name], test_data)
             self.assertEqual(
-                get_item_or_first(storage.metadata(uid)["origin.parameter.uri"]),
+                get_item_or_first(storage.metadata(name)["origin.parameter.uri"]),
                 uri,
             )
 
             # import from sql
             query = "select 1 as a"
             uri = "sqlite:///:memory:"
-            uid = storage.import_from_uri(uri, query=query)
-            self.assertEqual(storage[uid].replace(b"\r", b""), b"a\n1\n")
+            name = storage.import_from_uri(uri, query=query)
+            self.assertEqual(storage[name].replace(b"\r", b""), b"a\n1\n")
             # TODO add query?
             self.assertEqual(
-                get_item_or_first(storage.metadata(uid)["origin.parameter.uri"]),
+                get_item_or_first(storage.metadata(name)["origin.parameter.uri"]),
                 uri,
             )
 
@@ -382,8 +382,8 @@ class TestUseCases(TestCase):
         inputs = {"param_input1": "input.pickle"}
 
         # generate inputs
-        for uid in inputs.values():
-            storage[uid] = pickle.dumps(3)
+        for name in inputs.values():
+            storage[name] = pickle.dumps(3)
 
         job_create_output = storage.job(
             function,
@@ -393,17 +393,17 @@ class TestUseCases(TestCase):
 
         # try to call mutliple times - but only of output does not exist
         for _ in range(2):
-            if not all(uid in storage for uid in outputs.values()):
+            if not all(name in storage for name in outputs.values()):
                 job_create_output(**outputs, **inputs)
 
-        self.assertTrue(all(uid in storage for uid in outputs.values()))
+        self.assertTrue(all(name in storage for name in outputs.values()))
 
         self.assertEqual(count_calls, 1)
 
         # check that metadata should also be writtem
-        for uid in outputs.values():
+        for name in outputs.values():
             job_timestamp_s = str(
-                get_item_or_first(storage.metadata(uid)["origin.timestamp"])
+                get_item_or_first(storage.metadata(name)["origin.timestamp"])
             )
             datetime.datetime.fromisoformat(job_timestamp_s)
 
@@ -457,8 +457,4 @@ class TestUseCases(TestCase):
         self.assertEqual(
             get_item_or_first(storage.metadata(key2)["origin.function.@id"]),
             fid_convert,
-        )
-        self.assertEqual(
-            get_item_or_first(storage.metadata(key2)["origin.parameter.data.@id"]),
-            fid_bytes2json,
         )

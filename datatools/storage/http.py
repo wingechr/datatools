@@ -9,7 +9,7 @@ import httpx
 
 from datatools.exceptions import StorageException, StorageFileNotFoundError
 from datatools.storage.base import DataStorage, MetadataStorage
-from datatools.types import HTTP_METHOD, UID, MetadataAttribute, MetadataValue
+from datatools.types import HTTP_METHOD, MetadataAttribute, MetadataValue, Name
 from datatools.utils import parse_cmd_vals
 
 
@@ -44,37 +44,37 @@ def make_server_app(data_storage: DataStorage) -> FastAPI:
         filters_dict = parse_cmd_vals(q)
         return data_storage.find(**filters_dict)
 
-    @app.head("/data/{uid:path}")
+    @app.head("/data/{name:path}")
     @catch_exceptions
-    def has(uid: str):
-        if uid not in data_storage:
-            raise StorageFileNotFoundError(uid)
+    def has(name: str):
+        if name not in data_storage:
+            raise StorageFileNotFoundError(name)
 
-    @app.delete("/data/{uid:path}")
+    @app.delete("/data/{name:path}")
     @catch_exceptions
-    def delete(uid: str):
-        del data_storage[uid]
+    def delete(name: str):
+        del data_storage[name]
 
-    @app.get("/data/{uid:path}")
+    @app.get("/data/{name:path}")
     @catch_exceptions
-    def get(uid: str):
-        data = data_storage[uid]
+    def get(name: str):
+        data = data_storage[name]
         return Response(content=data)
 
-    @app.put("/data/{uid:path}")
+    @app.put("/data/{name:path}")
     @catch_exceptions
-    def put(uid: str, data: bytes = Body(...)):
-        data_storage[uid] = data
+    def put(name: str, data: bytes = Body(...)):
+        data_storage[name] = data
 
-    @app.get("/metadata/{uid:path}")
+    @app.get("/metadata/{name:path}")
     @catch_exceptions
-    def metadata_get(uid, a: str):
-        return data_storage.metadata(uid)[a]
+    def metadata_get(name, a: str):
+        return data_storage.metadata(name)[a]
 
-    @app.post("/metadata/{uid:path}")
+    @app.post("/metadata/{name:path}")
     @catch_exceptions
-    def metadata_set(uid, data: dict):
-        metadata = data_storage.metadata(uid)
+    def metadata_set(name, data: dict):
+        metadata = data_storage.metadata(name)
         for k, v in data.items():
             metadata[k] = v
 
@@ -135,32 +135,32 @@ class HttpDataStorage(DataStorage):
 
         return resp
 
-    def _contains(self, uid: UID) -> bool:
+    def _contains(self, name: Name) -> bool:
         try:
-            self._request(path=f"/data/{uid}", method="HEAD")
+            self._request(path=f"/data/{name}", method="HEAD")
             return True
         except StorageFileNotFoundError:
             return False
 
-    def _getitem(self, uid: UID) -> bytes:
-        resp = self._request(path=f"/data/{uid}", method="GET")
+    def _getitem(self, name: Name) -> bytes:
+        resp = self._request(path=f"/data/{name}", method="GET")
         return resp.content
 
-    def _setitem(self, uid: UID, data: bytes) -> None:
-        self._request(path=f"/data/{uid}", method="PUT", data=data)
+    def _setitem(self, name: Name, data: bytes) -> None:
+        self._request(path=f"/data/{name}", method="PUT", data=data)
 
-    def _delitem(self, uid: UID) -> None:
-        self._request(path=f"/data/{uid}", method="DELETE")
+    def _delitem(self, name: Name) -> None:
+        self._request(path=f"/data/{name}", method="DELETE")
 
-    def _list(self) -> Iterable[UID]:
+    def _list(self) -> Iterable[Name]:
         return self._request(path="/data").json()
 
-    def _find(self, **filters: MetadataValue) -> Iterable[UID]:
+    def _find(self, **filters: MetadataValue) -> Iterable[Name]:
         filters_list = [f"{k}={v}" for k, v in filters.items()]
         return self._request(path="/data", params={"q": filters_list}).json()
 
-    def _metadata(self, uid: UID) -> HttpMetadataStorage:
-        url = self._location + f"/metadata/{uid}"
+    def _metadata(self, name: Name) -> HttpMetadataStorage:
+        url = self._location + f"/metadata/{name}"
         return HttpMetadataStorage(url)
 
     def info(self) -> dict:

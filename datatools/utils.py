@@ -521,7 +521,7 @@ def remove_port_from_netloc(netloc: str) -> str:
     return netloc
 
 
-def get_uid_from_uri(uri: str) -> str:
+def get_name_from_uri(uri: str) -> str:
     """TODO"""
     parts = urlsplit(uri)
     netloc = remove_credentials_from_netloc(parts.netloc)

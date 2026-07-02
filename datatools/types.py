@@ -10,7 +10,7 @@ SubCls = TypeVar("SubCls")
 
 Json: TypeAlias = str | int | float | bool | None | list["Json"] | dict[str, "Json"]
 StrPath = Path | str
-UID = str
+Name = str
 ByteData = bytes
 MetadataAttribute = str
 MetadataValue: TypeAlias = Json

@@ -12,26 +12,26 @@ from datatools.exceptions import (
     SubprocessStatus,
 )
 from datatools.storage.base import DataStorage, MetadataStorage
-from datatools.types import UID, MetadataAttribute, MetadataValue
+from datatools.types import MetadataAttribute, MetadataValue, Name
 from datatools.utils import json_dumps_for_print, reverse_prints, try_parse_json_str
 
 
 class TestCliMetadataDataStorage(MetadataStorage):
     """TODO"""
 
-    def __init__(self, uid: UID, request: Callable):
-        self._uid = uid
+    def __init__(self, name: Name, request: Callable):
+        self._name = name
         self._request = request
 
     def _getitem(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
-        data = self._request("metadata", "get", self._uid, str(attribute))
+        data = self._request("metadata", "get", self._name, str(attribute))
         return try_parse_json_str(data)
 
     def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
         self._request(
             "metadata",
             "set",
-            self._uid,
+            self._name,
             f"{attribute}={json_dumps_for_print(value)}",
         )
 
@@ -64,31 +64,31 @@ class CliWrapperDataStorage(DataStorage):
 
         return stdout
 
-    def _contains(self, uid: UID) -> bool:
+    def _contains(self, name: Name) -> bool:
         try:
-            self._request("has", uid)
+            self._request("has", name)
         except SubprocessStatus:
             return False
         return True
 
-    def _getitem(self, uid: UID) -> bytes:
-        return self._request("get", uid)
+    def _getitem(self, name: Name) -> bytes:
+        return self._request("get", name)
 
-    def _setitem(self, uid: UID, data: bytes) -> None:
-        self._request("put", uid, data=data)
+    def _setitem(self, name: Name, data: bytes) -> None:
+        self._request("put", name, data=data)
 
-    def _delitem(self, uid: UID) -> None:
-        self._request("delete", uid)
+    def _delitem(self, name: Name) -> None:
+        self._request("delete", name)
 
-    def _metadata(self, uid: UID) -> MetadataStorage:
-        return TestCliMetadataDataStorage(uid, self._request)
+    def _metadata(self, name: Name) -> MetadataStorage:
+        return TestCliMetadataDataStorage(name, self._request)
 
-    def _find(self, **filters: MetadataValue) -> Iterable[UID]:
+    def _find(self, **filters: MetadataValue) -> Iterable[Name]:
         filters_str = [f"{k}={v}" for k, v in filters.items()]
         data = self._request("find", *filters_str)
         return reverse_prints(data)
 
-    def _list(self) -> Iterable[UID]:
+    def _list(self) -> Iterable[Name]:
         return self._find()
 
     def info(self) -> dict:
