@@ -28,8 +28,10 @@ from urllib.request import url2pathname
 import chardet
 import httpx
 import jsonpath_ng
+import jsonpath_ng.ext
 import numpy as np
 import pandas as pd
+import sqlalchemy as sa
 import sqlparse
 import tzlocal
 
@@ -37,6 +39,7 @@ from datatools.types import Json, StrPath, SubCls
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import CursorResult
+    from sqlalchemy.engine.row import Row
 
 
 DATETIMETZ_FMT = "%Y-%m-%dT%H:%M:%S%z"
@@ -333,13 +336,28 @@ def identity(x):
 
 def jsonpath_update(data: dict[str, Json], key: str, val: Json) -> None:
     """TODO"""
-    path = jsonpath_ng.parse(key)
+    path = jsonpath_ng.ext.parse(key)
     path.update_or_create(data, val)
 
 
 def jsonpath_get(data: dict[str, Json], key: str) -> list[Json]:
-    """TODO"""
-    path = jsonpath_ng.parse(key)
+    """TODO
+
+    Example:
+
+    >>> jsonpath_get({"a": {"b": 1}}, "$.a.b")
+    [1]
+    >>> jsonpath_get({"a": {"b": 1}}, "a.b")
+    [1]
+    >>> jsonpath_get({"a": [{"b": 1}, {"b": 2}]}, "a[0].b")
+    [1]
+    >>> jsonpath_get({"a": [{"b": 1}, {"b": 2}]}, "a[*].b")
+    [1, 2]
+    >>> jsonpath_get({"a": [{"b": 1}, {"b": 2}]}, 'a[?(b > 1)].b')
+    [2]
+
+    """
+    path = jsonpath_ng.ext.parse(key)
     match = path.find(data)
     values = [x.value for x in match]
     return values
@@ -867,3 +885,51 @@ def wait_for_url(url: str, timeout_s=30):
             break
         except Exception:  # noqa: S112
             continue
+
+
+def http_get(uri: str, **options) -> bytes:
+    """TODO"""
+    resp = httpx.get(uri, follow_redirects=True)
+    resp.raise_for_status()
+    data = resp.content
+    return data
+
+
+def read_file_uri(uri: str, **options) -> bytes:
+    """TODO"""
+    path = uri_or_path_to_path(uri).resolve()
+    data = path.read_bytes()
+    return data
+
+
+def query_sql(uri: str, query: str, **options) -> Iterable["Row"]:
+    """TODO"""
+    eng = sa.create_engine(uri)
+    with eng.connect() as con:
+        resp = con.execute(sa.text(query))
+        data = resp.fetchall()
+
+    return data
+
+
+def wrap_exception(
+    function: Callable[[], None], debug: bool = True
+):  # pragma: no cover - only called in __main__
+    """TODO"""
+    try:
+        # your logic here
+        function()
+    except Exception as e:
+        if debug:
+            logging.exception(e)  # includes stack trace
+        else:
+            logging.error(e)
+        sys.exit(1)
+
+
+def sql_query_result_to_csv_bytes(data: Iterable["Row"], **options) -> bytes:
+    """TODO"""
+    df = pd.DataFrame(data)
+    data_s = df.to_csv(index=False)
+    data_b = data_s.encode()
+    return data_b

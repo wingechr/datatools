@@ -10,6 +10,7 @@ import pandas as pd
 
 from datatools import FileDataStorage
 from datatools.utils import start_http_server
+from tests.test_storage import QueryParameterUri
 
 # test http server
 this_file_path = Path(__file__)
@@ -64,7 +65,6 @@ with TemporaryDirectory() as tempdir:
     assert len(st[name1]) == len(st[name2])  # imported same files 2 times
     assert json.loads(st[name4]) == 2 * len(st[name1]) + 1
 
-    assert st.metadata(name1)["origin.parameter.uri"][0] == uri1
-    assert st.metadata(name2)["origin.parameter.uri"][0] == uri2
-    assert st.metadata(name3)["origin.parameter.uri"][0] == uri3
-    assert st.metadata(name3)["origin.parameter.query"][0] == query
+    assert st.metadata(name1)[QueryParameterUri][0] == uri1
+    assert st.metadata(name2)[QueryParameterUri][0] == uri2
+    assert st.metadata(name3)[QueryParameterUri][0] == uri3

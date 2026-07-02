@@ -27,8 +27,27 @@ from datatools.storage.file import FileDataStorage, FileDataStorageWithRdfMetada
 from datatools.storage.http import HttpDataStorage, make_server_app
 from datatools.storage.memory import MemoryDataStorage
 from datatools.storage.sql import SqlDataStorage
-from datatools.utils import get_free_port, get_now_str, start_http_server, wait_for_url
+from datatools.types import (
+    PROP_CONVERTED_WITH,
+    PROP_CREATOR,
+    PROP_DATETIME,
+    PROP_FUNCTION,
+    PROP_GENERATED_BY,
+    PROP_PARAMETER,
+    PROP_PARAMETER_NAME,
+    PROP_PARAMETER_VALUE,
+)
+from datatools.utils import (
+    get_free_port,
+    query_sql,
+    sql_query_result_to_csv_bytes,
+    start_http_server,
+    wait_for_url,
+)
 from tests.base import TempdirTestCase
+
+QueryParameterUri = f'{PROP_GENERATED_BY}.{PROP_PARAMETER}[?({PROP_PARAMETER_NAME} == "uri")].{PROP_PARAMETER_VALUE}'  # noqa:E501
+QueryTimestamp = f"{PROP_GENERATED_BY}.{PROP_DATETIME}"
 
 
 def get_item_or_first(x):
@@ -36,21 +55,6 @@ def get_item_or_first(x):
     if isinstance(x, list):
         return x[0]
     return x
-
-
-def _test_action_sequence_metadata(self: TestCase, storage: DataStorage):
-    metadata = storage.metadata("test")
-
-    uri = "http://example.com"
-    # describe file origin
-    metadata["origin"] = {
-        "function": {"name": "download"},
-        "parameters": {"uri": {"value": uri}},
-        "timestamp": get_now_str(),
-    }
-    values = list(metadata["origin.parameters.uri.value"])
-    logging.info(values)
-    self.assertEqual(values[0], uri)
 
 
 def _test_action_sequence(self: TestCase, storage: DataStorage):
@@ -104,9 +108,6 @@ def _test_action_sequence(self: TestCase, storage: DataStorage):
     storage.metadata(name2)[mdata2_key] = "CHANGED"
     # and can retrieve it
     self.assertEqual(next(iter(storage.metadata(name2)[mdata2_key])), "CHANGED")
-
-    # additional tests
-    _test_action_sequence_metadata(self, storage)
 
 
 class TestStorageMemory(TestCase):
@@ -308,7 +309,7 @@ class TestUseCases(TestCase):
             self.assertEqual(storage[name], test_data)
             # should have meta data from import action
             self.assertEqual(
-                get_item_or_first(storage.metadata(name)["origin.parameter.uri"]),
+                get_item_or_first(storage.metadata(name)[QueryParameterUri]),
                 uri,
             )
 
@@ -317,7 +318,7 @@ class TestUseCases(TestCase):
             name = storage.import_from_uri(uri)
             self.assertEqual(storage[name], test_data)
             self.assertEqual(
-                get_item_or_first(storage.metadata(name)["origin.parameter.uri"]),
+                get_item_or_first(storage.metadata(name)[QueryParameterUri]),
                 uri,
             )
 
@@ -328,9 +329,48 @@ class TestUseCases(TestCase):
             self.assertEqual(storage[name].replace(b"\r", b""), b"a\n1\n")
             # TODO add query?
             self.assertEqual(
-                get_item_or_first(storage.metadata(name)["origin.parameter.uri"]),
+                get_item_or_first(storage.metadata(name)[QueryParameterUri]),
                 uri,
             )
+
+            # check metadata
+            metadata_all = get_item_or_first(storage.metadata(name)["$"])
+            metadata_gen: dict = metadata_all[PROP_GENERATED_BY]  # type:ignore
+            metadata_all_s = json.dumps(
+                metadata_all, ensure_ascii=False, sort_keys=True, indent=2
+            )
+
+            metadata_all_expected = {
+                PROP_GENERATED_BY: {
+                    "@id": metadata_gen["@id"],
+                    PROP_CONVERTED_WITH: {
+                        "@id": "sql_query_result_to_csv_bytes",
+                        "description": sql_query_result_to_csv_bytes.__doc__,
+                    },
+                    PROP_DATETIME: metadata_gen[PROP_DATETIME],
+                    PROP_CREATOR: metadata_gen[PROP_CREATOR],
+                    PROP_FUNCTION: {"@id": "QUERY", "description": query_sql.__doc__},
+                    PROP_PARAMETER: [
+                        {
+                            PROP_PARAMETER_VALUE: "sqlite:///:memory:",
+                            PROP_PARAMETER_NAME: "uri",
+                        },
+                        {
+                            PROP_PARAMETER_VALUE: "select 1 as a",
+                            PROP_PARAMETER_NAME: "query",
+                        },
+                        {
+                            PROP_PARAMETER_VALUE: None,
+                            PROP_PARAMETER_NAME: "options",
+                        },
+                    ],
+                }
+            }
+            metadata_all_expected_s = json.dumps(
+                metadata_all_expected, ensure_ascii=False, sort_keys=True, indent=2
+            )
+
+            self.assertEqual(metadata_all_expected_s, metadata_all_s, metadata_all_s)
 
     def test_use_case_cache(self):
         """TODO"""
@@ -403,7 +443,7 @@ class TestUseCases(TestCase):
         # check that metadata should also be writtem
         for name in outputs.values():
             job_timestamp_s = str(
-                get_item_or_first(storage.metadata(name)["origin.timestamp"])
+                get_item_or_first(storage.metadata(name)[QueryTimestamp])
             )
             datetime.datetime.fromisoformat(job_timestamp_s)
 
@@ -451,10 +491,8 @@ class TestUseCases(TestCase):
 
         # check metadata
         self.assertEqual(
-            get_item_or_first(storage.metadata(key1)["origin.conversion.@id"]),
-            "identity",  # nothings
-        )
-        self.assertEqual(
-            get_item_or_first(storage.metadata(key2)["origin.function.@id"]),
+            get_item_or_first(
+                storage.metadata(key2)[f"{PROP_GENERATED_BY}.{PROP_FUNCTION}.@id"]
+            ),
             fid_convert,
         )

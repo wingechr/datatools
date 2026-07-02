@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator
-import datetime
+import contextlib
 import functools
 import pickle
 from typing import Any
@@ -15,6 +15,14 @@ from datatools.exceptions import (
 from datatools.job.importer import infer_importer_class
 from datatools.job.job import FunctionWrapper, Job, default_get_job_hashsum
 from datatools.types import (
+    PROP_CONVERTED_WITH,
+    PROP_CREATOR,
+    PROP_DATETIME,
+    PROP_FUNCTION,
+    PROP_GENERATED_BY,
+    PROP_PARAMETER,
+    PROP_PARAMETER_NAME,
+    PROP_PARAMETER_VALUE,
     SINGLE_OUTPUT_PARAM_NAME,
     ByteData,
     FunFromBytes,
@@ -26,7 +34,12 @@ from datatools.types import (
     MetadataValue,
     Name,
 )
-from datatools.utils import get_user_w_host, identity
+from datatools.utils import (
+    get_now_str,
+    get_user_w_host,
+    identity,
+    remove_credentials_from_netloc,
+)
 
 
 class MetadataStorage(ABC):  # TODO: subclass AbstractContextManager ?
@@ -200,7 +213,7 @@ class DataStorage(ABC):
     def job(
         self,
         function: Callable,
-        output_converters: dict[str, FunToBytes | None] | FunToBytes,
+        output_converters: dict[str, FunToBytes | None] | FunToBytes | None = None,
         input_converters: dict[str, FunFromBytes | None] | None = None,
         get_job_hashsum: FunHashsum = default_get_job_hashsum,
         skip_finished: bool = False,
@@ -213,51 +226,80 @@ class DataStorage(ABC):
 
         # update metadata before running job
         # so output handlers can use it
-        timestamp = datetime.datetime.now().isoformat()
 
-        metadata_origin = {
-            "timestamp": timestamp,
-            "parameter": {},  # will be filled by input handlers
-            "function": {
-                "@id": wrapped_function.get_function_id(),
-                "description": wrapped_function.description,
+        callback_data = {
+            "metadata_origin": {
+                PROP_FUNCTION: wrapped_function.get_metadata(),
+                PROP_PARAMETER: [],  # will be filled by input handlers
+                PROP_DATETIME: get_now_str(),
+                PROP_CREATOR: get_user_w_host(),
             },
-            "user": get_user_w_host(),
+            "input_parameter_values": {},
+            "job": None,  # will be filled later
         }
 
         def wrap_input_handler(name: str, handler: Callable):
-            def handle_(name: Name):
+            def handle_(name_value: Name):
+                callback_data["input_parameter_values"][name] = name_value
                 handler_w = FunctionWrapper.assert_wrapped(handler)
-                metadata_origin["parameter"][name] = {
-                    "@value": name,
-                    "@id": handler_w.get_function_id(),
-                    "description": handler_w.description,
-                }
-                bdata = self[name]
+
+                callback_data["metadata_origin"][PROP_PARAMETER].append(
+                    {
+                        PROP_PARAMETER_VALUE: name_value,
+                        PROP_PARAMETER_NAME: name,
+                        PROP_CONVERTED_WITH: handler_w.get_metadata(),
+                    }
+                )
+
+                bdata = self[name_value]
                 return handler(bdata)
 
             return handle_
 
         def create_input_handler(name):
             def handle_(value: Any):
-                metadata_origin["parameter"][name] = value
+                with contextlib.suppress(Exception):
+                    # TODO: maybe get fromhandler
+                    value = remove_credentials_from_netloc(value)
+
+                callback_data["input_parameter_values"][name] = value
+                callback_data["metadata_origin"][PROP_PARAMETER].append(
+                    {PROP_PARAMETER_VALUE: value, PROP_PARAMETER_NAME: name}
+                )
+
                 return value
 
             return handle_
 
-        def wrap_output_handler(handler: Callable):
-            handler_w = FunctionWrapper.assert_wrapped(handler)
+        def wrap_output_handler(handler: Callable | None = None):
+            def create_job_id():
+                # generate job id (once)
+                if "@id" not in callback_data["metadata_origin"]:
+                    job: Job = callback_data["job"]
+                    job_hashsum = job.get_job_hashsum(
+                        **callback_data["input_parameter_values"]
+                    )
+                    job_id = f"job:{job_hashsum}"
+                    callback_data["metadata_origin"]["@id"] = job_id
 
-            def handle_(data: Any, name: Name):
-                bdata = handler(data)
-                self[name] = bdata
-                metadata = self.metadata(name)
-                metadata["origin"] = metadata_origin | {
-                    "conversion": {
-                        "@id": handler_w.get_function_id(),
-                        "description": handler_w.description,
-                    },
-                }
+            if handler:
+                handler_w = FunctionWrapper.assert_wrapped(handler)
+
+                def handle_(data: Any, name: Name):
+                    bdata = handler(data)
+                    self[name] = bdata
+                    create_job_id()
+                    metadata = self.metadata(name)
+                    metadata[PROP_GENERATED_BY] = callback_data["metadata_origin"] | {
+                        PROP_CONVERTED_WITH: handler_w.get_metadata(),
+                    }
+            else:
+
+                def handle_(data: Any, name: Name):
+                    self[name] = data
+                    create_job_id()
+                    metadata = self.metadata(name)
+                    metadata[PROP_GENERATED_BY] = callback_data["metadata_origin"]
 
             return handle_
 
@@ -265,8 +307,7 @@ class DataStorage(ABC):
             return all(name in self for name in names.values())
 
         wrapped_output_handlers = {
-            name: wrap_output_handler(conv or identity)
-            for name, conv in output_converters.items()
+            name: wrap_output_handler(conv) for name, conv in output_converters.items()
         }
 
         input_converters = input_converters or {}
@@ -280,10 +321,12 @@ class DataStorage(ABC):
             for name in wrapped_function.fun_parameter_names
         }
 
-        return Job(
+        job = Job(
             function,
             output_writers=wrapped_output_handlers,
             input_readers=wrapped_input_handlers,
             get_job_hashsum=get_job_hashsum,
             check_done=check_names_exist if skip_finished else None,
         )
+        callback_data["job"] = job
+        return job

@@ -1,19 +1,22 @@
 """Abstract classes / interfaces, types"""
 
-from abc import ABC, abstractmethod
+from abc import ABC
+from collections.abc import Callable
 import re
-from typing import Any
 from urllib.parse import urlparse
 
-import httpx
-import pandas as pd
-import sqlalchemy as sa
 from typing_extensions import override
 
-from datatools.types import Name
+from datatools.job.job import FunctionWrapper
+from datatools.types import FunToBytes, Name
 from datatools.utils import (
     get_name_from_uri,
+    http_get,
     is_file_uri_or_path,
+    query_sql,
+    read_file_uri,
+    remove_credentials_from_netloc,
+    sql_query_result_to_csv_bytes,
     subclasses_by_name,
     uri_or_path_to_path,
 )
@@ -21,6 +24,9 @@ from datatools.utils import (
 
 class Importer(ABC):
     """TODO"""
+
+    output_to_bytes: FunToBytes | None = None
+    get_data: Callable
 
     @classmethod
     def can_handle(cls, uri: str, **options) -> bool:
@@ -31,15 +37,6 @@ class Importer(ABC):
     def get_output_name(cls, uri: str, **options) -> str:
         """TODO"""
         return get_name_from_uri(uri)
-
-    @classmethod
-    @abstractmethod
-    def get_data(cls, uri: str, **options) -> Any: ...
-
-    @classmethod
-    def output_to_bytes(cls, data: Any) -> bytes:
-        """convert result to bytes."""
-        return data
 
 
 def infer_importer_class(uri: str, **options) -> type[Importer]:
@@ -54,34 +51,30 @@ def infer_importer_class(uri: str, **options) -> type[Importer]:
 class HttpImporter(Importer):
     """TODO"""
 
+    # use generic id (tool does not matter)
+    get_data = FunctionWrapper.wrap(function_id="GET")(http_get)
+
     @classmethod
     @override
     def can_handle(cls, uri: str, **options) -> bool:
         return bool(re.match(r"^https?://", uri))
 
     @classmethod
-    def get_data(cls, uri: str, **options):
+    def get_output_name(cls, uri: str, **options) -> str:
         """TODO"""
-        resp = httpx.get(uri, follow_redirects=True)
-        resp.raise_for_status()
-        data = resp.content
-        return data
+        return get_name_from_uri(remove_credentials_from_netloc(uri))
 
 
 class FileImporter(Importer):
     """TODO"""
 
+    # use generic id (tool does not matter)
+    get_data = FunctionWrapper.wrap(function_id="COPY")(read_file_uri)
+
     @classmethod
     def can_handle(cls, uri: str, **options) -> bool:
         """Either file:// protocol or no protocol"""
         return is_file_uri_or_path(uri)
-
-    @classmethod
-    def get_data(cls, uri: str, **options):
-        """TODO"""
-        path = uri_or_path_to_path(uri).resolve()
-        data = path.read_bytes()
-        return data
 
     @classmethod
     def get_output_name(cls, uri: str, **options) -> Name:
@@ -102,26 +95,12 @@ class FileImporter(Importer):
 class SqlImporter(Importer):
     """TODO"""
 
+    # use generic id (tool does not matter)
+    get_data = FunctionWrapper.wrap(function_id="QUERY")(query_sql)
+    output_to_bytes = FunctionWrapper.wrap()(sql_query_result_to_csv_bytes)
+
     @classmethod
     @override
     def can_handle(cls, uri: str, **options) -> bool:
         parsed = urlparse(uri)
         return bool(parsed.scheme and "sql" in parsed.scheme.lower())
-
-    @classmethod
-    def get_data(cls, uri: str, query: str, **options):
-        """TODO"""
-        eng = sa.create_engine(uri)
-        with eng.connect() as con:
-            resp = con.execute(sa.text(query))
-            data = resp.fetchall()
-
-        return data
-
-    @classmethod
-    @override
-    def output_to_bytes(cls, data: list):
-        df = pd.DataFrame(data)
-        data_s = df.to_csv(index=False)
-        data_b = data_s.encode()
-        return data_b

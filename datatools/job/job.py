@@ -4,7 +4,7 @@ from collections.abc import Callable
 import logging
 from typing import Any, Generic
 
-from datatools.types import FunHashsum, FunParams, FunResult, Json
+from datatools.types import PROP_DESCRIPTION, FunHashsum, FunParams, FunResult, Json
 from datatools.utils import (
     function_get_defaults,
     function_get_regular_params,
@@ -39,6 +39,10 @@ class FunctionWrapper(Generic[FunParams, FunResult]):
     def __call__(self, *args: FunParams.args, **kwargs: FunParams.kwargs) -> FunResult:  # noqa
         return self.fun(*args, **kwargs)
 
+    def get_metadata(self) -> dict[str, Json]:
+        """TODO"""
+        return {"@id": self.function_id, PROP_DESCRIPTION: self.description}
+
     @classmethod
     def wrap(
         cls,
@@ -65,10 +69,6 @@ class FunctionWrapper(Generic[FunParams, FunResult]):
             return function
         return FunctionWrapper(function)
 
-    def get_function_id(self) -> str:
-        """TODO"""
-        return self.function_id
-
 
 def get_job_input_parameters(job: "Job", *args, **kwargs) -> dict:
     """TODO"""
@@ -81,7 +81,7 @@ def get_job_input_parameters(job: "Job", *args, **kwargs) -> dict:
 
 def default_get_hash_data(job: "Job", input_params: dict) -> Json:
     """TODO"""
-    function_id = job.function.get_function_id()
+    function_id = job.function.function_id
     return {"function": function_id, "parameters": input_params}
 
 
