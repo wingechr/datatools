@@ -43,11 +43,15 @@ HTTP_METHOD = Literal["GET", "PUT", "POST", "DELETE", "HEAD", "PATCH"]
 # raise Exception(NS_XSD.xyz.fragment)
 
 PROP_DESCRIPTION = "description"  # http://purl.org/dc/terms/description
+PROP_SAVED_WITH = "savedWith"
 PROP_GENERATED_BY = "wasGeneratedBy"  # https://www.w3.org/TR/prov-o/#wasGeneratedBy
 PROP_DATETIME = "created"  # http://purl.org/dc/terms/created or http://www.w3.org/ns/prov#generatedAtTime # noqa: E501
 PROP_CREATOR = "creator"  # http://purl.org/dc/terms/creator
 PROP_FUNCTION = "function"  # TODO
-PROP_CONVERTED_WITH = "conversion"  # TODO
+PROP_LOADED_WITH = "loadedWith"  # TODO
 PROP_PARAMETER = "parameter"  # TODO
 PROP_PARAMETER_NAME = "name"  # https://schema.org/name
 PROP_PARAMETER_VALUE = "@value"
+PROP_SIZE = "sizeBytes"
+PROP_HASHSUM = "hashsum"
+PROP_JOB = "job"

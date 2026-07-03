@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator
 import contextlib
 import functools
+import hashlib
 import pickle
 from typing import Any
 
@@ -15,14 +16,18 @@ from datatools.exceptions import (
 from datatools.process.importer import infer_importer_class
 from datatools.process.task import AnnotatedFunction, Task, default_get_job_hashsum
 from datatools.types import (
-    PROP_CONVERTED_WITH,
     PROP_CREATOR,
     PROP_DATETIME,
     PROP_FUNCTION,
     PROP_GENERATED_BY,
+    PROP_HASHSUM,
+    PROP_JOB,
+    PROP_LOADED_WITH,
     PROP_PARAMETER,
     PROP_PARAMETER_NAME,
     PROP_PARAMETER_VALUE,
+    PROP_SAVED_WITH,
+    PROP_SIZE,
     SINGLE_OUTPUT_PARAM_NAME,
     ByteData,
     FunFromBytes,
@@ -228,11 +233,17 @@ class DataStorage(ABC):
         # so output handlers can use it
 
         callback_data = {
-            "metadata_origin": {
-                PROP_FUNCTION: wrapped_function.get_metadata(),
-                PROP_PARAMETER: [],  # will be filled by input handlers
+            "metadata_activity": {
+                # "@id": None,
+                "@type": "Activity",
                 PROP_DATETIME: get_now_str(),
                 PROP_CREATOR: get_user_w_host(),
+                PROP_JOB: {
+                    # "@id": set later when we have it
+                    "@type": "Job",
+                    PROP_FUNCTION: wrapped_function.get_metadata(),
+                    PROP_PARAMETER: [],  # will be filled by input handlers
+                },
             },
             "input_parameter_values": {},
             "task": None,  # will be filled later
@@ -243,11 +254,13 @@ class DataStorage(ABC):
                 callback_data["input_parameter_values"][name] = name_value
                 handler_w = AnnotatedFunction.assert_wrapped(handler)
 
-                callback_data["metadata_origin"][PROP_PARAMETER].append(
+                callback_data["metadata_activity"][PROP_JOB][PROP_PARAMETER].append(
                     {
+                        "@type": "Input",
+                        # "@id": set later when we have it
                         PROP_PARAMETER_VALUE: name_value,
                         PROP_PARAMETER_NAME: name,
-                        PROP_CONVERTED_WITH: handler_w.get_metadata(),
+                        PROP_LOADED_WITH: handler_w.get_metadata(),
                     }
                 )
 
@@ -263,43 +276,65 @@ class DataStorage(ABC):
                     value = remove_credentials_from_netloc(value)
 
                 callback_data["input_parameter_values"][name] = value
-                callback_data["metadata_origin"][PROP_PARAMETER].append(
-                    {PROP_PARAMETER_VALUE: value, PROP_PARAMETER_NAME: name}
+                callback_data["metadata_activity"][PROP_JOB][PROP_PARAMETER].append(
+                    {
+                        "@type": "Input",
+                        PROP_PARAMETER_VALUE: value,
+                        PROP_PARAMETER_NAME: name,
+                    }
                 )
 
                 return value
 
             return handle_
 
-        def wrap_output_handler(handler: Callable | None = None):
-            def create_job_id():
+        def wrap_output_handler(param_name: str, handler: Callable | None = None):
+            def update_metadata_task_id():
                 # generate task id (once)
-                if "@id" not in callback_data["metadata_origin"]:
+                if "@id" not in callback_data["metadata_activity"]:
                     task: Task = callback_data["task"]
                     job_hashsum = task.get_job_hashsum(
                         **callback_data["input_parameter_values"]
                     )
                     job_id = f"job:{job_hashsum}"
-                    callback_data["metadata_origin"]["@id"] = job_id
+                    datatime = callback_data["metadata_activity"][PROP_DATETIME]
+                    activity_id = f"activity:{job_hashsum}-{datatime}"
+                    callback_data["metadata_activity"]["@id"] = activity_id
+                    callback_data["metadata_activity"][PROP_JOB]["@id"] = job_id
+                    # update ids for input parameters
+                    for p in callback_data["metadata_activity"][PROP_JOB][
+                        PROP_PARAMETER
+                    ]:
+                        p["@id"] = activity_id + "/input/" + p[PROP_PARAMETER_NAME]
 
             if handler:
                 handler_w = AnnotatedFunction.assert_wrapped(handler)
-
-                def handle_(data: Any, name: Name):
-                    bdata = handler(data)
-                    self[name] = bdata
-                    create_job_id()
-                    metadata = self.metadata(name)
-                    metadata[PROP_GENERATED_BY] = callback_data["metadata_origin"] | {
-                        PROP_CONVERTED_WITH: handler_w.get_metadata(),
-                    }
+                meta_saved_with = {
+                    # "@id": set later when we have it
+                    "@type": "Output",
+                    PROP_FUNCTION: handler_w.get_metadata(),
+                }
             else:
+                meta_saved_with = {}
+                handler = identity
 
-                def handle_(data: Any, name: Name):
-                    self[name] = data
-                    create_job_id()
-                    metadata = self.metadata(name)
-                    metadata[PROP_GENERATED_BY] = callback_data["metadata_origin"]
+            def handle_(data: Any, name: Name):
+                bdata = handler(data)
+                self[name] = bdata
+                update_metadata_task_id()
+                metadata = self.metadata(name)
+                metadata["@id"] = "TODO"
+                metadata["@type"] = "Resource"
+                metadata[PROP_SIZE] = len(bdata)
+                metadata[PROP_HASHSUM] = "md5:" + hashlib.md5(bdata).hexdigest()  # noqa
+                metadata[PROP_GENERATED_BY] = callback_data["metadata_activity"]
+                if meta_saved_with:
+                    # update id
+                    metadata[PROP_SAVED_WITH] = meta_saved_with | {
+                        "@id": callback_data["metadata_activity"]["@id"]
+                        + "/output/"
+                        + param_name
+                    }
 
             return handle_
 
@@ -307,7 +342,8 @@ class DataStorage(ABC):
             return all(name in self for name in names.values())
 
         wrapped_output_handlers = {
-            name: wrap_output_handler(conv) for name, conv in output_converters.items()
+            name: wrap_output_handler(name, conv)
+            for name, conv in output_converters.items()
         }
 
         input_converters = input_converters or {}

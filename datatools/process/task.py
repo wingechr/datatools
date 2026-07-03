@@ -69,7 +69,11 @@ class AnnotatedFunction(Generic[FunParams, FunResult]):
 
     def get_metadata(self) -> dict[str, Json]:
         """TODO"""
-        return {"@id": self.function_id, PROP_DESCRIPTION: self.description}
+        return {
+            "@type": "Function",
+            "@id": self.function_id,
+            PROP_DESCRIPTION: self.description,
+        }
 
     @classmethod
     def wrap(
@@ -248,8 +252,3 @@ class Task:
         output_values = {p: param_values[p] for p in self.output_parameter_names}
         input_values = {p: param_values[p] for p in self.input_parameter_names}
         return output_values, input_values
-
-    def __str__(self) -> str:
-        inp = ", ".join(self.input_parameter_names)
-        outp = ", ".join(self.output_parameter_names)
-        return f"Task({inp}) -> ({outp})"

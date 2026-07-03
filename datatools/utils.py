@@ -938,6 +938,6 @@ def wrap_exception(
 def sql_query_result_to_csv_bytes(data: Iterable["Row"], **options) -> bytes:
     """TODO"""
     df = pd.DataFrame(data)
-    data_s = df.to_csv(index=False)
+    data_s = df.to_csv(index=False, lineterminator="\n")
     data_b = data_s.encode()
     return data_b
