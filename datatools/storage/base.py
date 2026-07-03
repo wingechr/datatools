@@ -312,6 +312,7 @@ class DataStorage(ABC):
                 meta_saved_with = {
                     # "@id": set later when we have it
                     "@type": "Output",
+                    PROP_PARAMETER_NAME: param_name,
                     PROP_FUNCTION: handler_w.get_metadata(),
                 }
             else:
@@ -323,8 +324,9 @@ class DataStorage(ABC):
                 self[name] = bdata
                 update_metadata_task_id()
                 metadata = self.metadata(name)
-                metadata["@id"] = "TODO"
+                metadata["@id"] = name
                 metadata["@type"] = "Resource"
+                metadata['$."$schema"'] = "TODO"  # NOTE: need to quote $schema
                 metadata[PROP_SIZE] = len(bdata)
                 metadata[PROP_HASHSUM] = "md5:" + hashlib.md5(bdata).hexdigest()  # noqa
                 metadata[PROP_GENERATED_BY] = callback_data["metadata_activity"]

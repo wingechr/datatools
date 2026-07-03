@@ -351,7 +351,8 @@ class TestUseCases(TestCase):
             )
 
             metadata_all_expected = {
-                "@id": "TODO",
+                "$schema": "TODO",
+                "@id": ":memory:",
                 "@type": "Resource",
                 # file info
                 PROP_SIZE: 4,
@@ -360,6 +361,7 @@ class TestUseCases(TestCase):
                 PROP_SAVED_WITH: {
                     "@id": activity_id + "/output/" + SINGLE_OUTPUT_PARAM_NAME,
                     "@type": "Output",
+                    PROP_PARAMETER_NAME: SINGLE_OUTPUT_PARAM_NAME,
                     PROP_FUNCTION: {
                         "@id": "sql_query_result_to_csv_bytes",
                         "@type": "Function",
