@@ -16,8 +16,8 @@ def dump(x):
 # use FileDataStorage to create jobs
 
 data_storage = FileDataStorage(".")
-job_generate = data_storage.job(generate, {"output": None}) # "output": None -> already bytes
-job_convert = data_storage.job(convert, {"output": dump}, {"data": json.loads})
+task_generate = data_storage.task(generate, {"output": None}) # "output": None -> already bytes
+task_convert = data_storage.task(convert, {"output": dump}, {"data": json.loads})
 
 # create rules to links jobs
 
@@ -27,14 +27,14 @@ rule convert:
     output:
         "converted.json"
     run:
-        job_convert(output[0], input[0])
+        task_convert(output[0], input[0])
 
 rule generate:
     output:
         "generatad.json"
     run:
-        job_generate(output[0])
+        task_generate(output[0])
 
 # for this simple exmaple, we could also manally just run
-# data_storage.job(generate, {"output": None}, skip_finished=True)("generatad.json")
-# data_storage.job(convert, {"output": dump}, {"data": json.loads}, skip_finished=True)("generatad.json", "converted.json")
+# data_storage.task(generate, {"output": None}, skip_finished=True)("generatad.json")
+# data_storage.task(convert, {"output": dump}, {"data": json.loads}, skip_finished=True)("generatad.json", "converted.json")

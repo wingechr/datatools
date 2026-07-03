@@ -19,7 +19,7 @@ from datatools.exceptions import (
     StorageFileNotFoundError,
     StorageInvalidNameError,
 )
-from datatools.job.job import FunctionWrapper
+from datatools.process.task import AnnotatedFunction
 from datatools.storage.__main__ import infer_storage_class
 from datatools.storage.base import DataStorage
 from datatools.storage.cli import CliWrapperDataStorage
@@ -391,7 +391,7 @@ class TestUseCases(TestCase):
         self.assertEqual(fun(1, y=2), fun(1, y=2))
         self.assertEqual(count_calls, 1)
 
-    def test_use_case_job_graph(self):
+    def test_use_case_task_graph(self):
         """TODO
 
         Cache is not useful in a large graph of operations,
@@ -403,7 +403,7 @@ class TestUseCases(TestCase):
         the build tool decides if and in what orderto call the functons with the
         arguments.
 
-        job(output:Path, input1:Path, input2:Path, param3:int=default) -> None
+        task(output:Path, input1:Path, input2:Path, param3:int=default) -> None
 
 
 
@@ -425,7 +425,7 @@ class TestUseCases(TestCase):
         for name in inputs.values():
             storage[name] = pickle.dumps(3)
 
-        job_create_output = storage.job(
+        task_create_output = storage.task(
             function,
             input_converters=dict.fromkeys(inputs, pickle.loads),
             output_converters=dict.fromkeys(outputs, pickle.dumps),
@@ -434,7 +434,7 @@ class TestUseCases(TestCase):
         # try to call mutliple times - but only of output does not exist
         for _ in range(2):
             if not all(name in storage for name in outputs.values()):
-                job_create_output(**outputs, **inputs)
+                task_create_output(**outputs, **inputs)
 
         self.assertTrue(all(name in storage for name in outputs.values()))
 
@@ -442,12 +442,12 @@ class TestUseCases(TestCase):
 
         # check that metadata should also be writtem
         for name in outputs.values():
-            job_timestamp_s = str(
+            task_timestamp_s = str(
                 get_item_or_first(storage.metadata(name)[QueryTimestamp])
             )
-            datetime.datetime.fromisoformat(job_timestamp_s)
+            datetime.datetime.fromisoformat(task_timestamp_s)
 
-    def test_use_chain_of_jobs_w_storage(self):
+    def test_use_chain_of_tasks_w_storage(self):
         """TODO
 
         In build tools like snakemake, we need to know node ids in advance.
@@ -466,28 +466,28 @@ class TestUseCases(TestCase):
         def generate1() -> bytes:
             return data1
 
-        @FunctionWrapper.wrap(function_id=fid_convert)
+        @AnnotatedFunction.wrap(function_id=fid_convert)
         def convert(data: list) -> list:
             return [x + 1 for x in data]
 
-        loads = FunctionWrapper(json.loads, function_id=fid_bytes2json)
+        loads = AnnotatedFunction(json.loads, function_id=fid_bytes2json)
 
         # "output": None -> already bytes
-        job_generate = storage.job(generate1, {"output": None}, skip_finished=True)
-        job_convert = storage.job(
+        task_generate = storage.task(generate1, {"output": None}, skip_finished=True)
+        task_convert = storage.task(
             convert,
             {"output": lambda x: json.dumps(x).encode()},
             {"data": loads},
             skip_finished=True,
         )
 
-        key1 = f"generated_{job_generate.get_job_hashsum()}.json"
-        job_generate(output=key1)
-        job_generate(key1)  # does nothing, because already created
+        key1 = f"generated_{task_generate.get_job_hashsum()}.json"
+        task_generate(output=key1)
+        task_generate(key1)  # does nothing, because already created
 
         # dynamically create id for next step (use same arguments as in actuall)
-        key2 = f"converted_{job_convert.get_job_hashsum(data=key1)}.json"
-        job_convert(output=key2, data=key1)
+        key2 = f"converted_{task_convert.get_job_hashsum(data=key1)}.json"
+        task_convert(output=key2, data=key1)
 
         # check metadata
         self.assertEqual(

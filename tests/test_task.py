@@ -2,8 +2,8 @@
 
 from unittest import TestCase
 
-from datatools.job.importer import infer_importer_class
-from datatools.job.job import Job
+from datatools.process.importer import infer_importer_class
+from datatools.process.task import Task
 
 
 class TestImporter(TestCase):
@@ -28,7 +28,7 @@ class TestImporter(TestCase):
             return 1
 
         # works
-        Job(
+        Task(
             test_fun,
             output_writers={"output": dump_null},
             input_readers={"b": read_1},
@@ -36,14 +36,14 @@ class TestImporter(TestCase):
         # should not work (output == input)
         self.assertRaises(
             Exception,
-            Job,
+            Task,
             test_fun,
             output_writers={"a": dump_null},
         )
         # should not work (invalid input)
         self.assertRaises(
             Exception,
-            Job,
+            Task,
             test_fun,
             output_writers={"output": dump_null},
             input_readers={"X": read_1},

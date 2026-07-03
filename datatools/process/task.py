@@ -1,4 +1,32 @@
-"""Abstract classes / interfaces, types"""
+"""Abstract classes / interfaces, types
+
+Concepts
+
+Functions get various input parameters (of different types) and return an output.
+
+The callable AnnotatedFunction does not change the signature or behaviour of
+the Function in any way but provides additional metadata
+(especially a unique id and description).
+
+A Task has a changed signature from its base wrapped Function.
+One or more output arguments are attached to the front, and the types of some of the
+imputs have changed.
+These will be usually file names where output is stored or input is read from.
+The Task has been created with suitable reading/writing functions to convert from
+and to bytes for these.
+Calling the Task does not return result (except maybe a success status).
+
+A Job is a Task where at least the input parameters are provided.
+But the Task has not been executed yet. This can be used to create a unique
+hash for caching from function id and input values.
+
+An Activity is the process of running the Job.
+It also creates some context metadata (like timestamp) when it wus run.
+It must have a unique id as well, but maybe we just use a random UID, or alternatively
+the Task's id plus some hashed context data.
+
+
+"""
 
 from collections.abc import Callable
 import logging
@@ -14,7 +42,7 @@ from datatools.utils import (
 )
 
 
-class FunctionWrapper(Generic[FunParams, FunResult]):
+class AnnotatedFunction(Generic[FunParams, FunResult]):
     """TODO"""
 
     def __init__(
@@ -53,7 +81,7 @@ class FunctionWrapper(Generic[FunParams, FunResult]):
         """TODO"""
 
         def decorator(fun):
-            return FunctionWrapper(
+            return AnnotatedFunction(
                 fun,
                 function_id=function_id,
                 description=description,
@@ -63,37 +91,76 @@ class FunctionWrapper(Generic[FunParams, FunResult]):
         return decorator
 
     @classmethod
-    def assert_wrapped(cls, function: Callable) -> "FunctionWrapper":
+    def assert_wrapped(cls, function: Callable) -> "AnnotatedFunction":
         """TODO"""
-        if isinstance(function, FunctionWrapper):
+        if isinstance(function, AnnotatedFunction):
             return function
-        return FunctionWrapper(function)
+        return AnnotatedFunction(function)
 
 
-def get_job_input_parameters(job: "Job", *args, **kwargs) -> dict:
+def get_task_input_parameters(task: "Task", *args, **kwargs) -> dict:
     """TODO"""
     # logging.error((args, kwargs))
-    _output_params, input_params = job.get_job_parameters(
-        *job.output_parameter_names, *args, **kwargs
+    _output_params, input_params = task.get_input_output_parameters(
+        *task.output_parameter_names, *args, **kwargs
     )
     return input_params
 
 
-def default_get_hash_data(job: "Job", input_params: dict) -> Json:
+def default_get_hash_data(task: "Task", input_params: dict) -> Json:
     """TODO"""
-    function_id = job.function.function_id
+    function_id = task.function.function_id
     return {"function": function_id, "parameters": input_params}
 
 
-def default_get_job_hashsum(job: "Job", *args, **kwargs) -> str:
+def default_get_job_hashsum(task: "Task", *args, **kwargs) -> str:
     """TODO"""
-    input_params = get_job_input_parameters(job, *args, **kwargs)
-    hash_data = default_get_hash_data(job, input_params)
+    input_params = get_task_input_parameters(task, *args, **kwargs)
+    hash_data = default_get_hash_data(task, input_params)
     hashsum = get_md5_hash(hash_data)
     return hashsum
 
 
 class Job:
+    """TODO"""
+
+    def __init__(
+        self,
+        output_names: dict,
+        output_writers: dict,
+        input_readers: dict,
+        input_params: dict,
+        function: Callable,
+        check_done: Callable | None,
+    ):
+        self.output_names = output_names
+        self.output_writers = output_writers
+        self.input_readers = input_readers
+        self.input_params = input_params
+        self.function = function
+        self.check_done = check_done
+
+    def __call__(self):
+        """TODO"""
+        if self.check_done and self.check_done(**self.output_names):
+            logging.info("Already done, %s", self)
+            return
+
+        updated_input_values = {
+            p: read(self.input_params[p]) for p, read in self.input_readers.items()
+        }
+
+        input_param_values = self.input_params | updated_input_values
+
+        # call function
+        result = self.function(**input_param_values)
+
+        for param, write in self.output_writers.items():
+            name = self.output_names[param]
+            write(result, name)
+
+
+class Task:
     """TODO"""
 
     def __init__(
@@ -104,7 +171,7 @@ class Job:
         check_done: Callable[..., bool] | None = None,
         get_job_hashsum: FunHashsum = default_get_job_hashsum,
     ):
-        self.function = FunctionWrapper.assert_wrapped(function)
+        self.function = AnnotatedFunction.assert_wrapped(function)
         self.output_writers = output_writers
         self.input_readers = input_readers or {}
         self.check_done = check_done
@@ -145,36 +212,27 @@ class Job:
         FIXME: create unit tests - why dont i have to pass output args like
         the same way as in __call__?
         """
-        return self._get_job_hashsum(self, *args, **kwargs)  # self is first arg (job)
+        return self._get_job_hashsum(self, *args, **kwargs)  # self is first arg (task)
+
+    def create_job(self, *args, **kwargs) -> Job:
+        """TODO"""
+        output_names, input_params = self.get_input_output_parameters(*args, **kwargs)
+        job = Job(
+            output_names=output_names,
+            output_writers=self.output_writers,
+            input_readers=self.input_readers,
+            input_params=input_params,
+            function=self.function,
+            check_done=self.check_done,
+        )
+        return job
 
     def __call__(self, *args, **kwargs):
         """TODO"""
-        # logging.error("orig_fun_parameter_names: %s", input_parameter_names)
+        job = self.create_job(*args, **kwargs)
+        job()
 
-        output_names, input_params = self.get_job_parameters(*args, **kwargs)
-
-        if self.check_done and self.check_done(**output_names):
-            logging.info("Already done, %s", self)
-            return
-
-        # logging.error("input_params: %s", input_params)
-
-        updated_input_values = {
-            p: read(input_params[p]) for p, read in self.input_readers.items()
-        }
-
-        input_param_values = input_params | updated_input_values
-
-        # logging.error("param_values input_param_values: %s", input_param_values)
-
-        # call function
-        result = self.function(**input_param_values)
-
-        for param, write in self.output_writers.items():
-            name = output_names[param]
-            write(result, name)
-
-    def get_job_parameters(
+    def get_input_output_parameters(
         self,
         *args,
         **kwargs,
@@ -194,4 +252,4 @@ class Job:
     def __str__(self) -> str:
         inp = ", ".join(self.input_parameter_names)
         outp = ", ".join(self.output_parameter_names)
-        return f"Job({inp}) -> ({outp})"
+        return f"Task({inp}) -> ({outp})"

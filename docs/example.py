@@ -44,8 +44,8 @@ with TemporaryDirectory() as tempdir:
         """sum of input values"""
         return value1 + value2 + int(value3["value"].sum())
 
-    # define a job
-    job = st.job(
+    # define a task
+    task = st.task(
         sum_values,
         # to / from bytes convert fro output/input
         output_converters=lambda x: json.dumps(x).encode(),
@@ -57,9 +57,9 @@ with TemporaryDirectory() as tempdir:
         skip_finished=True,
     )
 
-    # run job
+    # run task
     name4 = "result.json"
-    job(name4, value1=name1, value2=name2, value3=name3)
+    task(name4, value1=name1, value2=name2, value3=name3)
 
     # check result and metadata
     assert len(st[name1]) == len(st[name2])  # imported same files 2 times

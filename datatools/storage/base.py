@@ -12,8 +12,8 @@ from datatools.exceptions import (
     StorageFileNotFoundError,
     StorageInvalidNameError,
 )
-from datatools.job.importer import infer_importer_class
-from datatools.job.job import FunctionWrapper, Job, default_get_job_hashsum
+from datatools.process.importer import infer_importer_class
+from datatools.process.task import AnnotatedFunction, Task, default_get_job_hashsum
 from datatools.types import (
     PROP_CONVERTED_WITH,
     PROP_CREATOR,
@@ -164,13 +164,13 @@ class DataStorage(ABC):
 
         # logging.error((uri, name, options))
 
-        job = self.job(
+        task = self.task(
             function=importer_class.get_data,
             output_converters={
                 SINGLE_OUTPUT_PARAM_NAME: importer_class.output_to_bytes
             },
         )
-        job(name, uri, **options)
+        task(name, uri, **options)
         return name
 
     def cache(
@@ -185,7 +185,7 @@ class DataStorage(ABC):
         def decorator(function: Callable[FunParams, FunResult]) -> Callable:
             """TODO"""
 
-            job = self.job(
+            task = self.task(
                 function=function,
                 output_converters={SINGLE_OUTPUT_PARAM_NAME: output_to_bytes},
                 get_job_hashsum=get_job_hashsum,
@@ -193,13 +193,13 @@ class DataStorage(ABC):
 
             @functools.wraps(function)
             def _fun(*args, **kwargs):
-                hashsum = job.get_job_hashsum(*args, **kwargs)
+                hashsum = task.get_job_hashsum(*args, **kwargs)
                 output_name = get_name_from_hash(hashsum)
                 # logging.error((hash_data, hashsum))
 
                 if output_name not in self:
-                    # run job (first arg (_output_name) is name)
-                    job(output_name, *args, **kwargs)
+                    # run task (first arg (_output_name) is name)
+                    task(output_name, *args, **kwargs)
 
                 # retrieval
                 data = self[output_name]
@@ -210,21 +210,21 @@ class DataStorage(ABC):
 
         return decorator
 
-    def job(
+    def task(
         self,
         function: Callable,
         output_converters: dict[str, FunToBytes | None] | FunToBytes | None = None,
         input_converters: dict[str, FunFromBytes | None] | None = None,
         get_job_hashsum: FunHashsum = default_get_job_hashsum,
         skip_finished: bool = False,
-    ) -> Job:
+    ) -> Task:
         """TODO"""
 
-        wrapped_function = FunctionWrapper.assert_wrapped(function)
+        wrapped_function = AnnotatedFunction.assert_wrapped(function)
         if not isinstance(output_converters, dict):
             output_converters = {SINGLE_OUTPUT_PARAM_NAME: output_converters}
 
-        # update metadata before running job
+        # update metadata before running task
         # so output handlers can use it
 
         callback_data = {
@@ -235,13 +235,13 @@ class DataStorage(ABC):
                 PROP_CREATOR: get_user_w_host(),
             },
             "input_parameter_values": {},
-            "job": None,  # will be filled later
+            "task": None,  # will be filled later
         }
 
         def wrap_input_handler(name: str, handler: Callable):
             def handle_(name_value: Name):
                 callback_data["input_parameter_values"][name] = name_value
-                handler_w = FunctionWrapper.assert_wrapped(handler)
+                handler_w = AnnotatedFunction.assert_wrapped(handler)
 
                 callback_data["metadata_origin"][PROP_PARAMETER].append(
                     {
@@ -259,7 +259,7 @@ class DataStorage(ABC):
         def create_input_handler(name):
             def handle_(value: Any):
                 with contextlib.suppress(Exception):
-                    # TODO: maybe get fromhandler
+                    # TODO: maybe get from handler
                     value = remove_credentials_from_netloc(value)
 
                 callback_data["input_parameter_values"][name] = value
@@ -273,17 +273,17 @@ class DataStorage(ABC):
 
         def wrap_output_handler(handler: Callable | None = None):
             def create_job_id():
-                # generate job id (once)
+                # generate task id (once)
                 if "@id" not in callback_data["metadata_origin"]:
-                    job: Job = callback_data["job"]
-                    job_hashsum = job.get_job_hashsum(
+                    task: Task = callback_data["task"]
+                    job_hashsum = task.get_job_hashsum(
                         **callback_data["input_parameter_values"]
                     )
                     job_id = f"job:{job_hashsum}"
                     callback_data["metadata_origin"]["@id"] = job_id
 
             if handler:
-                handler_w = FunctionWrapper.assert_wrapped(handler)
+                handler_w = AnnotatedFunction.assert_wrapped(handler)
 
                 def handle_(data: Any, name: Name):
                     bdata = handler(data)
@@ -321,12 +321,12 @@ class DataStorage(ABC):
             for name in wrapped_function.fun_parameter_names
         }
 
-        job = Job(
+        task = Task(
             function,
             output_writers=wrapped_output_handlers,
             input_readers=wrapped_input_handlers,
             get_job_hashsum=get_job_hashsum,
             check_done=check_names_exist if skip_finished else None,
         )
-        callback_data["job"] = job
-        return job
+        callback_data["task"] = task
+        return task

@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 from typing_extensions import override
 
-from datatools.job.job import FunctionWrapper
+from datatools.process.task import AnnotatedFunction
 from datatools.types import FunToBytes, Name
 from datatools.utils import (
     get_name_from_uri,
@@ -52,7 +52,7 @@ class HttpImporter(Importer):
     """TODO"""
 
     # use generic id (tool does not matter)
-    get_data = FunctionWrapper.wrap(function_id="GET")(http_get)
+    get_data = AnnotatedFunction.wrap(function_id="GET")(http_get)
 
     @classmethod
     @override
@@ -69,7 +69,7 @@ class FileImporter(Importer):
     """TODO"""
 
     # use generic id (tool does not matter)
-    get_data = FunctionWrapper.wrap(function_id="COPY")(read_file_uri)
+    get_data = AnnotatedFunction.wrap(function_id="COPY")(read_file_uri)
 
     @classmethod
     def can_handle(cls, uri: str, **options) -> bool:
@@ -96,8 +96,8 @@ class SqlImporter(Importer):
     """TODO"""
 
     # use generic id (tool does not matter)
-    get_data = FunctionWrapper.wrap(function_id="QUERY")(query_sql)
-    output_to_bytes = FunctionWrapper.wrap()(sql_query_result_to_csv_bytes)
+    get_data = AnnotatedFunction.wrap(function_id="QUERY")(query_sql)
+    output_to_bytes = AnnotatedFunction.wrap()(sql_query_result_to_csv_bytes)
 
     @classmethod
     @override
