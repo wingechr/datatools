@@ -16,7 +16,8 @@ class MemoryMetadataStorage(MetadataStorage):
         self._data = {} if data is None else data
 
     def _getitem(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
-        return jsonpath_get(data=self._data, key=attribute)
+        result = jsonpath_get(data=self._data, key=attribute)
+        return result
 
     def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
         jsonpath_update(data=self._data, key=attribute, val=value)

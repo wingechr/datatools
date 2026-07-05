@@ -18,9 +18,9 @@ from datatools.process.task import AnnotatedFunction, Task, default_get_job_hash
 from datatools.types import (
     PROP_CREATOR,
     PROP_DATETIME,
+    PROP_FILE,
     PROP_FUNCTION,
     PROP_GENERATED_BY,
-    PROP_HASHSUM,
     PROP_JOB,
     PROP_LOADED_WITH,
     PROP_PARAMETER,
@@ -238,12 +238,8 @@ class DataStorage(ABC):
                 "@type": "Activity",
                 PROP_DATETIME: get_now_str(),
                 PROP_CREATOR: get_user_w_host(),
-                PROP_JOB: {
-                    # "@id": set later when we have it
-                    "@type": "Job",
-                    PROP_FUNCTION: wrapped_function.get_metadata(),
-                    PROP_PARAMETER: [],  # will be filled by input handlers
-                },
+                PROP_FUNCTION: wrapped_function.get_metadata(),
+                PROP_PARAMETER: [],  # will be filled by input handlers
             },
             "input_parameter_values": {},
             "task": None,  # will be filled later
@@ -254,7 +250,7 @@ class DataStorage(ABC):
                 callback_data["input_parameter_values"][name] = name_value
                 handler_w = AnnotatedFunction.assert_wrapped(handler)
 
-                callback_data["metadata_activity"][PROP_JOB][PROP_PARAMETER].append(
+                callback_data["metadata_activity"][PROP_PARAMETER].append(
                     {
                         "@type": "Input",
                         # "@id": set later when we have it
@@ -276,7 +272,7 @@ class DataStorage(ABC):
                     value = remove_credentials_from_netloc(value)
 
                 callback_data["input_parameter_values"][name] = value
-                callback_data["metadata_activity"][PROP_JOB][PROP_PARAMETER].append(
+                callback_data["metadata_activity"][PROP_PARAMETER].append(
                     {
                         "@type": "Input",
                         PROP_PARAMETER_VALUE: value,
@@ -300,20 +296,17 @@ class DataStorage(ABC):
                     datatime = callback_data["metadata_activity"][PROP_DATETIME]
                     activity_id = f"activity:{job_hashsum}-{datatime}"
                     callback_data["metadata_activity"]["@id"] = activity_id
-                    callback_data["metadata_activity"][PROP_JOB]["@id"] = job_id
+                    callback_data["metadata_activity"][PROP_JOB] = job_id
                     # update ids for input parameters
-                    for p in callback_data["metadata_activity"][PROP_JOB][
-                        PROP_PARAMETER
-                    ]:
+                    for p in callback_data["metadata_activity"][PROP_PARAMETER]:
                         p["@id"] = activity_id + "/input/" + p[PROP_PARAMETER_NAME]
 
             if handler:
                 handler_w = AnnotatedFunction.assert_wrapped(handler)
                 meta_saved_with = {
                     # "@id": set later when we have it
-                    "@type": "Output",
-                    PROP_PARAMETER_NAME: param_name,
                     PROP_FUNCTION: handler_w.get_metadata(),
+                    PROP_PARAMETER_NAME: param_name,
                 }
             else:
                 meta_saved_with = {}
@@ -323,20 +316,30 @@ class DataStorage(ABC):
                 bdata = handler(data)
                 self[name] = bdata
                 update_metadata_task_id()
-                metadata = self.metadata(name)
-                metadata["@id"] = name
-                metadata["@type"] = "Resource"
-                metadata['$."$schema"'] = "TODO"  # NOTE: need to quote $schema
-                metadata[PROP_SIZE] = len(bdata)
-                metadata[PROP_HASHSUM] = "md5:" + hashlib.md5(bdata).hexdigest()  # noqa
-                metadata[PROP_GENERATED_BY] = callback_data["metadata_activity"]
+                output_metadata = {
+                    "@type": "Output",
+                    "name": name,
+                    "@id": callback_data["metadata_activity"]["@id"]
+                    + "/output/"
+                    + param_name,
+                    PROP_FILE: {
+                        "@id": "md5:" + hashlib.md5(bdata).hexdigest(),  # noqa:S324
+                        "@type": "File",
+                        PROP_SIZE: len(bdata),
+                    },
+                    PROP_GENERATED_BY: callback_data["metadata_activity"],
+                }
+
                 if meta_saved_with:
                     # update id
-                    metadata[PROP_SAVED_WITH] = meta_saved_with | {
-                        "@id": callback_data["metadata_activity"]["@id"]
-                        + "/output/"
-                        + param_name
-                    }
+                    output_metadata[PROP_SAVED_WITH] = meta_saved_with
+
+                # cannot set root itself:
+                metadata = self.metadata(name)
+                for key, val in output_metadata.items():
+                    metadata[key] = val
+
+                metadata['$."$schema"'] = "TODO"  # need to quote
 
             return handle_
 

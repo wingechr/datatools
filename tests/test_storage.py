@@ -30,9 +30,9 @@ from datatools.storage.sql import SqlDataStorage
 from datatools.types import (
     PROP_CREATOR,
     PROP_DATETIME,
+    PROP_FILE,
     PROP_FUNCTION,
     PROP_GENERATED_BY,
-    PROP_HASHSUM,
     PROP_JOB,
     PROP_PARAMETER,
     PROP_PARAMETER_NAME,
@@ -50,7 +50,7 @@ from datatools.utils import (
 )
 from tests.base import TempdirTestCase
 
-QueryParameterUri = f'{PROP_GENERATED_BY}.{PROP_JOB}.{PROP_PARAMETER}[?({PROP_PARAMETER_NAME} == "uri")].{PROP_PARAMETER_VALUE}'  # noqa:E501
+QueryParameterUri = f'{PROP_GENERATED_BY}.{PROP_PARAMETER}[?({PROP_PARAMETER_NAME} == "uri")].{PROP_PARAMETER_VALUE}'  # noqa:E501
 QueryTimestamp = f"{PROP_GENERATED_BY}.{PROP_DATETIME}"
 
 
@@ -342,7 +342,7 @@ class TestUseCases(TestCase):
 
             metadata_activity: dict = metadata_all[PROP_GENERATED_BY]  # type:ignore
 
-            job_id = metadata_activity[PROP_JOB]["@id"]
+            job_id = metadata_activity[PROP_JOB]
             self.assertTrue(job_id, "")
             activity_id = (
                 job_id.replace("job:", "activity:")
@@ -352,21 +352,23 @@ class TestUseCases(TestCase):
 
             metadata_all_expected = {
                 "$schema": "TODO",
-                "@id": ":memory:",
-                "@type": "Resource",
+                "@id": activity_id + "/output/" + SINGLE_OUTPUT_PARAM_NAME,
+                "@type": "Output",
+                "name": ":memory:",
                 # file info
-                PROP_SIZE: 4,
-                PROP_HASHSUM: "md5:34ff2335cbe2045ddc3b78993d1e971d",
+                PROP_FILE: {
+                    "@id": "md5:34ff2335cbe2045ddc3b78993d1e971d",
+                    "@type": "File",
+                    PROP_SIZE: 4,
+                },
                 # file saved with info
                 PROP_SAVED_WITH: {
-                    "@id": activity_id + "/output/" + SINGLE_OUTPUT_PARAM_NAME,
-                    "@type": "Output",
-                    PROP_PARAMETER_NAME: SINGLE_OUTPUT_PARAM_NAME,
                     PROP_FUNCTION: {
                         "@id": "sql_query_result_to_csv_bytes",
                         "@type": "Function",
                         "description": sql_query_result_to_csv_bytes.__doc__,
                     },
+                    PROP_PARAMETER_NAME: SINGLE_OUTPUT_PARAM_NAME,
                 },
                 # file generation info
                 PROP_GENERATED_BY: {
@@ -376,35 +378,32 @@ class TestUseCases(TestCase):
                     PROP_DATETIME: metadata_activity[PROP_DATETIME],
                     PROP_CREATOR: metadata_activity[PROP_CREATOR],
                     # Job
-                    PROP_JOB: {
-                        "@id": job_id,
-                        "@type": "Job",
-                        PROP_FUNCTION: {
-                            "@id": "QUERY",
-                            "@type": "Function",
-                            "description": query_sql.__doc__,
-                        },
-                        PROP_PARAMETER: [
-                            {
-                                "@id": activity_id + "/input/uri",
-                                "@type": "Input",
-                                PROP_PARAMETER_NAME: "uri",
-                                PROP_PARAMETER_VALUE: "sqlite:///:memory:",
-                            },
-                            {
-                                "@id": activity_id + "/input/query",
-                                "@type": "Input",
-                                PROP_PARAMETER_NAME: "query",
-                                PROP_PARAMETER_VALUE: "select 1 as a",
-                            },
-                            {
-                                "@id": activity_id + "/input/options",
-                                "@type": "Input",
-                                PROP_PARAMETER_NAME: "options",
-                                PROP_PARAMETER_VALUE: None,
-                            },
-                        ],
+                    PROP_FUNCTION: {
+                        "@id": "QUERY",
+                        "@type": "Function",
+                        "description": query_sql.__doc__,
                     },
+                    PROP_JOB: job_id,
+                    PROP_PARAMETER: [
+                        {
+                            "@id": activity_id + "/input/uri",
+                            "@type": "Input",
+                            PROP_PARAMETER_NAME: "uri",
+                            PROP_PARAMETER_VALUE: "sqlite:///:memory:",
+                        },
+                        {
+                            "@id": activity_id + "/input/query",
+                            "@type": "Input",
+                            PROP_PARAMETER_NAME: "query",
+                            PROP_PARAMETER_VALUE: "select 1 as a",
+                        },
+                        {
+                            "@id": activity_id + "/input/options",
+                            "@type": "Input",
+                            PROP_PARAMETER_NAME: "options",
+                            PROP_PARAMETER_VALUE: None,
+                        },
+                    ],
                 },
             }
             self.maxDiff = None
@@ -530,9 +529,7 @@ class TestUseCases(TestCase):
         # check metadata
         self.assertEqual(
             get_item_or_first(
-                storage.metadata(key2)[
-                    f"{PROP_GENERATED_BY}.{PROP_JOB}.{PROP_FUNCTION}.@id"
-                ]
+                storage.metadata(key2)[f"{PROP_GENERATED_BY}.{PROP_FUNCTION}.@id"]
             ),
             fid_convert,
         )

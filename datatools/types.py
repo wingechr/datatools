@@ -53,5 +53,6 @@ PROP_PARAMETER = "parameter"  # TODO
 PROP_PARAMETER_NAME = "name"  # https://schema.org/name
 PROP_PARAMETER_VALUE = "@value"
 PROP_SIZE = "sizeBytes"
+PROP_FILE = "file"
 PROP_HASHSUM = "hashsum"
 PROP_JOB = "job"
