@@ -1,6 +1,6 @@
 [project]
 name = "wingechr-datatools"
-version = "0.15.0"
+version = "0.15.1"
 description = "TODO"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
@@ -16,9 +16,7 @@ dependencies = [
     "openpyxl>=3.1.5",
     "pandas>=2.3.3",
     "pydantic>=2.13.4",
-    "pyodbc>=5.3.0",
     "rdflib>=7.6.0",
-    "snakemake>=7.32.4",
     "sqlalchemy>=2.0.51",
     "sqlparse>=0.5.5",
     "typing-extensions>=4.15.0",
@@ -33,6 +31,7 @@ test = [
     "pytest>=9.0",
     "tox>=4.47",
     "pytest-cov>=7.0.0",
+    "snakemake>=7.32.4",
 ]
 docs = [
     "mdx-truly-sane-lists>=1.3",

@@ -38,5 +38,5 @@ def main(loglevel: str) -> None:
 main.add_command(storage_main, name="storage")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     wrap_exception(main)

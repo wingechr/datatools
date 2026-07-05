@@ -14,23 +14,24 @@ from sqlalchemy import (
     create_engine,
 )
 
+from datatools.exceptions import StorageFileNotFoundError
 from datatools.storage.base import DataStorage, MetadataStorage
 from datatools.storage.memory import PersistentMemoryMetadataStorage
-from datatools.types import UID
+from datatools.types import Name
 
 sql_base = MetaData()
 
 table_data = Table(
     "data",
     sql_base,
-    Column("uid", VARCHAR, primary_key=True),
+    Column("name", VARCHAR, primary_key=True),
     Column("data", VARBINARY),
 )
 
 table_metadata = Table(
     "metadata",
     sql_base,
-    Column("uid", VARCHAR, primary_key=True),
+    Column("name", VARCHAR, primary_key=True),
     Column("metadata", VARCHAR),  # or use JSON
 )
 
@@ -38,9 +39,9 @@ table_metadata = Table(
 class SqlMetadataStorage(PersistentMemoryMetadataStorage):
     """TODO"""
 
-    def __init__(self, engine: Engine, uid: UID):
+    def __init__(self, engine: Engine, name: Name):
         self._engine = engine
-        self._uid = uid
+        self._name = name
         super().__init__()
 
     def _load_or_init(self) -> dict | None:
@@ -49,7 +50,7 @@ class SqlMetadataStorage(PersistentMemoryMetadataStorage):
                 table_metadata.select()
                 .with_only_columns(table_metadata.c.metadata)
                 .where(
-                    table_metadata.c.uid == self._uid,
+                    table_metadata.c.name == self._name,
                 )
             ).fetchall()
         if rows:
@@ -62,8 +63,8 @@ class SqlMetadataStorage(PersistentMemoryMetadataStorage):
         with self._engine.begin() as con:
             resp = con.execute(
                 table_metadata.select()
-                .with_only_columns(table_metadata.c.uid)
-                .where(table_metadata.c.uid == self._uid)
+                .with_only_columns(table_metadata.c.name)
+                .where(table_metadata.c.name == self._name)
             )
             n_res = len(resp.fetchall())
             if n_res:
@@ -71,12 +72,12 @@ class SqlMetadataStorage(PersistentMemoryMetadataStorage):
                 con.execute(
                     table_metadata.update()
                     .values(metadata=data_s)
-                    .where(table_metadata.c.uid == self._uid)
+                    .where(table_metadata.c.name == self._name)
                 )
             else:
                 # insert
                 con.execute(
-                    table_metadata.insert().values(uid=self._uid, metadata=data_s)
+                    table_metadata.insert().values(name=self._name, metadata=data_s)
                 )
 
 
@@ -98,41 +99,41 @@ class SqlDataStorage(DataStorage):
 
         sql_base.create_all(self._engine)
 
-    def _contains(self, uid: UID) -> bool:
+    def _contains(self, name: Name) -> bool:
         with self._engine.begin() as con:
             resp = con.execute(
                 table_data.select()
-                .with_only_columns(table_data.c.uid)
-                .where(table_data.c.uid == uid)
+                .with_only_columns(table_data.c.name)
+                .where(table_data.c.name == name)
             )
             n_res = len(resp.fetchall())
         return bool(n_res)
 
-    def _getitem(self, uid: UID) -> bytes:
+    def _getitem(self, name: Name) -> bytes:
         with self._engine.begin() as con:
             resp = con.execute(
                 table_data.select()
                 .with_only_columns(table_data.c.data)
-                .where(table_data.c.uid == uid)
+                .where(table_data.c.name == name)
             )
             row = resp.fetchone()
             if not row:
-                raise Exception()
+                raise StorageFileNotFoundError(f"Not found: {name}")
             return row[0]
 
-    def _setitem(self, uid: UID, data: bytes) -> None:
+    def _setitem(self, name: Name, data: bytes) -> None:
         with self._engine.begin() as con:
-            con.execute(table_data.insert().values(uid=uid, data=data))
+            con.execute(table_data.insert().values(name=name, data=data))
 
-    def _delitem(self, uid: UID) -> None:
+    def _delitem(self, name: Name) -> None:
         with self._engine.begin() as con:
-            con.execute(table_data.delete().where(table_data.c.uid == uid))
+            con.execute(table_data.delete().where(table_data.c.name == name))
 
-    def _list(self) -> Iterable[UID]:
+    def _list(self) -> Iterable[Name]:
         with self._engine.begin() as con:
-            resp = con.execute(table_data.select().with_only_columns(table_data.c.uid))
-            uids = {x[0] for x in resp.fetchall()}
-        return uids
+            resp = con.execute(table_data.select().with_only_columns(table_data.c.name))
+            names = {x[0] for x in resp.fetchall()}
+        return names
 
-    def _metadata(self, uid: UID) -> MetadataStorage:
-        return SqlMetadataStorage(engine=self._engine, uid=uid)
+    def _metadata(self, name: Name) -> MetadataStorage:
+        return SqlMetadataStorage(engine=self._engine, name=name)

@@ -7,7 +7,6 @@ from functools import cache, partial
 import hashlib
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import importlib
-import importlib.util
 import inspect
 from inspect import Parameter, Signature
 import json
@@ -15,27 +14,33 @@ import logging
 import math
 import os
 from pathlib import Path
-import pickle
 import re
+import site
 import socket
 import subprocess
-import subprocess as sp
 import sys
 from threading import Thread
-from typing import Any, Literal
+import time
+from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import unquote, urlparse, urlsplit
 from urllib.request import url2pathname
 
 import chardet
+import httpx
 import jsonpath_ng
+import jsonpath_ng.ext
 import numpy as np
 import pandas as pd
-from pyodbc import Cursor
+import sqlalchemy as sa
 import sqlparse
 import tzlocal
 
-from datatools.exceptions import SubprocessStatus
 from datatools.types import Json, StrPath, SubCls
+
+if TYPE_CHECKING:
+    from sqlalchemy.engine import CursorResult
+    from sqlalchemy.engine.row import Row
+
 
 DATETIMETZ_FMT = "%Y-%m-%dT%H:%M:%S%z"
 DATE_FMT = "%Y-%m-%d"
@@ -106,30 +111,6 @@ class TextFile:
         self.dump_str(data_s)
 
 
-def find_subclass(base_cls, name: str):
-    """TODO"""
-    for cls in base_cls.__subclasses__():
-        if cls.__name__ == name:
-            return cls
-        found = find_subclass(cls, name)
-        if found:
-            return found
-    return None
-
-
-def wrap_exception(function: Callable[[], None], debug: bool = True):
-    """TODO"""
-    try:
-        # your logic here
-        function()
-    except Exception as e:
-        if debug:
-            logging.exception(e)  # includes stack trace
-        else:
-            logging.error(e)
-        sys.exit(1)
-
-
 def parse_cmd_vals(arguments: list[str]) -> dict[str, Json]:
     """TODO"""
     items = [kv.split("=", 1) for kv in arguments]
@@ -145,7 +126,20 @@ def get_free_port() -> int:
 
 
 def file_uri_to_path(uri: str) -> Path:
-    """TODO"""
+    """TODO
+
+    Example:
+
+    >>> file_uri_to_path("file:///absolue/path").as_posix()
+    '/absolue/path'
+    >>> file_uri_to_path("file:///./relative/path").relative_to(os.getcwd()).as_posix()
+    'relative/path'
+    >>> file_uri_to_path("file://host/path").as_posix()
+    Traceback (most recent call last):
+        ...
+    NotImplementedError:
+
+    """
     parts = urlparse(uri)
     if parts.netloc:
         raise NotImplementedError(uri)
@@ -167,7 +161,18 @@ def reverse_prints(stdout_data: bytes) -> list[str]:
 
 
 def try_parse_json_str(s: str) -> Any:
-    """TODO"""
+    """TODO
+
+    Example:
+
+    >>> try_parse_json_str("s")
+    's'
+    >>> try_parse_json_str('"s"')
+    's'
+    >>> try_parse_json_str(1)
+    1
+
+    """
     try:
         return json.loads(s)
     except Exception:
@@ -175,14 +180,36 @@ def try_parse_json_str(s: str) -> Any:
 
 
 def is_file_uri_or_path(x: str | Path) -> bool:
-    """TODO"""
+    """TODO
+
+    Example:
+
+    >>> is_file_uri_or_path(Path("."))
+    True
+    >>> is_file_uri_or_path("file:///path")
+    True
+    >>> is_file_uri_or_path("http:///path")
+    False
+
+    """
     if isinstance(x, Path):
         return True
     return bool(re.match(r"file://", x)) or "://" not in x
 
 
 def uri_or_path_to_path(x: str | Path) -> Path:
-    """TODO"""
+    """TODO
+
+    Example:
+    >>> from pathlib import Path
+    >>> uri_or_path_to_path(Path(".")).as_posix()
+    '.'
+    >>> uri_or_path_to_path(".").resolve().relative_to(os.getcwd()).as_posix()
+    '.'
+    >>> uri_or_path_to_path("file:///./").relative_to(os.getcwd()).as_posix()
+    '.'
+
+    """
     if isinstance(x, Path):
         return x
     elif re.match(r"file://", x):
@@ -202,7 +229,25 @@ def function_get_defaults(func: Callable):
 
 
 def function_has_varargs(func: Callable) -> bool:
-    """TODO"""
+    """TODO
+
+    >>> def f():
+    ...     pass
+    >>> function_has_varargs(f)
+    False
+    >>> def f(a, b=1):
+    ...     pass
+    >>> function_has_varargs(f)
+    False
+    >>> def f(a, *args):
+    ...     pass
+    >>> function_has_varargs(f)
+    True
+    >>> def f(a, **kwargs):
+    ...     pass
+    >>> function_has_varargs(f)
+    True
+    """
     sig = inspect.signature(func)
     has_args = any(p.kind == Parameter.VAR_POSITIONAL for p in sig.parameters.values())
     has_kwargs = any(p.kind == Parameter.VAR_KEYWORD for p in sig.parameters.values())
@@ -217,14 +262,6 @@ def function_get_regular_params(func: Callable) -> list[str]:
 
     sig = inspect.signature(func)
     return list(sig.parameters)
-
-
-def function_get_argument_dict(f: Callable, *args, **kwargs) -> dict[str, Any]:
-    """TODO"""
-    sig = inspect.signature(f)
-    bound = sig.bind(*args, **kwargs)  # or bind_partial()
-    bound.apply_defaults()
-    return bound.arguments
 
 
 def names_get_argument_dict(
@@ -264,7 +301,9 @@ def subclasses_by_name(cls: type[SubCls]) -> dict[str, type[SubCls]]:
 
 def get_md5_hash(hash_data: Json) -> str:
     """TODO"""
-    hash_data_s = json.dumps(hash_data, ensure_ascii=False, indent=0, sort_keys=True)
+    hash_data_s = json.dumps(
+        hash_data, ensure_ascii=False, indent=0, sort_keys=True, default=json_serialize
+    )
     hash_data_b = hash_data_s.encode("utf-8")
     hashsum = hashlib.md5(hash_data_b).hexdigest()  # noqa:S324
     # logging.error("%s %s", hashsum, hash_data)
@@ -272,25 +311,22 @@ def get_md5_hash(hash_data: Json) -> str:
 
 
 def assert_unique(iterable: Iterable):
-    """TODO"""
+    """TODO
+
+    Example:
+
+    >>> assert_unique(range(10))
+    >>> assert_unique(iter([1, 2, 1]))
+    Traceback (most recent call last):
+    ...
+    KeyError:
+
+    """
     uq = set()
     for x in iterable:
         if x in uq:
-            raise KeyError("Duplicate key: %s", x)
+            raise KeyError(f"Duplicate key: {x}")
         uq.add(x)
-
-
-def pickle_dump_to_path(data: Any, path: Path) -> None:
-    """TODO"""
-    path.parent.mkdir(exist_ok=True, parents=True)
-    with path.open("wb") as file:
-        return pickle.dump(data, file)
-
-
-def pickle_load_from_path(path: Path) -> Any:
-    """TODO"""
-    with path.open("rb") as file:
-        return pickle.load(file)  # noqa:S301
 
 
 def identity(x):
@@ -298,40 +334,101 @@ def identity(x):
     return x
 
 
-def call_script(
-    script: Path | str, args: list[str], data: bytes | None = None
-) -> tuple[bytes, bytes]:
-    """Call python script."""
-    cmd = [sys.executable, str(script)] + list(args)
-    logging.debug(cmd)
-    pop = sp.Popen(cmd, stdin=sp.PIPE, stdout=sp.PIPE)
-    stdout, stderr = pop.communicate(data)
-    if pop.returncode:
-        raise SubprocessStatus(pop.returncode)
-    return stdout, stderr
-
-
 def jsonpath_update(data: dict[str, Json], key: str, val: Json) -> None:
     """TODO"""
-    path = jsonpath_ng.parse(key)
+    path = jsonpath_ng.ext.parse(key)
     path.update_or_create(data, val)
 
 
 def jsonpath_get(data: dict[str, Json], key: str) -> list[Json]:
-    """TODO"""
-    path = jsonpath_ng.parse(key)
+    """TODO
+
+    Example:
+
+    >>> jsonpath_get({"a": {"b": 1}}, "$.a.b")
+    [1]
+    >>> jsonpath_get({"a": {"b": 1}}, "a.b")
+    [1]
+    >>> jsonpath_get({"a": [{"b": 1}, {"b": 2}]}, "a[0].b")
+    [1]
+    >>> jsonpath_get({"a": [{"b": 1}, {"b": 2}]}, "a[*].b")
+    [1, 2]
+    >>> jsonpath_get({"a": [{"b": 1}, {"b": 2}]}, 'a[?(b > 1)].b')
+    [2]
+
+    """
+    path = jsonpath_ng.ext.parse(key)
     match = path.find(data)
     values = [x.value for x in match]
     return values
 
 
 def isna(x: Any) -> bool:
-    """TODO"""
-    return bool(x is None or isinstance(x, float) and (math.isnan(x) or math.isinf(x)))
+    """TODO
+
+    Example:
+
+    >>> import pandas as pd
+    >>> import numpy as np
+    >>> isna(0)
+    False
+    >>> isna("")
+    False
+    >>> isna(float("nan"))
+    True
+    >>> isna(float("inf"))
+    True
+    >>> isna(None)
+    True
+    >>> isna(pd.NA)
+    True
+    >>> isna(np.nan)
+    True
+
+    """
+    return bool(
+        x is None
+        or isinstance(x, float)
+        and (math.isnan(x) or math.isinf(x))
+        or pd.isna(x)
+    )
 
 
 def json_serialize(x: Any) -> Json:
-    """TODO"""
+    """TODO
+
+    Example:
+
+    >>> import json
+    >>> import numpy as np
+    >>> import datetime
+    >>> json.dumps(datetime.date(2001,2,3), default=json_serialize)
+    '"2001-02-03"'
+    >>> json.dumps(datetime.time(4,5,6), default=json_serialize)
+    '"04:05:06"'
+    >>> json.dumps(datetime.datetime(2001,2,3,4,5,6), default=json_serialize)
+    '"2001-02-03T04:05:06"'
+    >>> json.dumps(np.nan, allow_nan=True, default=json_serialize)
+    'NaN'
+    >>> repr(json_serialize(np.nan))
+    'None'
+    >>> json.dumps(float('nan'), allow_nan=True, default=json_serialize)
+    'NaN'
+    >>> repr(json_serialize(float('nan')))
+    'None'
+    >>> json.dumps(np.int64(0), default=json_serialize)
+    '0'
+    >>> json_serialize(np.float64(0.5))
+    0.5
+    >>> json.dumps(np.bool(0), default=json_serialize)
+    'false'
+    >>> json.dumps(object(), default=json_serialize)
+    Traceback (most recent call last):
+    ...
+    NotImplementedError:
+
+
+    """
     if isinstance(x, datetime.datetime):
         return x.strftime(DATETIMETZ_FMT)
     elif isinstance(x, datetime.date):
@@ -339,6 +436,8 @@ def json_serialize(x: Any) -> Json:
     elif isinstance(x, datetime.time):
         return x.strftime(TIME_FMT)
     elif isna(x):
+        # FIXME: when using json.dumps(default=json_serialize), nan will NOT
+        # be forwarded to this function
         return None
     elif isinstance(x, np.bool_):
         return bool(x)
@@ -369,12 +468,6 @@ def get_now_str() -> str:
     # add ":" in offset
     now_str = re.sub("([+-][0-9]{2})([0-9]{2})$", r"\1:\2", now_str)
     return now_str
-
-
-@cache
-def get_hostname() -> str:
-    """TODO"""
-    return socket.gethostname()
 
 
 @cache
@@ -446,7 +539,7 @@ def remove_port_from_netloc(netloc: str) -> str:
     return netloc
 
 
-def get_uid_from_uri(uri: str) -> str:
+def get_name_from_uri(uri: str) -> str:
     """TODO"""
     parts = urlsplit(uri)
     netloc = remove_credentials_from_netloc(parts.netloc)
@@ -457,21 +550,10 @@ def get_uid_from_uri(uri: str) -> str:
     return name
 
 
-def import_module_from_path(name: str, filepath: StrPath):
-    """TODO"""
-    spec = importlib.util.spec_from_file_location(name, filepath)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Cannot load module '{name}' from '{filepath}'")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
 @cache
 def normalize_sql_query(query: str) -> str:
-    """TODO"""
-    """
+    """TODO
+
     Prettify an SQL query.
 
     Args:
@@ -479,6 +561,12 @@ def normalize_sql_query(query: str) -> str:
 
     Returns:
         str: The prettified SQL query.
+
+    Example:
+
+    >>> normalize_sql_query("select  1 as a;")
+    'SELECT 1 AS a;'
+
     """
     query = sqlparse.format(  # type:ignore
         query,
@@ -491,15 +579,30 @@ def normalize_sql_query(query: str) -> str:
 
 
 def detect_encoding(sample_data: bytes) -> str:
-    """TODO"""
+    """TODO
+
+    Example:
+
+    >>> b = "Ünicöde".encode(encoding="windows-1252")
+    >>> detect_encoding(b).lower()
+    'windows-1252'
+
+    """
     result = chardet.detect(sample_data)
-    if result["confidence"] < 1:
-        logging.warning("Chardet encoding detection < 100%: %s", result)
     return str(result["encoding"])
 
 
 def detect_csv_dialect(sample_data: str) -> dict[str, Any]:
-    """TODO"""
+    r"""TODO
+
+    Example:
+
+    >>> d = detect_csv_dialect('A;B;C\n1;2;3')
+    >>> d["delimiter"]
+    ';'
+
+
+    """
     dialect = csv.Sniffer().sniff(sample_data)
     dialect_dict = {
         k: v
@@ -517,8 +620,22 @@ def detect_csv_dialect(sample_data: str) -> dict[str, Any]:
     return dialect_dict
 
 
-def get_sql_table_schema(cursor: Cursor) -> dict[str, Any]:
-    """TODO"""
+def get_sql_table_schema(result: "CursorResult") -> dict[str, Any]:
+    """TODO
+
+    Example:
+
+    >>> import sqlalchemy as sa
+    >>> eng = sa.create_engine('sqlite:///:memory:')
+    >>> res = eng.connect().execute(sa.text(
+    ... "select 1 as a, 'x' as b UNION select 2 as a, NULL as b"))
+    >>> [x["name"] for x in get_sql_table_schema(res)["fields"]]
+    ['a', 'b']
+
+    """
+    if result.cursor is None:
+        raise Exception("Query returned nothing")  # pragma: no cover
+
     fields: list[dict[str, Any]] = [
         {"name": name, "data_type": data_type, "is_nullable": is_nullable}
         for (
@@ -529,20 +646,27 @@ def get_sql_table_schema(cursor: Cursor) -> dict[str, Any]:
             _precision,
             _scale,
             is_nullable,
-        ) in cursor.description
+        ) in result.cursor.description
     ]
     return {"fields": fields}
 
 
 def get_df_table_schema(df: pd.DataFrame) -> dict[str, Any]:
-    """TODO"""
+    """TODO
+
+    >>> from pandas import DataFrame
+    >>> df = DataFrame([{"f1": 1, "f2": "x"}, {"f1": 2}])
+    >>> get_df_table_schema(df)
+    {'fields': [{'name': 'f1', 'data_type': 'int64', 'is_nullable': False}, {'name': 'f2', 'data_type': 'str', 'is_nullable': True}]}
+
+    """  # noqa W501
     fields: list[dict[str, Any]] = []
     for cname in df.columns:
         fields.append(
             {
                 "name": cname,
                 "data_type": df[cname].dtype.name,
-                "is_nullable": (df[cname].isna() | df[cname].isnull()).any(),
+                "is_nullable": bool((df[cname].isna() | df[cname].isnull()).any()),
             }
         )
     return {"fields": fields}
@@ -558,8 +682,8 @@ def get_git_info(repo_path: StrPath) -> dict[str, Any]:
     def run_git_command(command: list[str], cwd: StrPath):
         result = subprocess.run(command, cwd=cwd, capture_output=True, text=True)
         if result.returncode != 0:
-            logging.warning(result.stderr.strip())
-            return None
+            logging.warning(result.stderr.strip())  # pragma: no cover
+            return None  # pragma: no cover
         return result.stdout.strip()
 
     # Get the current branch name
@@ -586,12 +710,12 @@ def get_git_info(repo_path: StrPath) -> dict[str, Any]:
     }
 
 
-def get_function_description(function: Callable[..., Any]) -> str | None:
+def get_function_description(function: Callable) -> str | None:
     """TODO"""
     return function.__doc__
 
 
-def get_function_name(function: Callable[..., Any]) -> str:
+def get_function_name(function: Callable) -> str:
     """TODO
 
     Example:
@@ -604,7 +728,7 @@ def get_function_name(function: Callable[..., Any]) -> str:
     return function.__name__ or str(function)
 
 
-def get_module(func: Callable[..., Any]) -> str | None:
+def get_module(func: Callable) -> str | None:
     """TODO
 
     Example:
@@ -612,13 +736,31 @@ def get_module(func: Callable[..., Any]) -> str | None:
     >>> get_module(get_module)
     'datatools.utils'
 
+    >>> get_module(open)
+    'io'
+
     """
     mod = inspect.getmodule(func)
-    return mod.__name__ if mod else None
+    if mod is not None:
+        mod = mod.__name__
+        # system mods sometimes start with "_"
+        mod = mod.lstrip("_")
+
+    return mod
 
 
-def get_module_version(func: Callable[..., Any]) -> str | None:
-    """TODO"""
+def get_module_version(func: Callable) -> str | None:
+    """TODO
+
+    Example:
+
+    >>> from datatools import __version__
+    >>> v = get_module_version(get_module_version)
+    >>> v == __version__
+    True
+
+
+    """
     # get module version (or parent module version)
     version = None
     try:
@@ -629,15 +771,15 @@ def get_module_version(func: Callable[..., Any]) -> str | None:
             mod = importlib.import_module(mod_name)
             try:
                 version = mod.__version__
-                version = f"{mod_name} {version}"
+                return version
             except AttributeError:
                 pass
             mod_path = mod_path[:-1]
-    except Exception:  # noqa: S110
-        pass
+    except Exception:  # noqa: S110 # pragma: no cover
+        pass  # pragma: no cover
 
 
-def get_function_filepath(function: Callable[..., Any]) -> Path:
+def get_function_filepath(function: Callable) -> Path:
     """TODO"""
     try:
         return function.__file__
@@ -664,9 +806,15 @@ def get_function_git_id(fun: Callable) -> str:
     True
 
     """
-    filepath = get_function_filepath(fun)
+    filepath = get_function_filepath(fun).absolute()
+    if any(str(filepath).startswith(p) for p in site.getsitepackages()):
+        raise Exception("is site-package")
+
     git_root = get_git_root(filepath)
     git_info = get_git_info(git_root)
+    if not git_info:
+        raise Exception("git not found")  # pragma: no cover
+
     path = filepath.relative_to(git_root).as_posix()
     return f"{git_info['origin']}/{git_info['commit']}/{path}:{fun.__name__}"
 
@@ -684,16 +832,112 @@ def get_function_module_id(fun: Callable) -> str:
     return f"{mod}:{fun.__name__}"
 
 
+def is_lambda(fun: Callable):
+    """TODO
+
+    Example:
+
+    >>> is_lambda(is_lambda)
+    False
+    >>> is_lambda(lambda x: x)
+    True
+
+    """
+    return getattr(fun, "__name__", None) == "<lambda>"
+
+
 def get_function_id(fun: Callable) -> str:
+    """Example:
+
+    >>> get_function_id(get_function_id).endswith('get_function_id')
+    True
+    >>> get_function_id(lambda x:x)
+    '<lambda>'
+    >>> from pandas import DataFrame
+    >>> get_function_id(DataFrame)
+    'pandas:DataFrame'
+    >>> get_function_id(open)
+    'io:open'
+
+    """
+    if is_lambda(fun):
+        return "<lambda>"
+    for get_id in [get_function_git_id, get_function_module_id, get_function_name]:
+        try:
+            return get_id(fun)
+        except Exception:  # noqa: S112
+            continue
+    return str(fun)  # pragma: no cover # fallback
+
+
+def wait_for_url(url: str, timeout_s=30):
+    """TODO
+
+    Example:
+
+    >>> port = get_free_port()
+    >>> wait_for_url(f"http://localhost:{port}", timeout_s=0.1)
+    Traceback (most recent call last):
+    ...
+    TimeoutError:
+
+    """
+    t_start = time.time()
+
+    while True:
+        timeout_left = timeout_s + t_start - time.time()
+        if timeout_left <= 0:
+            raise TimeoutError()
+        try:
+            httpx.head(url, timeout=timeout_left)
+            break
+        except Exception:  # noqa: S112
+            continue
+
+
+def http_get(uri: str, **options) -> bytes:
+    """TODO"""
+    resp = httpx.get(uri, follow_redirects=True)
+    resp.raise_for_status()
+    data = resp.content
+    return data
+
+
+def read_file_uri(uri: str, **options) -> bytes:
+    """TODO"""
+    path = uri_or_path_to_path(uri).resolve()
+    data = path.read_bytes()
+    return data
+
+
+def query_sql(uri: str, query: str, **options) -> Iterable["Row"]:
+    """TODO"""
+    eng = sa.create_engine(uri)
+    with eng.connect() as con:
+        resp = con.execute(sa.text(query))
+        data = resp.fetchall()
+
+    return data
+
+
+def wrap_exception(
+    function: Callable[[], None], debug: bool = True
+):  # pragma: no cover - only called in __main__
     """TODO"""
     try:
-        return get_function_git_id(fun)
-    except Exception:  # noqa: S110
-        pass
+        # your logic here
+        function()
+    except Exception as e:
+        if debug:
+            logging.exception(e)  # includes stack trace
+        else:
+            logging.error(e)
+        sys.exit(1)
 
-    try:
-        return get_function_module_id(fun)
-    except Exception:  # noqa: S110
-        pass
 
-    return get_function_name(fun)
+def sql_query_result_to_csv_bytes(data: Iterable["Row"], **options) -> bytes:
+    """TODO"""
+    df = pd.DataFrame(data)
+    data_s = df.to_csv(index=False, lineterminator="\n")
+    data_b = data_s.encode()
+    return data_b

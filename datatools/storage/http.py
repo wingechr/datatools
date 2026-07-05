@@ -3,18 +3,17 @@
 from collections.abc import Iterable
 import functools
 import re
-from typing import Literal
 
 from fastapi import Body, FastAPI, HTTPException, Query, Response
 import httpx
 
-from datatools.exceptions import StorageFileNotFoundError
+from datatools.exceptions import StorageException, StorageFileNotFoundError
 from datatools.storage.base import DataStorage, MetadataStorage
-from datatools.types import UID, MetadataAttribute, MetadataValue
+from datatools.types import HTTP_METHOD, MetadataAttribute, MetadataValue, Name
 from datatools.utils import parse_cmd_vals
 
 
-def catch_StorageFileNotFoundError(fun):
+def catch_exceptions(fun):
     """on StorageFileNotFoundError, return 404"""
 
     @functools.wraps(fun)
@@ -22,7 +21,10 @@ def catch_StorageFileNotFoundError(fun):
         try:
             return fun(*args, **kwargs)
         except StorageFileNotFoundError as err:
-            raise HTTPException(status_code=404) from err
+            raise HTTPException(status_code=404, detail=str(err)) from err
+        except StorageException as err:
+            # return info of exception
+            raise HTTPException(status_code=400, detail=str(err)) from err
 
     return _fun
 
@@ -32,42 +34,47 @@ def make_server_app(data_storage: DataStorage) -> FastAPI:
     app = FastAPI()
 
     @app.get("/info")
+    @catch_exceptions
     def info():
         return data_storage.info()
 
-    @app.get("/")
+    @app.get("/data")
+    @catch_exceptions
     def find(q: list[str] = Query(default=[])):  # noqa: B008
         filters_dict = parse_cmd_vals(q)
         return data_storage.find(**filters_dict)
 
-    @app.head("/{uid}")
-    def has(uid: str):
-        if uid not in data_storage:
-            raise HTTPException(status_code=404)
+    @app.head("/data/{name:path}")
+    @catch_exceptions
+    def has(name: str):
+        if name not in data_storage:
+            raise StorageFileNotFoundError(name)
 
-    @app.delete("/{uid}")
-    @catch_StorageFileNotFoundError
-    def delete(uid: str):
-        del data_storage[uid]
+    @app.delete("/data/{name:path}")
+    @catch_exceptions
+    def delete(name: str):
+        del data_storage[name]
 
-    @app.get("/{uid}")
-    @catch_StorageFileNotFoundError
-    def get(uid: str):
-        data = data_storage[uid]
+    @app.get("/data/{name:path}")
+    @catch_exceptions
+    def get(name: str):
+        data = data_storage[name]
         return Response(content=data)
 
-    @app.put("/{uid}")
-    @catch_StorageFileNotFoundError
-    def put(uid: str, data: bytes = Body(...)):
-        data_storage[uid] = data
+    @app.put("/data/{name:path}")
+    @catch_exceptions
+    def put(name: str, data: bytes = Body(...)):
+        data_storage[name] = data
 
-    @app.get("/{uid}/metadata/")
-    def metadata_get(uid, a: str):
-        return data_storage.metadata(uid)[a]
+    @app.get("/metadata/{name:path}")
+    @catch_exceptions
+    def metadata_get(name, a: str):
+        return data_storage.metadata(name)[a]
 
-    @app.post("/{uid}/metadata/")
-    def metadata_set(uid, data: dict):
-        metadata = data_storage.metadata(uid)
+    @app.post("/metadata/{name:path}")
+    @catch_exceptions
+    def metadata_set(name, data: dict):
+        metadata = data_storage.metadata(name)
         for k, v in data.items():
             metadata[k] = v
 
@@ -78,16 +85,16 @@ class HttpMetadataStorage(MetadataStorage):
     """TODO"""
 
     def __init__(self, url: str):
-        self._location = url
+        self._url = url
 
     def _request(
         self,
         path: str = "/",
-        method: Literal["GET", "PUT", "POST", "DELETE", "HEAD", "PATCH"] = "GET",
+        method: HTTP_METHOD = "GET",
         params: dict | None = None,
         data: dict | None = None,
     ):
-        url = self._location + path
+        url = self._url
         resp = httpx.request(method=method, url=url, params=params, json=data)
         resp.raise_for_status()
         return resp
@@ -111,43 +118,49 @@ class HttpDataStorage(DataStorage):
     def _request(
         self,
         path: str = "/",
-        method: Literal["GET", "PUT", "POST", "DELETE", "HEAD", "PATCH"] = "GET",
+        method: HTTP_METHOD = "GET",
         params: dict | None = None,
         data: bytes | None = None,
     ):
         url = self._location + path
         resp = httpx.request(method=method, url=url, params=params, content=data)
-        resp.raise_for_status()
+
+        if resp.is_error:
+            if resp.status_code == 404:
+                raise StorageFileNotFoundError()
+            elif resp.status_code < 500:
+                raise StorageException(resp.content)
+            else:
+                raise Exception(resp.content)  # pragma: no cover
+
         return resp
 
-    def _contains(self, uid: UID) -> bool:
+    def _contains(self, name: Name) -> bool:
         try:
-            resp = self._request(path=f"/{uid}", method="HEAD")
-            return resp.is_success
-        except httpx.HTTPStatusError as exc:
-            if not exc.response.status_code == 404:
-                raise
-        return False
+            self._request(path=f"/data/{name}", method="HEAD")
+            return True
+        except StorageFileNotFoundError:
+            return False
 
-    def _getitem(self, uid: UID) -> bytes:
-        resp = self._request(path=f"/{uid}", method="GET")
+    def _getitem(self, name: Name) -> bytes:
+        resp = self._request(path=f"/data/{name}", method="GET")
         return resp.content
 
-    def _setitem(self, uid: UID, data: bytes) -> None:
-        self._request(path=f"/{uid}", method="PUT", data=data)
+    def _setitem(self, name: Name, data: bytes) -> None:
+        self._request(path=f"/data/{name}", method="PUT", data=data)
 
-    def _delitem(self, uid: UID) -> None:
-        self._request(path=f"/{uid}", method="DELETE")
+    def _delitem(self, name: Name) -> None:
+        self._request(path=f"/data/{name}", method="DELETE")
 
-    def _list(self) -> Iterable[UID]:
-        return self._request(path="/").json()
+    def _list(self) -> Iterable[Name]:
+        return self._request(path="/data").json()
 
-    def _find(self, **filters: MetadataValue) -> Iterable[UID]:
+    def _find(self, **filters: MetadataValue) -> Iterable[Name]:
         filters_list = [f"{k}={v}" for k, v in filters.items()]
-        return self._request(path="/", params={"q": filters_list}).json()
+        return self._request(path="/data", params={"q": filters_list}).json()
 
-    def _metadata(self, uid: UID) -> HttpMetadataStorage:
-        url = self._location + f"/{uid}/metadata"
+    def _metadata(self, name: Name) -> HttpMetadataStorage:
+        url = self._location + f"/metadata/{name}"
         return HttpMetadataStorage(url)
 
     def info(self) -> dict:

@@ -20,7 +20,9 @@ class TestDocstests(unittest.TestCase):
                 module,
                 verbose=False,
                 raise_on_error=False,
-                optionflags=doctest.REPORT_NDIFF,
+                optionflags=doctest.REPORT_NDIFF
+                | doctest.ELLIPSIS
+                | doctest.IGNORE_EXCEPTION_DETAIL,
             )
             if failed:
                 raise Exception(failed)

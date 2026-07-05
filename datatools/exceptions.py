@@ -1,6 +1,6 @@
 """Exceptions."""
 
-from datatools.types import UID
+from datatools.types import Name
 
 
 class StorageException(Exception):
@@ -21,15 +21,15 @@ class StorageFileExistsError(FileExistsError, StorageException):
     pass
 
 
-class StorageInvalidUidError(KeyError, StorageException):
-    """UID not valid in this storage.
+class StorageInvalidNameError(KeyError, StorageException):
+    """Name not valid in this storage.
 
-    has attribute uid for corrected UID.
+    has attribute name for corrected Name.
     """
 
-    def __init__(self, message, uid: UID):
+    def __init__(self, message, name: Name):
         super().__init__(message)
-        self.uid = UID  # corrected UID
+        self.name = Name  # corrected Name
 
 
 class SubprocessStatus(StorageException):
