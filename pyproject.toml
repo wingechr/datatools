@@ -42,7 +42,9 @@ docs = [
     "pymdown-extensions>=10.16",
 ]
 [tool.setuptools.packages.find]
-include = ["datatools"]
+where = ["."]
+include = ["*"]
+exclude = ["tests*", "docs*"]
 
 [build-system]
 requires = ["setuptools", "wheel", "build"]
