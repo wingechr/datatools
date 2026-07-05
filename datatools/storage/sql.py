@@ -1,7 +1,6 @@
 """TODO"""
 
 from collections.abc import Iterable
-import json
 import re
 
 from sqlalchemy import (
@@ -18,6 +17,7 @@ from datatools.exceptions import StorageFileNotFoundError
 from datatools.storage.base import DataStorage, MetadataStorage
 from datatools.storage.memory import PersistentMemoryMetadataStorage
 from datatools.types import Name
+from datatools.utils import json_dumps, json_loads
 
 sql_base = MetaData()
 
@@ -55,10 +55,10 @@ class SqlMetadataStorage(PersistentMemoryMetadataStorage):
             ).fetchall()
         if rows:
             data_s = rows[0][0]
-            return json.loads(data_s)
+            return json_loads(data_s)
 
     def _dump(self, data: dict) -> None:
-        data_s = json.dumps(data, ensure_ascii=False)
+        data_s = json_dumps(data, ensure_ascii=False)
         # check if row exists
         with self._engine.begin() as con:
             resp = con.execute(

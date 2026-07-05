@@ -53,6 +53,13 @@ build-backend = "setuptools.build_meta"
 [project.scripts]
 datatools = "datatools.__main__:main"
 
+[tool.bumpversion]
+
+[[tool.bumpversion.hooks]]
+name = "update-uv-lock"
+after = "bump"
+run = "uv lock && git add uv.lock"
+
 [tool.tox]
 envlist = ["py311", "py312", "py313"]
 

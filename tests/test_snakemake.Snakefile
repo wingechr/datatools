@@ -1,7 +1,7 @@
 import os
 import sys
-import json
 from datatools import FileDataStorage
+from datatools.utils import json_dumpb, json_loadb
 
 # example functions
 def generate() -> bytes:
@@ -10,14 +10,11 @@ def generate() -> bytes:
 def convert(data: list) -> list:
     return [x + 1 for x in data]
 
-def dump(x):
-    return json.dumps(x).encode()
-
 # use FileDataStorage to create jobs
 
 data_storage = FileDataStorage(".")
 task_generate = data_storage.task(generate, {"output": None}) # "output": None -> already bytes
-task_convert = data_storage.task(convert, {"output": dump}, {"data": json.loads})
+task_convert = data_storage.task(convert, {"output": json_dumpb}, {"data": json_loadb})
 
 # create rules to links jobs
 

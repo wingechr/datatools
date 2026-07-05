@@ -31,6 +31,7 @@ import jsonpath_ng
 import jsonpath_ng.ext
 import numpy as np
 import pandas as pd
+from pydantic import BaseModel
 import sqlalchemy as sa
 import sqlparse
 import tzlocal
@@ -86,7 +87,7 @@ class TextFile:
     def load_json(self) -> Any:
         """TODO"""
         data_s = self.load_str()
-        return json.loads(data_s)
+        return json_loads(data_s)
 
     def dump_bytes(self, data: bytes) -> None:
         """TODO"""
@@ -102,13 +103,143 @@ class TextFile:
 
     def dump_json(self, data: Any) -> None:
         """TODO"""
-        data_s = json.dumps(
+        data_s = json_dumps(
             data,
             ensure_ascii=self.ensure_ascii,
             sort_keys=self.sort_keys,
             indent=self.indent,
         )
         self.dump_str(data_s)
+
+
+def json_serialize(x: Any) -> Json:
+    """TODO
+
+    Example:
+
+    >>> import json
+    >>> import numpy as np
+    >>> import datetime
+    >>> from pydantic import BaseModel
+    >>> json.dumps(datetime.date(2001,2,3), default=json_serialize)
+    '"2001-02-03"'
+    >>> json.dumps(datetime.time(4,5,6), default=json_serialize)
+    '"04:05:06"'
+    >>> json.dumps(datetime.datetime(2001,2,3,4,5,6), default=json_serialize)
+    '"2001-02-03T04:05:06"'
+    >>> json.dumps(np.nan, allow_nan=True, default=json_serialize)
+    'NaN'
+    >>> repr(json_serialize(np.nan))
+    'None'
+    >>> json.dumps(float('nan'), allow_nan=True, default=json_serialize)
+    'NaN'
+    >>> repr(json_serialize(float('nan')))
+    'None'
+    >>> json.dumps(np.int64(0), default=json_serialize)
+    '0'
+    >>> json_serialize(np.float64(0.5))
+    0.5
+    >>> json.dumps(np.bool(0), default=json_serialize)
+    'false'
+    >>> json.dumps(object(), default=json_serialize)
+    Traceback (most recent call last):
+    ...
+    NotImplementedError:
+    >>> class Test(BaseModel):
+    ...    value: int
+    >>> json.dumps(Test(value='10'), default=json_serialize)
+    '{"value": 10}'
+
+
+    """
+    if isinstance(x, datetime.datetime):
+        return x.strftime(DATETIMETZ_FMT)
+    elif isinstance(x, datetime.date):
+        return x.strftime(DATE_FMT)
+    elif isinstance(x, datetime.time):
+        return x.strftime(TIME_FMT)
+    elif isna(x):
+        # FIXME: when using json.dumps(default=json_serialize), nan will NOT
+        # be forwarded to this function
+        return None
+    elif isinstance(x, np.bool_):
+        return bool(x)
+    elif np.issubdtype(type(x), np.integer):  # type:ignore
+        return int(x)
+    elif np.issubdtype(type(x), np.floating):  # type:ignore
+        return float(x)
+    elif isinstance(x, BaseModel):
+        return x.model_dump(mode="json")
+    else:
+        raise NotImplementedError(f"{x.__class__}: {x}")
+
+
+def str_dumpb(
+    text: str,
+    encoding="utf-8",
+    errors: Literal["strict", "replace", "ignore"] = "strict",
+) -> bytes:
+    """TODO"""
+    return text.encode(encoding=encoding, errors=errors)
+
+
+def str_load(
+    data: bytes,
+    encoding="utf-8",
+    errors: Literal["strict", "replace", "ignore"] = "strict",
+) -> str:
+    """TODO"""
+    return data.decode(encoding=encoding, errors=errors)
+
+
+def json_dumps(
+    data: Any,
+    ensure_ascii: bool = False,
+    sort_keys: bool = False,
+    indent: int = 2,
+    default: Callable | None = json_serialize,
+) -> str:
+    """TODO"""
+    return json.dumps(
+        data,
+        ensure_ascii=ensure_ascii,
+        sort_keys=sort_keys,
+        indent=indent,
+        default=default,
+    )
+
+
+def json_loads(text: str) -> Json:
+    """TODO"""
+    return json.loads(text)
+
+
+def json_loadb(
+    data: bytes,
+    encoding="utf-8",
+    errors: Literal["strict", "replace", "ignore"] = "strict",
+) -> Json:
+    """TODO"""
+    text = str_load(data, encoding=encoding, errors=errors)
+    return json_loads(text)
+
+
+def json_dumpb(
+    data: Any,
+    ensure_ascii: bool = False,
+    sort_keys: bool = False,
+    indent: int = 2,
+    encoding="utf-8",
+    errors: Literal["strict", "replace", "ignore"] = "strict",
+) -> bytes:
+    """TODO"""
+    text = json_dumps(
+        data,
+        ensure_ascii=ensure_ascii,
+        sort_keys=sort_keys,
+        indent=indent,
+    )
+    return str_dumpb(text, encoding=encoding, errors=errors)
 
 
 def parse_cmd_vals(arguments: list[str]) -> dict[str, Json]:
@@ -174,7 +305,7 @@ def try_parse_json_str(s: str) -> Any:
 
     """
     try:
-        return json.loads(s)
+        return json_loads(s)
     except Exception:
         return s
 
@@ -301,7 +432,7 @@ def subclasses_by_name(cls: type[SubCls]) -> dict[str, type[SubCls]]:
 
 def get_md5_hash(hash_data: Json) -> str:
     """TODO"""
-    hash_data_s = json.dumps(
+    hash_data_s = json_dumps(
         hash_data, ensure_ascii=False, indent=0, sort_keys=True, default=json_serialize
     )
     hash_data_b = hash_data_s.encode("utf-8")
@@ -394,61 +525,6 @@ def isna(x: Any) -> bool:
     )
 
 
-def json_serialize(x: Any) -> Json:
-    """TODO
-
-    Example:
-
-    >>> import json
-    >>> import numpy as np
-    >>> import datetime
-    >>> json.dumps(datetime.date(2001,2,3), default=json_serialize)
-    '"2001-02-03"'
-    >>> json.dumps(datetime.time(4,5,6), default=json_serialize)
-    '"04:05:06"'
-    >>> json.dumps(datetime.datetime(2001,2,3,4,5,6), default=json_serialize)
-    '"2001-02-03T04:05:06"'
-    >>> json.dumps(np.nan, allow_nan=True, default=json_serialize)
-    'NaN'
-    >>> repr(json_serialize(np.nan))
-    'None'
-    >>> json.dumps(float('nan'), allow_nan=True, default=json_serialize)
-    'NaN'
-    >>> repr(json_serialize(float('nan')))
-    'None'
-    >>> json.dumps(np.int64(0), default=json_serialize)
-    '0'
-    >>> json_serialize(np.float64(0.5))
-    0.5
-    >>> json.dumps(np.bool(0), default=json_serialize)
-    'false'
-    >>> json.dumps(object(), default=json_serialize)
-    Traceback (most recent call last):
-    ...
-    NotImplementedError:
-
-
-    """
-    if isinstance(x, datetime.datetime):
-        return x.strftime(DATETIMETZ_FMT)
-    elif isinstance(x, datetime.date):
-        return x.strftime(DATE_FMT)
-    elif isinstance(x, datetime.time):
-        return x.strftime(TIME_FMT)
-    elif isna(x):
-        # FIXME: when using json.dumps(default=json_serialize), nan will NOT
-        # be forwarded to this function
-        return None
-    elif isinstance(x, np.bool_):
-        return bool(x)
-    elif np.issubdtype(type(x), np.integer):  # type:ignore
-        return int(x)
-    elif np.issubdtype(type(x), np.floating):  # type:ignore
-        return float(x)
-    else:
-        raise NotImplementedError(f"{x.__class__}: {x}")
-
-
 def get_now() -> datetime.datetime:
     """TODO"""
     # my local timezone, e.g.  DstTzInfo 'Europe/Berlin' LMT+0:53:00 STD
@@ -487,11 +563,6 @@ def get_username() -> str:
 def get_user_w_host() -> str:
     """TODO"""
     return f"{get_username()}@{get_fqhostname()}"
-
-
-def json_dumps_for_print(data: Json) -> str:
-    """TODO"""
-    return json.dumps(data, ensure_ascii=False)
 
 
 def start_http_server(

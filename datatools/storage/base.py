@@ -35,6 +35,7 @@ from datatools.types import (
     FunParams,
     FunResult,
     FunToBytes,
+    Json,
     MetadataAttribute,
     MetadataValue,
     Name,
@@ -220,6 +221,7 @@ class DataStorage(ABC):
         function: Callable,
         output_converters: dict[str, FunToBytes | None] | FunToBytes | None = None,
         input_converters: dict[str, FunFromBytes | None] | None = None,
+        metadata_converters: dict[str, Callable[[Any], Json]] | None = None,
         get_job_hashsum: FunHashsum = default_get_job_hashsum,
         skip_finished: bool = False,
     ) -> Task:
@@ -241,6 +243,7 @@ class DataStorage(ABC):
                 PROP_FUNCTION: wrapped_function.get_metadata(),
                 PROP_PARAMETER: [],  # will be filled by input handlers
             },
+            "metadata_file": {},
             "input_parameter_values": {},
             "task": None,  # will be filled later
         }
@@ -284,23 +287,32 @@ class DataStorage(ABC):
 
             return handle_
 
-        def wrap_output_handler(param_name: str, handler: Callable | None = None):
-            def update_metadata_task_id():
-                # generate task id (once)
-                if "@id" not in callback_data["metadata_activity"]:
-                    task: Task = callback_data["task"]
-                    job_hashsum = task.get_job_hashsum(
-                        **callback_data["input_parameter_values"]
-                    )
-                    job_id = f"job:{job_hashsum}"
-                    datatime = callback_data["metadata_activity"][PROP_DATETIME]
-                    activity_id = f"activity:{job_hashsum}-{datatime}"
-                    callback_data["metadata_activity"]["@id"] = activity_id
-                    callback_data["metadata_activity"][PROP_JOB] = job_id
-                    # update ids for input parameters
-                    for p in callback_data["metadata_activity"][PROP_PARAMETER]:
-                        p["@id"] = activity_id + "/input/" + p[PROP_PARAMETER_NAME]
+        def update_metadata_task_id(data: Any):
+            # generate task id (once)
+            metadata_generated = "@id" in callback_data["metadata_activity"]
 
+            if not metadata_generated:
+                task: Task = callback_data["task"]
+                job_hashsum = task.get_job_hashsum(
+                    **callback_data["input_parameter_values"]
+                )
+                job_id = f"job:{job_hashsum}"
+                datatime = callback_data["metadata_activity"][PROP_DATETIME]
+                activity_id = f"activity:{job_hashsum}-{datatime}"
+                callback_data["metadata_activity"]["@id"] = activity_id
+                callback_data["metadata_activity"][PROP_JOB] = job_id
+                # update ids for input parameters
+                for p in callback_data["metadata_activity"][PROP_PARAMETER]:
+                    p["@id"] = activity_id + "/input/" + p[PROP_PARAMETER_NAME]
+
+                # generate metadata
+                if metadata_converters:
+                    for name, conv in metadata_converters.items():
+                        mdata = conv(data)
+                        # TODO: should it be in a different group
+                        callback_data["metadata_file"][name] = mdata
+
+        def wrap_output_handler(param_name: str, handler: Callable | None = None):
             if handler:
                 handler_w = AnnotatedFunction.assert_wrapped(handler)
                 meta_saved_with = {
@@ -315,14 +327,16 @@ class DataStorage(ABC):
             def handle_(data: Any, name: Name):
                 bdata = handler(data)
                 self[name] = bdata
-                update_metadata_task_id()
+                update_metadata_task_id(data)
+
                 output_metadata = {
                     "@type": "Output",
                     "name": name,
                     "@id": callback_data["metadata_activity"]["@id"]
                     + "/output/"
                     + param_name,
-                    PROP_FILE: {
+                    PROP_FILE: callback_data["metadata_file"]
+                    | {
                         "@id": "md5:" + hashlib.md5(bdata).hexdigest(),  # noqa:S324
                         "@type": "File",
                         PROP_SIZE: len(bdata),

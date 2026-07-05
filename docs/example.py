@@ -2,14 +2,13 @@
 # ruff: noqa: S101, D103
 
 from io import BytesIO
-import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import pandas as pd
 
 from datatools import FileDataStorage
-from datatools.utils import start_http_server
+from datatools.utils import json_dumpb, json_loadb, start_http_server
 from tests.test_storage import QueryParameterUri
 
 # test http server
@@ -48,7 +47,7 @@ with TemporaryDirectory() as tempdir:
     task = st.task(
         sum_values,
         # to / from bytes convert fro output/input
-        output_converters=lambda x: json.dumps(x).encode(),
+        output_converters=json_dumpb,
         input_converters={
             "value1": len,
             "value2": len,
@@ -63,7 +62,7 @@ with TemporaryDirectory() as tempdir:
 
     # check result and metadata
     assert len(st[name1]) == len(st[name2])  # imported same files 2 times
-    assert json.loads(st[name4]) == 2 * len(st[name1]) + 1
+    assert json_loadb(st[name4]) == 2 * len(st[name1]) + 1
 
     assert st.metadata(name1)[QueryParameterUri][0] == uri1
     assert st.metadata(name2)[QueryParameterUri][0] == uri2

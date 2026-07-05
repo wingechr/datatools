@@ -1,7 +1,6 @@
 """TODO"""
 
 from collections.abc import Iterable
-import json
 import logging
 import os
 from pathlib import Path
@@ -12,7 +11,7 @@ from datatools.exceptions import StorageInvalidNameError
 from datatools.storage.base import DataStorage
 from datatools.storage.memory import PersistentMemoryMetadataStorage
 from datatools.types import Name
-from datatools.utils import TextFile, uri_or_path_to_path
+from datatools.utils import TextFile, json_dumps, json_loads, uri_or_path_to_path
 
 
 class JsonFileMetadataStorage(PersistentMemoryMetadataStorage):
@@ -62,11 +61,11 @@ class JsonLdFileMetadataStorage(JsonFileMetadataStorage):
     def _dump(self, data: dict) -> None:
         # rdf roundtrip test
 
-        data_s = json.dumps(data)
+        data_s = json_dumps(data)
         g = rdflib.Graph()
         g.parse(data=data_s, format="json-ld")
         data_s_new = g.serialize(format="json-ld", context=self.context)
-        data_new = json.loads(data_s_new)
+        data_new: dict = json_loads(data_s_new)  # type:ignore
 
         super()._dump(data_new)
 

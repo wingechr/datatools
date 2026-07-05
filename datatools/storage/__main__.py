@@ -9,7 +9,7 @@ import uvicorn
 from datatools.storage.base import DataStorage
 from datatools.storage.http import make_server_app
 from datatools.utils import (
-    json_dumps_for_print,
+    json_dumps,
     parse_cmd_vals,
     subclasses_by_name,
     wrap_exception,
@@ -49,7 +49,7 @@ def main(ctx, location: str, storage_class=str | None) -> None:
 def info(ctx_data_storage: DataStorage) -> None:
     """TODO"""
     info = ctx_data_storage.info()
-    print(json_dumps_for_print(info))
+    print(json_dumps(info))
 
 
 @main.command()
@@ -120,7 +120,7 @@ def metadata_get(ctx_data_storage: DataStorage, name: str, attribute: str) -> No
     """TODO"""
     metadata_storage = ctx_data_storage.metadata(name)
     values = list(metadata_storage[attribute])
-    print(json_dumps_for_print(values))
+    print(json_dumps(values))
 
 
 @metadata.command("set")

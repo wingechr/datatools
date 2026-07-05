@@ -1,7 +1,6 @@
 """TODO"""
 
 from collections.abc import Callable, Iterable
-import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -13,7 +12,12 @@ from datatools.exceptions import (
 )
 from datatools.storage.base import DataStorage, MetadataStorage
 from datatools.types import MetadataAttribute, MetadataValue, Name
-from datatools.utils import json_dumps_for_print, reverse_prints, try_parse_json_str
+from datatools.utils import (
+    json_dumps,
+    json_loads,
+    reverse_prints,
+    try_parse_json_str,
+)
 
 
 class TestCliMetadataDataStorage(MetadataStorage):
@@ -32,7 +36,7 @@ class TestCliMetadataDataStorage(MetadataStorage):
             "metadata",
             "set",
             self._name,
-            f"{attribute}={json_dumps_for_print(value)}",
+            f"{attribute}={json_dumps(value)}",
         )
 
 
@@ -94,7 +98,7 @@ class CliWrapperDataStorage(DataStorage):
     def info(self) -> dict:
         """TODO"""
         info_remote = self._request("info")
-        info_remote = json.loads(info_remote)
+        info_remote = json_loads(info_remote)
         info_client = super().info()
         info_client.update({"remote": info_remote})
 

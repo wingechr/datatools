@@ -1,7 +1,6 @@
 """TODO"""
 
 import datetime
-import json
 import logging
 from pathlib import Path
 import pickle
@@ -43,6 +42,8 @@ from datatools.types import (
 )
 from datatools.utils import (
     get_free_port,
+    json_dumpb,
+    json_loadb,
     query_sql,
     sql_query_result_to_csv_bytes,
     start_http_server,
@@ -507,13 +508,18 @@ class TestUseCases(TestCase):
         def convert(data: list) -> list:
             return [x + 1 for x in data]
 
-        loads = AnnotatedFunction(json.loads, function_id=fid_bytes2json)
+        loads = AnnotatedFunction(json_loadb, function_id=fid_bytes2json)
 
         # "output": None -> already bytes
-        task_generate = storage.task(generate1, {"output": None}, skip_finished=True)
+        task_generate = storage.task(
+            generate1,
+            {"output": None},
+            metadata_converters={"mediatype": lambda output: "application/json"},
+            skip_finished=True,
+        )
         task_convert = storage.task(
             convert,
-            {"output": lambda x: json.dumps(x).encode()},
+            {"output": json_dumpb},
             {"data": loads},
             skip_finished=True,
         )
@@ -532,4 +538,9 @@ class TestUseCases(TestCase):
                 storage.metadata(key2)[f"{PROP_GENERATED_BY}.{PROP_FUNCTION}.@id"]
             ),
             fid_convert,
+        )
+
+        self.assertEqual(
+            get_item_or_first(storage.metadata(key1)[f"{PROP_FILE}.mediatype"]),
+            "application/json",
         )
