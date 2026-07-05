@@ -1,6 +1,6 @@
 [project]
 name = "wingechr-datatools"
-version = "0.15.1"
+version = "0.15.2"
 description = "TODO"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
@@ -42,7 +42,9 @@ docs = [
     "pymdown-extensions>=10.16",
 ]
 [tool.setuptools.packages.find]
-include = ["datatools"]
+where = ["."]
+include = ["*"]
+exclude = ["tests*", "docs*"]
 
 [build-system]
 requires = ["setuptools", "wheel", "build"]
