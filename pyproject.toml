@@ -59,11 +59,8 @@ current_version = "0.15.2"
 commit = true
 tag = true
 message = "version: {current_version} → {new_version}"
+pre_commit_hooks = ["uv lock", "git add uv.lock"]
 
-[[tool.bumpversion.hooks]]
-name = "update-uv-lock"
-after = "bump"
-run = "uv lock && git add uv.lock"
 
 [[tool.bumpversion.files]]
 filename = "datatools/__init__.py"
