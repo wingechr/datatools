@@ -65,13 +65,13 @@ class MemoryDataStorage(DataStorage):
     def _has(self, name: Name) -> bool:
         return name in self.__data
 
-    def _getitem(self, name: Name) -> Any:
+    def _read(self, name: Name) -> Any:
         return self.__data[name]
 
-    def _setitem(self, name: Name, data: Any) -> None:
+    def _write(self, name: Name, data: Any) -> None:
         self.__data[name] = data
 
-    def _delitem(self, name: Name) -> None:
+    def _delete(self, name: Name) -> None:
         del self.__data[name]
         # dont delete metadata
 

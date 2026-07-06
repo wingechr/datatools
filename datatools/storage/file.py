@@ -89,18 +89,18 @@ class FileDataStorage(DataStorage):
         path = self._get_abs_path(name)
         return path.exists()
 
-    def _getitem(self, name: Name) -> bytes:
+    def _read(self, name: Name) -> bytes:
         path = self._get_abs_path(name)
         logging.debug("Reading %s", path)
         return path.read_bytes()
 
-    def _setitem(self, name: Name, data: bytes) -> None:
+    def _write(self, name: Name, data: bytes) -> None:
         path = self._get_abs_path(name)
         logging.debug("Writing %s", path)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
 
-    def _delitem(self, name: Name) -> None:
+    def _delete(self, name: Name) -> None:
         path = self._get_abs_path(name)
         logging.debug("Deleting %s", path)
         os.remove(path)

@@ -145,14 +145,14 @@ class HttpDataStorage(DataStorage):
         except StorageFileNotFoundError:
             return False
 
-    def _getitem(self, name: Name) -> bytes:
+    def _read(self, name: Name) -> bytes:
         resp = self._request(path=f"/data/{name}", method="GET")
         return resp.content
 
-    def _setitem(self, name: Name, data: bytes) -> None:
+    def _write(self, name: Name, data: bytes) -> None:
         self._request(path=f"/data/{name}", method="PUT", data=data)
 
-    def _delitem(self, name: Name) -> None:
+    def _delete(self, name: Name) -> None:
         self._request(path=f"/data/{name}", method="DELETE")
 
     def _list(self) -> Iterable[Name]:

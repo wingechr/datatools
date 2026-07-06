@@ -112,7 +112,7 @@ class SqlDataStorage(DataStorage):
         n_res = len(resp.fetchall())
         return bool(n_res)
 
-    def _getitem(self, name: Name) -> bytes:
+    def _read(self, name: Name) -> bytes:
         resp = self._engine.connect().execute(
             table_data.select()
             .with_only_columns(table_data.c.data)
@@ -123,11 +123,11 @@ class SqlDataStorage(DataStorage):
             raise StorageFileNotFoundError(f"Not found: {name}")
         return row[0]
 
-    def _setitem(self, name: Name, data: bytes) -> None:
+    def _write(self, name: Name, data: bytes) -> None:
         with self._engine.begin() as con:
             con.execute(table_data.insert().values(name=name, data=data))
 
-    def _delitem(self, name: Name) -> None:
+    def _delete(self, name: Name) -> None:
         with self._engine.begin() as con:
             con.execute(table_data.delete().where(table_data.c.name == name))
 

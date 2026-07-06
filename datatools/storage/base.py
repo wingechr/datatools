@@ -77,13 +77,13 @@ class DataStorage(ABC):
     def _has(self, name: Name) -> bool: ...
 
     @abstractmethod
-    def _getitem(self, name: Name) -> ByteData: ...
+    def _read(self, name: Name) -> ByteData: ...
 
     @abstractmethod
-    def _setitem(self, name: Name, data: ByteData) -> None: ...
+    def _write(self, name: Name, data: ByteData) -> None: ...
 
     @abstractmethod
-    def _delitem(self, name: Name) -> None: ...
+    def _delete(self, name: Name) -> None: ...
 
     @abstractmethod
     def _metadata(self, name: Name) -> MetadataStorage: ...
@@ -118,21 +118,21 @@ class DataStorage(ABC):
         self._assert_valid_name(name=name)
         if not self.has(name):
             raise StorageFileNotFoundError(f"Not found: {name}")
-        return self._getitem(name=name)
+        return self._read(name=name)
 
     def write(self, name: Name, data: ByteData) -> None:
         """TODO"""
         self._assert_valid_name(name=name)
         if self.has(name):
             raise StorageFileExistsError(f"Already exists: {name}")
-        return self._setitem(name=name, data=data)
+        return self._write(name=name, data=data)
 
     def delete(self, name: Name) -> None:
         """TODO"""
         self._assert_valid_name(name=name)
         if not self.has(name):
             raise StorageFileNotFoundError(f"Not found: {name}")
-        return self._delitem(name=name)
+        return self._delete(name=name)
 
     def metadata(self, name: Name) -> MetadataStorage:
         """Metadata container associated with data."""

@@ -180,7 +180,7 @@ class TestStorageSql(TestCase):
     def test_does_not_exist(self):
         """bypass check from base class."""
         storage = SqlDataStorage()
-        self.assertRaises(StorageFileNotFoundError, storage._getitem, "KEY")
+        self.assertRaises(StorageFileNotFoundError, storage._read, "KEY")
 
 
 class TestCliWrapperDataStorage(TestCase):

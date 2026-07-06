@@ -78,13 +78,13 @@ class CliWrapperDataStorage(DataStorage):
             return False
         return True
 
-    def _getitem(self, name: Name) -> bytes:
+    def _read(self, name: Name) -> bytes:
         return self._request("read", name)
 
-    def _setitem(self, name: Name, data: bytes) -> None:
+    def _write(self, name: Name, data: bytes) -> None:
         self._request("write", name, data=data)
 
-    def _delitem(self, name: Name) -> None:
+    def _delete(self, name: Name) -> None:
         self._request("delete", name)
 
     def _metadata(self, name: Name) -> MetadataStorage:
