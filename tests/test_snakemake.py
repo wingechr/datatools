@@ -14,7 +14,7 @@ class TestSnakemake(TempdirTestCase):
     def test_snakemake(self):
         """TODO"""
         data_storage = FileDataStorage(str(self.temp_dir))
-        self.assertFalse("converted.json" in data_storage)
+        self.assertFalse(data_storage.has("converted.json"))
 
         snakefile = Path(__file__).parent / "test_snakemake.Snakefile"
         env = os.environ.copy()
@@ -26,4 +26,4 @@ class TestSnakemake(TempdirTestCase):
             cwd=self.temp_dir,
         )
 
-        self.assertTrue("converted.json" in data_storage)
+        self.assertTrue(data_storage.has("converted.json"))

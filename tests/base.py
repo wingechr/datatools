@@ -1,16 +1,8 @@
 """package init"""
 
-import logging
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
-
-logging.basicConfig(
-    format="[%(asctime)s %(levelname)7s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    level=logging.INFO,
-    force=True,
-)
 
 
 class TempdirTestCase(TestCase):

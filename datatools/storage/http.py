@@ -6,6 +6,7 @@ import re
 
 from fastapi import Body, FastAPI, HTTPException, Query, Response
 import httpx
+from typing_extensions import override
 
 from datatools.exceptions import StorageException, StorageFileNotFoundError
 from datatools.storage.base import DataStorage, MetadataStorage
@@ -47,36 +48,36 @@ def make_server_app(data_storage: DataStorage) -> FastAPI:
     @app.head("/data/{name:path}")
     @catch_exceptions
     def has(name: str):
-        if name not in data_storage:
+        if not data_storage.has(name):
             raise StorageFileNotFoundError(name)
 
     @app.delete("/data/{name:path}")
     @catch_exceptions
     def delete(name: str):
-        del data_storage[name]
+        data_storage.delete(name)
 
     @app.get("/data/{name:path}")
     @catch_exceptions
-    def get(name: str):
-        data = data_storage[name]
+    def read(name: str):
+        data = data_storage.read(name)
         return Response(content=data)
 
     @app.put("/data/{name:path}")
     @catch_exceptions
-    def put(name: str, data: bytes = Body(...)):
-        data_storage[name] = data
+    def write(name: str, data: bytes = Body(...)):
+        data_storage.write(name, data)
 
     @app.get("/metadata/{name:path}")
     @catch_exceptions
     def metadata_get(name, a: str):
-        return data_storage.metadata(name)[a]
+        return data_storage.metadata(name).get(a)
 
     @app.post("/metadata/{name:path}")
     @catch_exceptions
     def metadata_set(name, data: dict):
         metadata = data_storage.metadata(name)
         for k, v in data.items():
-            metadata[k] = v
+            metadata.set(k, v)
 
     return app
 
@@ -99,10 +100,12 @@ class HttpMetadataStorage(MetadataStorage):
         resp.raise_for_status()
         return resp
 
-    def _getitem(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
+    @override
+    def get(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
         return self._request(params={"a": attribute}).json()
 
-    def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
+    @override
+    def set(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
         self._request(method="POST", data={attribute: value})
 
 
@@ -135,7 +138,7 @@ class HttpDataStorage(DataStorage):
 
         return resp
 
-    def _contains(self, name: Name) -> bool:
+    def _has(self, name: Name) -> bool:
         try:
             self._request(path=f"/data/{name}", method="HEAD")
             return True
@@ -153,9 +156,10 @@ class HttpDataStorage(DataStorage):
         self._request(path=f"/data/{name}", method="DELETE")
 
     def _list(self) -> Iterable[Name]:
-        return self._request(path="/data").json()
+        raise NotImplementedError()  # we implement find # pragma: no coverage
 
-    def _find(self, **filters: MetadataValue) -> Iterable[Name]:
+    @override
+    def find(self, **filters: MetadataValue) -> Iterable[Name]:
         filters_list = [f"{k}={v}" for k, v in filters.items()]
         return self._request(path="/data", params={"q": filters_list}).json()
 

@@ -72,16 +72,16 @@ def has(ctx_data_storage: DataStorage, name: str) -> None:
     just sets status code OK (0) if name in ctx_data_storage
 
     """
-    if name not in ctx_data_storage:
+    if not ctx_data_storage.has(name):
         sys.exit(1)
 
 
 @main.command()
 @click.pass_obj
 @click.argument("name")
-def get(ctx_data_storage: DataStorage, name: str) -> None:
+def read(ctx_data_storage: DataStorage, name: str) -> None:
     """TODO"""
-    bdata: bytes = ctx_data_storage[name]
+    bdata: bytes = ctx_data_storage.read(name)
     sys.stdout.buffer.write(bdata)
     sys.stdout.buffer.flush()
 
@@ -89,11 +89,11 @@ def get(ctx_data_storage: DataStorage, name: str) -> None:
 @main.command()
 @click.pass_obj
 @click.argument("name")
-def put(ctx_data_storage: DataStorage, name: str) -> None:
+def write(ctx_data_storage: DataStorage, name: str) -> None:
     """TODO"""
     # FIXME: validate name before actually reading data
     bdata: bytes = sys.stdin.buffer.read()
-    ctx_data_storage[name] = bdata
+    ctx_data_storage.write(name, bdata)
 
 
 @main.command()
@@ -102,7 +102,7 @@ def put(ctx_data_storage: DataStorage, name: str) -> None:
 def delete(ctx_data_storage: DataStorage, name: str) -> None:
     """TODO"""
     # FIXME: confirm
-    del ctx_data_storage[name]
+    ctx_data_storage.delete(name)
 
 
 @main.group()
@@ -119,7 +119,7 @@ def metadata(ctx_data_storage: DataStorage) -> None:
 def metadata_get(ctx_data_storage: DataStorage, name: str, attribute: str) -> None:
     """TODO"""
     metadata_storage = ctx_data_storage.metadata(name)
-    values = list(metadata_storage[attribute])
+    values = list(metadata_storage.get(attribute))
     print(json_dumps(values))
 
 
@@ -134,7 +134,7 @@ def metadata_set(
     metadata_storage = ctx_data_storage.metadata(name)
     attribute_values_dct = parse_cmd_vals(attribute_values)
     for attribute, value in attribute_values_dct.items():
-        metadata_storage[attribute] = value
+        metadata_storage.set(attribute, value)
 
 
 @main.command("import")

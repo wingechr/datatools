@@ -1,7 +1,6 @@
 """TODO"""
 
 import datetime
-import logging
 from pathlib import Path
 import pickle
 from tempfile import TemporaryDirectory
@@ -72,47 +71,47 @@ def _test_action_sequence(self: TestCase, storage: DataStorage):
     storage.info()
 
     # prevent invalid name
-    self.assertRaises(StorageInvalidNameError, storage.__setitem__, "\n" + name1, data1)
+    self.assertRaises(StorageInvalidNameError, storage.write, "\n" + name1, data1)
 
-    storage[name1] = data1
+    storage.write(name1, data1)
     # now it exists
-    self.assertTrue(name1 in storage)
+    self.assertTrue(storage.read(name1))
     # now we cannot add it again
-    self.assertRaises(StorageFileExistsError, storage.__setitem__, name1, data1)
+    self.assertRaises(StorageFileExistsError, storage.write, name1, data1)
     # we can retreive it
-    self.assertEqual(storage[name1], data1)
+    self.assertEqual(storage.read(name1), data1)
 
     name2 = "data2"
     data2 = b"data2"
     mdata2_key, mdata2_val = "metadata2_a", 10
-    self.assertFalse(name2 in storage)
+    self.assertFalse(storage.has(name2))
     # but even though it does not exist, we can add metadata
-    storage.metadata(name2)[mdata2_key] = mdata2_val
+    storage.metadata(name2).set(mdata2_key, mdata2_val)
     # and can retrieve it
-    self.assertEqual(next(iter(storage.metadata(name2)[mdata2_key])), mdata2_val)
+    self.assertEqual(next(iter(storage.metadata(name2).get(mdata2_key))), mdata2_val)
     # now we insert and retrieve data
-    storage[name2] = data2
-    self.assertEqual(storage[name2], data2)
+    storage.write(name2, data2)
+    self.assertEqual(storage.read(name2), data2)
     # list all names:
     self.assertEqual(set(storage.find()), {name1, name2})
     # list via iterator
-    self.assertEqual(set(storage), {name1, name2})
+    self.assertEqual(set(storage.find()), {name1, name2})
 
     # filter by metadata
     self.assertEqual(set(storage.find(**{mdata2_key: mdata2_val})), {name2})
 
     # delete
-    del storage[name1]
-    self.assertFalse(name1 in storage)
+    storage.delete(name1)
+    self.assertFalse(storage.has(name1))
 
     # try if exception is raised
-    self.assertRaises(StorageFileNotFoundError, storage.__getitem__, name1)
-    self.assertRaises(StorageFileNotFoundError, storage.__delitem__, name1)
+    self.assertRaises(StorageFileNotFoundError, storage.read, name1)
+    self.assertRaises(StorageFileNotFoundError, storage.delete, name1)
 
     # change/update metadata
-    storage.metadata(name2)[mdata2_key] = "CHANGED"
+    storage.metadata(name2).set(mdata2_key, "CHANGED")
     # and can retrieve it
-    self.assertEqual(next(iter(storage.metadata(name2)[mdata2_key])), "CHANGED")
+    self.assertEqual(next(iter(storage.metadata(name2).get(mdata2_key))), "CHANGED")
 
 
 class TestStorageMemory(TestCase):
@@ -155,9 +154,9 @@ class TestStorageFiles(TempdirTestCase):
     def test_new_name_is_path(self):
         """TODO"""
         storage = FileDataStorage(str(self.temp_dir))
-        storage["a/b"] = b""
+        storage.write("a/b", b"")
         # "a" is alreaedy used as path
-        self.assertRaises(StorageInvalidNameError, storage.__setitem__, "a", b"")
+        self.assertRaises(StorageInvalidNameError, storage.write, "a", b"")
 
 
 class TestStorageFilesWithRdfMetadata(TestCase):
@@ -223,14 +222,12 @@ class TestCliWrapperDataStorage(TestCase):
                 main,
                 ["storage", "-l", url, "import", str(path), "data"],
             )
-            logging.error((resp.return_value, resp.stdout_bytes, resp.stderr_bytes))
 
             # retrieve
             resp = runner2.invoke(
                 main,
-                ["storage", "-l", url, "get", "data"],
+                ["storage", "-l", url, "read", "data"],
             )
-            logging.error((resp.return_value, resp.stdout_bytes, resp.stderr_bytes))
 
             self.assertEqual(resp.stdout_bytes, test_data)
 
@@ -279,10 +276,10 @@ class TestStorageHttpServer(TestCase):
             resp = httpx.put(url + "/data//a", content=b"data")
             self.assertEqual(resp.status_code, 400)
 
-            self.assertTrue(storage._contains("a/b"))
-            self.assertFalse(storage._contains("b"))
-            self.assertRaises(Exception, storage._contains, "/a")
-            self.assertRaises(Exception, storage._contains, "a")
+            self.assertTrue(storage._has("a/b"))
+            self.assertFalse(storage._has("b"))
+            self.assertRaises(Exception, storage._has, "/a")
+            self.assertRaises(Exception, storage._has, "a")
 
 
 class TestUseCases(TestCase):
@@ -311,19 +308,19 @@ class TestUseCases(TestCase):
             uri = base_url + "/" + filename
             name = storage.import_from_uri(uri)
 
-            self.assertEqual(storage[name], test_data)
+            self.assertEqual(storage.read(name), test_data)
             # should have meta data from import action
             self.assertEqual(
-                get_item_or_first(storage.metadata(name)[QueryParameterUri]),
+                get_item_or_first(storage.metadata(name).get(QueryParameterUri)),
                 uri,
             )
 
             # import from path
             uri = filepath.as_uri()
             name = storage.import_from_uri(uri)
-            self.assertEqual(storage[name], test_data)
+            self.assertEqual(storage.read(name), test_data)
             self.assertEqual(
-                get_item_or_first(storage.metadata(name)[QueryParameterUri]),
+                get_item_or_first(storage.metadata(name).get(QueryParameterUri)),
                 uri,
             )
 
@@ -331,15 +328,15 @@ class TestUseCases(TestCase):
             query = "select 1 as a"
             uri = "sqlite:///:memory:"
             name = storage.import_from_uri(uri, query=query)
-            self.assertEqual(storage[name].replace(b"\r", b""), b"a\n1\n")
+            self.assertEqual(storage.read(name).replace(b"\r", b""), b"a\n1\n")
             # TODO add query?
             self.assertEqual(
-                get_item_or_first(storage.metadata(name)[QueryParameterUri]),
+                get_item_or_first(storage.metadata(name).get(QueryParameterUri)),
                 uri,
             )
 
             # check metadata
-            metadata_all = get_item_or_first(storage.metadata(name)["$"])
+            metadata_all = get_item_or_first(storage.metadata(name).get("$"))
 
             metadata_activity: dict = metadata_all[PROP_GENERATED_BY]  # type:ignore
 
@@ -461,7 +458,7 @@ class TestUseCases(TestCase):
 
         # generate inputs
         for name in inputs.values():
-            storage[name] = pickle.dumps(3)
+            storage.write(name, pickle.dumps(3))
 
         task_create_output = storage.task(
             function,
@@ -471,17 +468,17 @@ class TestUseCases(TestCase):
 
         # try to call mutliple times - but only of output does not exist
         for _ in range(2):
-            if not all(name in storage for name in outputs.values()):
+            if not all(storage.has(name) for name in outputs.values()):
                 task_create_output(**outputs, **inputs)
 
-        self.assertTrue(all(name in storage for name in outputs.values()))
+        self.assertTrue(all(storage.has(name) for name in outputs.values()))
 
         self.assertEqual(count_calls, 1)
 
         # check that metadata should also be writtem
         for name in outputs.values():
             task_timestamp_s = str(
-                get_item_or_first(storage.metadata(name)[QueryTimestamp])
+                get_item_or_first(storage.metadata(name).get(QueryTimestamp))
             )
             datetime.datetime.fromisoformat(task_timestamp_s)
 
@@ -535,12 +532,12 @@ class TestUseCases(TestCase):
         # check metadata
         self.assertEqual(
             get_item_or_first(
-                storage.metadata(key2)[f"{PROP_GENERATED_BY}.{PROP_FUNCTION}.@id"]
+                storage.metadata(key2).get(f"{PROP_GENERATED_BY}.{PROP_FUNCTION}.@id")
             ),
             fid_convert,
         )
 
         self.assertEqual(
-            get_item_or_first(storage.metadata(key1)[f"{PROP_FILE}.mediatype"]),
+            get_item_or_first(storage.metadata(key1).get(f"{PROP_FILE}.mediatype")),
             "application/json",
         )

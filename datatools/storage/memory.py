@@ -4,6 +4,8 @@ from abc import abstractmethod
 from collections.abc import Iterable
 from typing import Any
 
+from typing_extensions import override
+
 from datatools.storage.base import DataStorage, MetadataStorage
 from datatools.types import MetadataAttribute, MetadataValue, Name
 from datatools.utils import jsonpath_get, jsonpath_update
@@ -15,11 +17,13 @@ class MemoryMetadataStorage(MetadataStorage):
     def __init__(self, data: dict | None = None):
         self._data = {} if data is None else data
 
-    def _getitem(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
+    @override
+    def get(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
         result = jsonpath_get(data=self._data, key=attribute)
         return result
 
-    def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
+    @override
+    def set(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
         jsonpath_update(data=self._data, key=attribute, val=value)
 
 
@@ -27,16 +31,20 @@ class PersistentMemoryMetadataStorage(MemoryMetadataStorage):
     """TODO"""
 
     def __init__(self):
-        self._changed = False
+        # self._changed = False
         super().__init__(data=self._load_or_init())
 
-    def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
-        super()._setitem(attribute=attribute, value=value)
-        self._changed = True
+    @override
+    def set(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
+        super().set(attribute=attribute, value=value)
+        self._dump(
+            self._data
+        )  # TODO: maybe use context, so we dont have to dump every time
+        # self._changed = True
 
-    def __del__(self):
-        if self._changed:
-            self._dump(self._data)
+    # def __delete__(self):
+    #    if self._changed:
+    #        self._dump(self._data)
 
     @abstractmethod
     def _load_or_init(self) -> dict | None: ...
@@ -54,7 +62,7 @@ class MemoryDataStorage(DataStorage):
         self.__data: dict[Name, Any] = {}
         self.__metadata: dict[Name, MemoryMetadataStorage] = {}
 
-    def _contains(self, name: Name) -> bool:
+    def _has(self, name: Name) -> bool:
         return name in self.__data
 
     def _getitem(self, name: Name) -> Any:

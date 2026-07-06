@@ -1,7 +1,7 @@
 """TODO"""
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable
 import contextlib
 import functools
 import hashlib
@@ -52,23 +52,17 @@ class MetadataStorage(ABC):  # TODO: subclass AbstractContextManager ?
     """Abstract metadata storage."""
 
     @abstractmethod
-    def _getitem(self, attribute: MetadataAttribute) -> list[MetadataValue]: ...
+    def get(self, attribute: MetadataAttribute) -> list[MetadataValue]: ...
 
     @abstractmethod
-    def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None: ...
+    def set(self, attribute: MetadataAttribute, value: MetadataValue) -> None: ...
 
     def _match(self, **filters: MetadataValue) -> bool:
         # FIXME: implement better operators
         does_match = all(
-            value in self[attribute] for attribute, value in filters.items()
+            value in self.get(attribute) for attribute, value in filters.items()
         )
         return does_match
-
-    def __getitem__(self, attribute: MetadataAttribute) -> list[MetadataValue]:
-        return self._getitem(attribute=attribute)
-
-    def __setitem__(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
-        return self._setitem(attribute=attribute, value=value)
 
 
 class DataStorage(ABC):
@@ -80,7 +74,7 @@ class DataStorage(ABC):
         self._location = location
 
     @abstractmethod
-    def _contains(self, name: Name) -> bool: ...
+    def _has(self, name: Name) -> bool: ...
 
     @abstractmethod
     def _getitem(self, name: Name) -> ByteData: ...
@@ -97,7 +91,7 @@ class DataStorage(ABC):
     @abstractmethod
     def _list(self) -> Iterable[Name]: ...
 
-    def _find(self, **filters: MetadataValue) -> Iterable[Name]:
+    def find(self, **filters: MetadataValue) -> Iterable[Name]:
         """primitive implementation"""
         for name in self._list():
             if filters:
@@ -114,28 +108,29 @@ class DataStorage(ABC):
     def _get_valid_name(self, name: Name) -> Name:
         return Name(name).strip()
 
-    def __iter__(self) -> Iterator[Name]:
-        return iter(self._list())
-
-    def __contains__(self, name: Name) -> bool:
+    def has(self, name: Name) -> bool:
+        """TODO"""
         self._assert_valid_name(name=name)
-        return self._contains(name=name)
+        return self._has(name=name)
 
-    def __getitem__(self, name: Name) -> ByteData:
+    def read(self, name: Name) -> ByteData:
+        """TODO"""
         self._assert_valid_name(name=name)
-        if name not in self:
+        if not self.has(name):
             raise StorageFileNotFoundError(f"Not found: {name}")
         return self._getitem(name=name)
 
-    def __setitem__(self, name: Name, data: ByteData) -> None:
+    def write(self, name: Name, data: ByteData) -> None:
+        """TODO"""
         self._assert_valid_name(name=name)
-        if name in self:
+        if self.has(name):
             raise StorageFileExistsError(f"Already exists: {name}")
         return self._setitem(name=name, data=data)
 
-    def __delitem__(self, name: Name) -> None:
+    def delete(self, name: Name) -> None:
+        """TODO"""
         self._assert_valid_name(name=name)
-        if name not in self:
+        if not self.has(name):
             raise StorageFileNotFoundError(f"Not found: {name}")
         return self._delitem(name=name)
 
@@ -143,10 +138,6 @@ class DataStorage(ABC):
         """Metadata container associated with data."""
         self._assert_valid_name(name=name)
         return self._metadata(name=name)
-
-    def find(self, **filters: MetadataValue) -> Iterable[Name]:
-        """list names for given metadata query."""
-        return self._find(**filters)
 
     def _assert_valid_name(self, name: Name):
         valid_name = self._get_valid_name(name)
@@ -203,12 +194,12 @@ class DataStorage(ABC):
                 output_name = get_name_from_hash(hashsum)
                 # logging.error((hash_data, hashsum))
 
-                if output_name not in self:
+                if not self.has(output_name):
                     # run task (first arg (_output_name) is name)
                     task(output_name, *args, **kwargs)
 
                 # retrieval
-                data = self[output_name]
+                data = self.read(output_name)
                 result = output_from_bytes(data)
                 return result
 
@@ -263,7 +254,7 @@ class DataStorage(ABC):
                     }
                 )
 
-                bdata = self[name_value]
+                bdata = self.read(name_value)
                 return handler(bdata)
 
             return handle_
@@ -323,7 +314,7 @@ class DataStorage(ABC):
 
             def handle_(data: Any, name: Name):
                 bdata = handler(data)
-                self[name] = bdata
+                self.write(name, bdata)
                 update_metadata_task_id(data)
 
                 output_metadata = {
@@ -347,18 +338,18 @@ class DataStorage(ABC):
                 # cannot set root itself:
                 metadata = self.metadata(name)
                 for key, val in output_metadata.items():
-                    metadata[key] = val
+                    metadata.set(key, val)
 
                 # generated metadata
                 for key, val in callback_data["metadata_generated"].items():
-                    metadata[key] = val
+                    metadata.set(key, val)
 
-                metadata['$."$schema"'] = "TODO"  # need to quote
+                metadata.set('$."$schema"', "TODO")  # need to quote
 
             return handle_
 
         def check_names_exist(**names):
-            return all(name in self for name in names.values())
+            return all(self.has(name) for name in names.values())
 
         wrapped_output_handlers = {
             name: wrap_output_handler(name, conv)

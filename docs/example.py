@@ -61,9 +61,9 @@ with TemporaryDirectory() as tempdir:
     task(name4, value1=name1, value2=name2, value3=name3)
 
     # check result and metadata
-    assert len(st[name1]) == len(st[name2])  # imported same files 2 times
-    assert json_loadb(st[name4]) == 2 * len(st[name1]) + 1
+    assert len(st.read(name1)) == len(st.read(name2))  # imported same files 2 times
+    assert json_loadb(st.read(name4)) == 2 * len(st.read(name1)) + 1
 
-    assert st.metadata(name1)[QueryParameterUri][0] == uri1
-    assert st.metadata(name2)[QueryParameterUri][0] == uri2
-    assert st.metadata(name3)[QueryParameterUri][0] == uri3
+    assert st.metadata(name1).get(QueryParameterUri)[0] == uri1
+    assert st.metadata(name2).get(QueryParameterUri)[0] == uri2
+    assert st.metadata(name3).get(QueryParameterUri)[0] == uri3

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from click.testing import CliRunner
+from typing_extensions import override
 
 from datatools.exceptions import (
     SubprocessStatus,
@@ -14,7 +15,7 @@ from datatools.storage.base import DataStorage, MetadataStorage
 from datatools.types import MetadataAttribute, MetadataValue, Name
 from datatools.utils import (
     json_dumps,
-    json_loads,
+    json_loadb,
     reverse_prints,
     try_parse_json_str,
 )
@@ -27,11 +28,13 @@ class TestCliMetadataDataStorage(MetadataStorage):
         self._name = name
         self._request = request
 
-    def _getitem(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
+    @override
+    def get(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
         data = self._request("metadata", "get", self._name, str(attribute))
         return try_parse_json_str(data)
 
-    def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
+    @override
+    def set(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
         self._request(
             "metadata",
             "set",
@@ -68,7 +71,7 @@ class CliWrapperDataStorage(DataStorage):
 
         return stdout
 
-    def _contains(self, name: Name) -> bool:
+    def _has(self, name: Name) -> bool:
         try:
             self._request("has", name)
         except SubprocessStatus:
@@ -76,10 +79,10 @@ class CliWrapperDataStorage(DataStorage):
         return True
 
     def _getitem(self, name: Name) -> bytes:
-        return self._request("get", name)
+        return self._request("read", name)
 
     def _setitem(self, name: Name, data: bytes) -> None:
-        self._request("put", name, data=data)
+        self._request("write", name, data=data)
 
     def _delitem(self, name: Name) -> None:
         self._request("delete", name)
@@ -87,18 +90,19 @@ class CliWrapperDataStorage(DataStorage):
     def _metadata(self, name: Name) -> MetadataStorage:
         return TestCliMetadataDataStorage(name, self._request)
 
-    def _find(self, **filters: MetadataValue) -> Iterable[Name]:
+    @override
+    def find(self, **filters: MetadataValue) -> Iterable[Name]:
         filters_str = [f"{k}={v}" for k, v in filters.items()]
         data = self._request("find", *filters_str)
         return reverse_prints(data)
 
     def _list(self) -> Iterable[Name]:
-        return self._find()
+        raise NotImplementedError()  # we implement find # pragma: no coverage
 
     def info(self) -> dict:
         """TODO"""
         info_remote = self._request("info")
-        info_remote = json_loads(info_remote)
+        info_remote = json_loadb(info_remote)
         info_client = super().info()
         info_client.update({"remote": info_remote})
 

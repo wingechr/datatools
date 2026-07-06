@@ -85,7 +85,7 @@ class FileDataStorage(DataStorage):
         self._location: Path  # absolute, resolved location
         super().__init__(location=path)
 
-    def _contains(self, name: Name) -> bool:
+    def _has(self, name: Name) -> bool:
         path = self._get_abs_path(name)
         return path.exists()
 
