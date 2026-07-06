@@ -221,7 +221,7 @@ class DataStorage(ABC):
         function: Callable,
         output_converters: dict[str, FunToBytes | None] | FunToBytes | None = None,
         input_converters: dict[str, FunFromBytes | None] | None = None,
-        metadata_converters: dict[str, Callable[[Any], Json]] | None = None,
+        metadata_generator: Callable[[Any], dict[str, Json]] | None = None,
         get_job_hashsum: FunHashsum = default_get_job_hashsum,
         skip_finished: bool = False,
     ) -> Task:
@@ -243,7 +243,7 @@ class DataStorage(ABC):
                 PROP_FUNCTION: wrapped_function.get_metadata(),
                 PROP_PARAMETER: [],  # will be filled by input handlers
             },
-            "metadata_file": {},
+            "metadata_generated": {},
             "input_parameter_values": {},
             "task": None,  # will be filled later
         }
@@ -289,9 +289,9 @@ class DataStorage(ABC):
 
         def update_metadata_task_id(data: Any):
             # generate task id (once)
-            metadata_generated = "@id" in callback_data["metadata_activity"]
+            metadata_activity = "@id" in callback_data["metadata_activity"]
 
-            if not metadata_generated:
+            if not metadata_activity:
                 task: Task = callback_data["task"]
                 job_hashsum = task.get_job_hashsum(
                     **callback_data["input_parameter_values"]
@@ -306,11 +306,8 @@ class DataStorage(ABC):
                     p["@id"] = activity_id + "/input/" + p[PROP_PARAMETER_NAME]
 
                 # generate metadata
-                if metadata_converters:
-                    for name, conv in metadata_converters.items():
-                        mdata = conv(data)
-                        # TODO: should it be in a different group
-                        callback_data["metadata_file"][name] = mdata
+                if metadata_generator:
+                    callback_data["metadata_generated"] = metadata_generator(data)
 
         def wrap_output_handler(param_name: str, handler: Callable | None = None):
             if handler:
@@ -335,8 +332,7 @@ class DataStorage(ABC):
                     "@id": callback_data["metadata_activity"]["@id"]
                     + "/output/"
                     + param_name,
-                    PROP_FILE: callback_data["metadata_file"]
-                    | {
+                    PROP_FILE: {
                         "@id": "md5:" + hashlib.md5(bdata).hexdigest(),  # noqa:S324
                         "@type": "File",
                         PROP_SIZE: len(bdata),
@@ -351,6 +347,10 @@ class DataStorage(ABC):
                 # cannot set root itself:
                 metadata = self.metadata(name)
                 for key, val in output_metadata.items():
+                    metadata[key] = val
+
+                # generated metadata
+                for key, val in callback_data["metadata_generated"].items():
                     metadata[key] = val
 
                 metadata['$."$schema"'] = "TODO"  # need to quote

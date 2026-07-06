@@ -514,7 +514,7 @@ class TestUseCases(TestCase):
         task_generate = storage.task(
             generate1,
             {"output": None},
-            metadata_converters={"mediatype": lambda output: "application/json"},
+            metadata_generator=lambda _: {f"{PROP_FILE}.mediatype": "application/json"},
             skip_finished=True,
         )
         task_convert = storage.task(
