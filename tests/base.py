@@ -5,6 +5,13 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 
 
+def get_item_or_first(x):
+    """TODO"""
+    if isinstance(x, list):
+        return x[0]
+    return x
+
+
 class TempdirTestCase(TestCase):
     """TODO"""
 

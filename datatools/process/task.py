@@ -32,7 +32,14 @@ from collections.abc import Callable
 import logging
 from typing import Any, Generic
 
-from datatools.types import FunHashsum, FunParams, FunResult, Json, Properties as props
+from datatools.types import (
+    FunHashsum,
+    FunParams,
+    FunResult,
+    Json,
+    RdfClasses as clss,
+    RdfProperties as props,
+)
 from datatools.utils import (
     function_get_defaults,
     function_get_regular_params,
@@ -70,7 +77,7 @@ class AnnotatedFunction(Generic[FunParams, FunResult]):
     def get_metadata(self) -> dict[str, Json]:
         """TODO"""
         return {
-            "@type": "Function",
+            "@type": clss.FUNCTION.name,
             "@id": self.function_id,
             props.DESCRIPTION.name: self.description,
         }

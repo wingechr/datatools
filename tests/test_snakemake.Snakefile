@@ -1,14 +1,18 @@
 import os
 import sys
-from datatools import FileDataStorage
+from datatools import FileDataStorage, AnnotatedFunction
 from datatools.utils import json_dumpb, json_loadb
 
 # example functions
-def generate() -> bytes:
-    return b"[1, 2]"
+@AnnotatedFunction.wrap(function_id="urn:function:generate")
+def generate(n:int=1) -> bytes:
+    """generate a list of 1s"""
+    return json_dumpb([1] * n)
 
-def convert(data: list) -> list:
-    return [x + 1 for x in data]
+@AnnotatedFunction.wrap(function_id="urn:function:convert")
+def convert(data: list, y:int=1) -> list:
+    """add y to each list element"""
+    return [x + x for x in data]
 
 # use FileDataStorage to create jobs
 
@@ -30,7 +34,7 @@ rule generate:
     output:
         "generatad.json"
     run:
-        task_generate(output[0])
+        task_generate(output[0], n=10)
 
 # for this simple exmaple, we could also manally just run
 # data_storage.task(generate, {"output": None}, skip_finished=True)("generatad.json")

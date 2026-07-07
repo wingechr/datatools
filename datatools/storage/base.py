@@ -16,6 +16,7 @@ from datatools.exceptions import (
 from datatools.process.importer import infer_importer_class
 from datatools.process.task import AnnotatedFunction, Task, default_get_job_hashsum
 from datatools.types import (
+    RDF_CONTEXT,
     SINGLE_OUTPUT_PARAM_NAME,
     ByteData,
     FunFromBytes,
@@ -27,7 +28,8 @@ from datatools.types import (
     MetadataAttribute,
     MetadataValue,
     Name,
-    Properties as props,
+    RdfClasses as clss,
+    RdfProperties as props,
 )
 from datatools.utils import (
     get_now_str,
@@ -217,7 +219,7 @@ class DataStorage(ABC):
         callback_data = {
             "metadata_activity": {
                 # "@id": None,
-                "@type": "Activity",
+                "@type": clss.ACTIVITY.name,
                 props.DATETIME.name: get_now_str(),
                 props.CREATOR.name: get_user_w_host(),
                 props.FUNCTION.name: wrapped_function.get_metadata(),
@@ -235,7 +237,7 @@ class DataStorage(ABC):
 
                 callback_data["metadata_activity"][props.PARAMETER.name].append(
                     {
-                        "@type": "Input",
+                        "@type": clss.INPUT.name,
                         # "@id": set later when we have it
                         props.PARAMETER_VALUE.name: name_value,
                         props.PARAMETER_NAME.name: name,
@@ -257,7 +259,7 @@ class DataStorage(ABC):
                 callback_data["input_parameter_values"][name] = value
                 callback_data["metadata_activity"][props.PARAMETER.name].append(
                     {
-                        "@type": "Input",
+                        "@type": clss.INPUT.name,
                         props.PARAMETER_VALUE.name: value,
                         props.PARAMETER_NAME.name: name,
                     }
@@ -276,11 +278,11 @@ class DataStorage(ABC):
                 job_hashsum = task.get_job_hashsum(
                     **callback_data["input_parameter_values"]
                 )
-                job_id = f"job:{job_hashsum}"
+                job_id = f"urn:job:{job_hashsum}"
                 datatime = callback_data["metadata_activity"][props.DATETIME.name]
-                activity_id = f"activity:{job_hashsum}-{datatime}"
+                activity_id = f"urn:activity:{job_hashsum}-{datatime}"
                 callback_data["metadata_activity"]["@id"] = activity_id
-                callback_data["metadata_activity"][props.JOB.name] = job_id
+                callback_data["metadata_activity"][props.IDENTIFIER.name] = job_id
                 # update ids for input parameters
                 for p in callback_data["metadata_activity"][props.PARAMETER.name]:
                     p["@id"] = activity_id + "/input/" + p[props.PARAMETER_NAME.name]
@@ -307,14 +309,15 @@ class DataStorage(ABC):
                 update_metadata_task_id(data)
 
                 output_metadata = {
-                    "@type": "Output",
-                    "name": name,
+                    "@context": RDF_CONTEXT,
+                    "@type": clss.OUTPUT.name,
+                    props.IDENTIFIER.name: name,
                     "@id": callback_data["metadata_activity"]["@id"]
                     + "/output/"
                     + param_name,
                     props.FILE.name: {
-                        "@id": "md5:" + hashlib.md5(bdata).hexdigest(),  # noqa:S324
-                        "@type": "File",
+                        "@id": "urn:md5:" + hashlib.md5(bdata).hexdigest(),  # noqa:S324
+                        "@type": clss.FILE.name,
                         props.SIZE.name: len(bdata),
                     },
                     props.GENERATED_BY.name: callback_data["metadata_activity"],

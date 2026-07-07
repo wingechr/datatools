@@ -27,7 +27,8 @@ from datatools.storage.memory import MemoryDataStorage
 from datatools.storage.sql import SqlDataStorage
 from datatools.types import (
     SINGLE_OUTPUT_PARAM_NAME,
-    Properties as props,
+    RdfClasses as clss,
+    RdfProperties as props,
 )
 from datatools.utils import (
     get_free_port,
@@ -38,17 +39,10 @@ from datatools.utils import (
     start_http_server,
     wait_for_url,
 )
-from tests.base import TempdirTestCase
+from tests.base import TempdirTestCase, get_item_or_first
 
 QueryParameterUri = f'{props.GENERATED_BY.name}.{props.PARAMETER.name}[?({props.PARAMETER_NAME.name} == "uri")].{props.PARAMETER_VALUE.name}'  # noqa:E501
 QueryTimestamp = f"{props.GENERATED_BY.name}.{props.DATETIME.name}"
-
-
-def get_item_or_first(x):
-    """TODO"""
-    if isinstance(x, list):
-        return x[0]
-    return x
 
 
 def _test_action_sequence(self: TestCase, storage: DataStorage):
@@ -78,7 +72,9 @@ def _test_action_sequence(self: TestCase, storage: DataStorage):
     # but even though it does not exist, we can add metadata
     storage.metadata(name2).set(mdata2_key, mdata2_val)
     # and can retrieve it
-    self.assertEqual(next(iter(storage.metadata(name2).get(mdata2_key))), mdata2_val)
+    self.assertEqual(
+        get_item_or_first(storage.metadata(name2).get(mdata2_key)), mdata2_val
+    )
     # now we insert and retrieve data
     storage.write(name2, data2)
     self.assertEqual(storage.read(name2), data2)
@@ -101,7 +97,9 @@ def _test_action_sequence(self: TestCase, storage: DataStorage):
     # change/update metadata
     storage.metadata(name2).set(mdata2_key, "CHANGED")
     # and can retrieve it
-    self.assertEqual(next(iter(storage.metadata(name2).get(mdata2_key))), "CHANGED")
+    self.assertEqual(
+        get_item_or_first(storage.metadata(name2).get(mdata2_key)), "CHANGED"
+    )
 
 
 class TestStorageMemory(TestCase):
@@ -316,11 +314,12 @@ class TestUseCases(TestCase):
             )
 
             # check metadata
-            metadata_all = get_item_or_first(storage.metadata(name).get("$"))
+            metadata_all: dict = get_item_or_first(storage.metadata(name).get("$"))  # type:ignore
+            del metadata_all["@context"]
 
             metadata_activity: dict = metadata_all[props.GENERATED_BY.name]  # type:ignore
 
-            job_id = metadata_activity[props.JOB.name]
+            job_id = metadata_activity[props.IDENTIFIER.name]
             self.assertTrue(job_id, "")
             activity_id = (
                 job_id.replace("job:", "activity:")
@@ -331,18 +330,18 @@ class TestUseCases(TestCase):
             metadata_all_expected = {
                 "$schema": "TODO",
                 "@id": activity_id + "/output/" + SINGLE_OUTPUT_PARAM_NAME,
-                "@type": "Output",
-                "name": ":memory:",
+                "@type": clss.OUTPUT.name,
+                "identifier": ":memory:",
                 # file info
                 props.FILE.name: {
-                    "@id": "md5:34ff2335cbe2045ddc3b78993d1e971d",
-                    "@type": "File",
+                    "@id": "urn:md5:34ff2335cbe2045ddc3b78993d1e971d",
+                    "@type": clss.FILE.name,
                     props.SIZE.name: 4,
                     # file saved with info
                     props.SAVED_WITH.name: {
                         props.FUNCTION.name: {
                             "@id": "sql_query_result_to_csv_bytes",
-                            "@type": "Function",
+                            "@type": clss.FUNCTION.name,
                             "description": sql_query_result_to_csv_bytes.__doc__,
                         },
                         props.PARAMETER_NAME.name: SINGLE_OUTPUT_PARAM_NAME,
@@ -351,33 +350,33 @@ class TestUseCases(TestCase):
                 # file generation info
                 props.GENERATED_BY.name: {
                     "@id": activity_id,
-                    "@type": "Activity",
+                    "@type": clss.ACTIVITY.name,
                     # context
                     props.DATETIME.name: metadata_activity[props.DATETIME.name],
                     props.CREATOR.name: metadata_activity[props.CREATOR.name],
                     # Job
                     props.FUNCTION.name: {
                         "@id": "QUERY",
-                        "@type": "Function",
+                        "@type": clss.FUNCTION.name,
                         "description": query_sql.__doc__,
                     },
-                    props.JOB.name: job_id,
+                    props.IDENTIFIER.name: job_id,
                     props.PARAMETER.name: [
                         {
                             "@id": activity_id + "/input/uri",
-                            "@type": "Input",
+                            "@type": clss.INPUT.name,
                             props.PARAMETER_NAME.name: "uri",
                             props.PARAMETER_VALUE.name: "sqlite:///:memory:",
                         },
                         {
                             "@id": activity_id + "/input/query",
-                            "@type": "Input",
+                            "@type": clss.INPUT.name,
                             props.PARAMETER_NAME.name: "query",
                             props.PARAMETER_VALUE.name: "select 1 as a",
                         },
                         {
                             "@id": activity_id + "/input/options",
-                            "@type": "Input",
+                            "@type": clss.INPUT.name,
                             props.PARAMETER_NAME.name: "options",
                             props.PARAMETER_VALUE.name: None,
                         },
@@ -475,7 +474,7 @@ class TestUseCases(TestCase):
 
         data1 = b"[1, 2]"
 
-        fid_convert = "function://convert1"
+        fid_convert = "urn:function:convert1"
         fid_bytes2json = "bytes2json"
 
         def generate1() -> bytes:

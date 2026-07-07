@@ -1,15 +1,17 @@
 """Abstract classes / interfaces, types"""
 
 from collections.abc import Callable, Iterable, Mapping
+from functools import cache
 from pathlib import Path
 import re
-from typing import Any, Literal, ParamSpec, TypeAlias, TypeVar
+from typing import Any, ClassVar, Generic, Literal, ParamSpec, TypeAlias, TypeVar
 
 from rdflib import Namespace, URIRef
 
 FunParams = ParamSpec("FunParams")
 FunResult = TypeVar("FunResult")
 SubCls = TypeVar("SubCls")
+T = TypeVar("T")
 
 Json: TypeAlias = str | int | float | bool | None | list["Json"] | dict[str, "Json"]
 StrPath = Path | str
@@ -40,51 +42,65 @@ HTTP_METHOD = Literal["GET", "PUT", "POST", "DELETE", "HEAD", "PATCH"]
 # raise Exception(NS_XSD.xyz.fragment)
 
 
-class Namespaces:
+class MyEnum(Generic[T]):
     """TODO"""
 
+    _value_type: ClassVar[type]
+
+    @classmethod
+    @cache
+    def as_dict(cls) -> dict[str, T]:
+        """TODO"""
+        return {k: v for k, v in cls.__dict__.items() if isinstance(v, cls._value_type)}
+
+    @classmethod
+    @cache
+    def get(cls, prefix: str) -> T:
+        """TODO"""
+        return cls.as_dict()[prefix]
+
+
+class Namespaces(MyEnum[Namespace]):
+    """TODO"""
+
+    _value_type = Namespace
+
     # https://www.w3.org/TR/vocab-dcat-3/#normative-namespaces
-    adms = Namespace("http://www.w3.org/ns/adms#")
-    dc = Namespace("http://purl.org/dc/elements/1.1/")
+    # adms = Namespace("http://www.w3.org/ns/adms#")
+    # dc = Namespace("http://purl.org/dc/elements/1.1/")
     dcat = Namespace("http://www.w3.org/ns/dcat#")
     dcterms = Namespace("http://purl.org/dc/terms/")
-    dctype = Namespace("http://purl.org/dc/dcmitype/")
-    foaf = Namespace("http://xmlns.com/foaf/0.1/")
-    locn = Namespace("http://www.w3.org/ns/locn#")
-    odrl = Namespace("http://www.w3.org/ns/odrl/2/")
-    owl = Namespace("http://www.w3.org/2002/07/owl#")
+    # dctype = Namespace("http://purl.org/dc/dcmitype/")
+    # foaf = Namespace("http://xmlns.com/foaf/0.1/")
+    # locn = Namespace("http://www.w3.org/ns/locn#")
+    # odrl = Namespace("http://www.w3.org/ns/odrl/2/")
+    # owl = Namespace("http://www.w3.org/2002/07/owl#")
     prov = Namespace("http://www.w3.org/ns/prov#")
     rdf = Namespace("http://www.w3.org/1999/02/22-rdf-syntax-ns#")
-    rdfs = Namespace("http://www.w3.org/2000/01/rdf-schema#")
-    skos = Namespace("http://www.w3.org/2004/02/skos/core#")
+    # rdfs = Namespace("http://www.w3.org/2000/01/rdf-schema#")
+    # skos = Namespace("http://www.w3.org/2004/02/skos/core#")
     spdx = Namespace("http://spdx.org/rdf/terms#")
-    time = Namespace("http://www.w3.org/2006/time#")
-    vcard = Namespace("http://www.w3.org/2006/vcard/ns#")
-    xsd = Namespace("http://www.w3.org/2001/XMLSchema#")
+    # time = Namespace("http://www.w3.org/2006/time#")
+    # vcard = Namespace("http://www.w3.org/2006/vcard/ns#")
+    # xsd = Namespace("http://www.w3.org/2001/XMLSchema#")
     # dcat itself:
     dcat = Namespace("http://www.w3.org/ns/dcat#")
 
     # other
-    fno = Namespace("https://fno.io/spec/#")
-    sdo = Namespace("https://schema.org/")
+    # fno = Namespace("https://fno.io/spec/#")
+    # sdo = Namespace("https://schema.org/")
 
     @classmethod
+    @cache
     def get_prefix(cls, ns_uri: str) -> str:
         """TODO"""
-        for k, v in Namespaces.__dict__.items():
-            if not isinstance(v, Namespace):
-                continue
-            if str(v) == ns_uri:
+        for k, v in cls.as_dict().items():
+            if ns_uri == v:
                 return k
         raise KeyError(ns_uri)
 
-    @classmethod
-    def get(cls, prefix: str) -> Namespace:
-        """TODO"""
-        return getattr(cls, prefix)
 
-
-class Property:
+class MyUriRef:
     """TODO"""
 
     def __init__(self, uri: str | URIRef | None, name: str | None = None):
@@ -110,27 +126,51 @@ class Property:
             raise ValueError("no name")
         self.name: str = name
 
+    @property
+    def prefix_name(self) -> str | None:
+        """TODO"""
+        if self._prefix and self._qname:
+            return f"{self._prefix}:{self._qname}"
+
     def __str__(self) -> str:
         return self.name
 
 
-class Properties:
+class RdfProperties(MyEnum[MyUriRef]):
     """TODO"""
 
-    DESCRIPTION = Property("dcterms:description")
-    GENERATED_BY = Property("prov:wasGeneratedBy")
-    SAVED_WITH = Property("prov:hadPlan")
-    DATETIME = Property("dcterms:issued")
-    CREATOR = Property("dcterms:creator")
-    FUNCTION = Property("prov:hadPlan")
-    LOADED_WITH = Property("prov:hadPlan")
-    PARAMETER = Property("prov:used")
-    PARAMETER_NAME = Property("dcat:hadRole")
-    SIZE = Property("dcat:byteSize")
-    FILE = Property("dcat:distribution")
-    HASHSUM = Property("spdx:checksum")
-    JOB = Property("dcterms:identifier")
-    PARAMETER_VALUE = Property(None, name="@value")
+    _value_type = MyUriRef
+
+    DESCRIPTION = MyUriRef("dcterms:description")
+    GENERATED_BY = MyUriRef("prov:wasGeneratedBy")
+    SAVED_WITH = MyUriRef("prov:hadPlan")
+    DATETIME = MyUriRef("dcterms:issued")
+    CREATOR = MyUriRef("dcterms:creator")
+    FUNCTION = MyUriRef("prov:hadPlan")
+    LOADED_WITH = MyUriRef("prov:hadPlan")
+    PARAMETER = MyUriRef("prov:used")
+    PARAMETER_NAME = MyUriRef("dcat:hadRole")
+    SIZE = MyUriRef("dcat:byteSize")
+    FILE = MyUriRef("dcat:distribution")
+    HASHSUM = MyUriRef("spdx:checksum")
+    IDENTIFIER = MyUriRef("dcterms:identifier")
+    PARAMETER_VALUE = MyUriRef("rdf:value")
 
 
-RDF_CONTEXT = {}
+class RdfClasses(MyEnum[MyUriRef]):
+    """TODO"""
+
+    _value_type = MyUriRef
+
+    FUNCTION = MyUriRef("prov:Plan", name="Function")
+    ACTIVITY = MyUriRef("prov:Activity", name="Activity")
+    OUTPUT = MyUriRef("prov:Entity", name="Output")
+    INPUT = MyUriRef("prov:Entity", name="Input")
+    FILE = MyUriRef("dcat:Distribution", name="File")
+
+
+RDF_CONTEXT = (
+    {k: str(v) for k, v in Namespaces.as_dict().items()}
+    | {u.name: u.prefix_name for u in RdfProperties.as_dict().values() if u.prefix_name}
+    | {u.name: u.prefix_name for u in RdfClasses.as_dict().values() if u.prefix_name}
+)
