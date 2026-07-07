@@ -21,7 +21,7 @@ from datatools.process.task import AnnotatedFunction
 from datatools.storage.__main__ import infer_storage_class
 from datatools.storage.base import DataStorage
 from datatools.storage.cli import CliWrapperDataStorage
-from datatools.storage.file import FileDataStorage, FileDataStorageWithRdfMetadata
+from datatools.storage.file import FileDataStorage
 from datatools.storage.http import HttpDataStorage, make_server_app
 from datatools.storage.memory import MemoryDataStorage
 from datatools.storage.sql import SqlDataStorage
@@ -157,16 +157,6 @@ class TestStorageFiles(TempdirTestCase):
         storage.write("a/b", b"")
         # "a" is alreaedy used as path
         self.assertRaises(StorageInvalidNameError, storage.write, "a", b"")
-
-
-class TestStorageFilesWithRdfMetadata(TestCase):
-    """TODO"""
-
-    def test_action_sequence(self):
-        """TODO"""
-        with TemporaryDirectory() as tmpdir:
-            storage = FileDataStorageWithRdfMetadata(tmpdir)
-            _test_action_sequence(self, storage)
 
 
 class TestStorageSql(TestCase):

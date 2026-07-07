@@ -33,41 +33,16 @@ class JsonFileMetadataStorage(PersistentMemoryMetadataStorage):
             return data
 
     def _dump(self, data: dict) -> None:
+        # data = self._test_roundtrip_rdf(data)
         self._file.dump_json(data)
 
-
-class JsonLdFileMetadataStorage(JsonFileMetadataStorage):
-    """FIXME
-
-    this is all still very experimental: clients expect to use
-    jsonpath queries, so we convert from / to json
-
-    for now, we just parse json as jsonld and back to see if its possible
-
-    """
-
-    def __init__(self, path: Path, name: Name):
-        self.name = name
-        self.context = {"@vocab": "urn:dummy/"}
-        super().__init__(path)
-
-    def _load_or_init(self) -> dict | None:
-        data = super()._load_or_init()
-        if not data:
-            data = {"@id": self.name, "@context": self.context}
-
-        return data
-
-    def _dump(self, data: dict) -> None:
-        # rdf roundtrip test
-
+    def _run_through_rdf(self, data: dict) -> dict:
         data_s = json_dumps(data)
         g = rdflib.Graph()
         g.parse(data=data_s, format="json-ld")
-        data_s_new = g.serialize(format="json-ld", context=self.context)
+        data_s_new = g.serialize(format="json-ld", context={"@vocab": "urn:dummy/"})
         data_new: dict = json_loads(data_s_new)  # type:ignore
-
-        super()._dump(data_new)
+        return data_new
 
 
 class FileDataStorage(DataStorage):
@@ -134,12 +109,3 @@ class FileDataStorage(DataStorage):
         if abs_path.exists() and not abs_path.is_file():
             raise StorageInvalidNameError(f"name must be a file: {name}", name=Name())
         return abs_path.relative_to(self._location).as_posix()
-
-
-class FileDataStorageWithRdfMetadata(FileDataStorage):
-    """TODO"""
-
-    def _metadata(self, name: Name) -> JsonLdFileMetadataStorage:
-        path = self._get_abs_path(name)
-        path_metadata = path.with_name(path.name + self.metadata_sufix).resolve()
-        return JsonLdFileMetadataStorage(path_metadata, name=name)
