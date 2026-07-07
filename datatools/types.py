@@ -101,36 +101,53 @@ class Namespaces(MyEnum[Namespace]):
 
 
 class MyUriRef:
-    """TODO"""
+    """TODO
 
-    def __init__(self, uri: str | URIRef | None, name: str | None = None):
-        if not uri:
-            prefix, qname = None, None
+    Example:
+
+
+    >>> str(MyUriRef("dcat:Dataset"))
+    'Dataset'
+    >>> str(MyUriRef("dcat:Dataset", name="MyDataset"))
+    'MyDataset'
+    >>> str(MyUriRef("http://www.w3.org/ns/dcat#Dataset"))
+    'Dataset'
+    >>> MyUriRef("urn:something")
+    Traceback (most recent call last):
+    ...
+    KeyError:
+    >>> MyUriRef("http://something/something")
+    Traceback (most recent call last):
+    ...
+    KeyError:
+    >>> MyUriRef("something")
+    Traceback (most recent call last):
+    ...
+    NotImplementedError:
+
+    """
+
+    def __init__(self, uri: str | URIRef, name: str | None = None):
+        uri = str(uri)
+        if m := re.match(r"^([^:/#]+):([^:/#]+)$", uri):
+            # e.g. "dct:description"
+            prefix, qname = m.groups()
+            # check that it exists
+            Namespaces.get(prefix)
+        elif m := re.match(r"^(.*[/#])([^/#]+)$", uri):
+            # e.g. "http://purl.org/dc/terms/description"
+            ns_uri, qname = m.groups()
+            prefix = Namespaces.get_prefix(ns_uri)
         else:
-            uri = str(uri)
-            if m := re.match(r"^([^:/#]+):([^:/#]+)$", uri):
-                # e.g. "dct:description"
-                prefix, qname = m.groups()
-                # check that it exists
-                Namespaces.get(prefix)
-            elif m := re.match(r"^(.*[/#])([^/#]+)$", uri):
-                # e.g. "http://purl.org/dc/terms/description"
-                ns_uri, qname = m.groups()
-                prefix = Namespaces.get_prefix(ns_uri)
-            else:
-                raise NotImplementedError(uri)
+            raise NotImplementedError(uri)
         self._prefix = prefix
         self._qname = qname
-        name = name or qname
-        if not name:
-            raise ValueError("no name")
-        self.name: str = name
+        self.name: str = name or qname
 
     @property
-    def prefix_name(self) -> str | None:
+    def prefix_name(self) -> str:
         """TODO"""
-        if self._prefix and self._qname:
-            return f"{self._prefix}:{self._qname}"
+        return f"{self._prefix}:{self._qname}"
 
     def __str__(self) -> str:
         return self.name
