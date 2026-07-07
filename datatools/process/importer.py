@@ -3,7 +3,6 @@
 from abc import ABC
 from collections.abc import Callable
 import re
-from urllib.parse import urlparse
 
 from typing_extensions import override
 
@@ -102,5 +101,4 @@ class SqlImporter(Importer):
     @classmethod
     @override
     def can_handle(cls, uri: str, **options) -> bool:
-        parsed = urlparse(uri)
-        return bool(parsed.scheme and "sql" in parsed.scheme.lower())
+        return bool(re.match(r"^[^/]*sql[^/]*://", uri))

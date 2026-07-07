@@ -32,7 +32,7 @@ from collections.abc import Callable
 import logging
 from typing import Any, Generic
 
-from datatools.types import PROP_DESCRIPTION, FunHashsum, FunParams, FunResult, Json
+from datatools.types import FunHashsum, FunParams, FunResult, Json, Properties as props
 from datatools.utils import (
     function_get_defaults,
     function_get_regular_params,
@@ -72,7 +72,7 @@ class AnnotatedFunction(Generic[FunParams, FunResult]):
         return {
             "@type": "Function",
             "@id": self.function_id,
-            PROP_DESCRIPTION: self.description,
+            props.DESCRIPTION.name: self.description,
         }
 
     @classmethod

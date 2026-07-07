@@ -2,7 +2,10 @@
 
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
+import re
 from typing import Any, Literal, ParamSpec, TypeAlias, TypeVar
+
+from rdflib import Namespace, URIRef
 
 FunParams = ParamSpec("FunParams")
 FunResult = TypeVar("FunResult")
@@ -27,12 +30,6 @@ SINGLE_OUTPUT_PARAM_NAME = "__output"
 HTTP_METHOD = Literal["GET", "PUT", "POST", "DELETE", "HEAD", "PATCH"]
 
 
-# NS_DCT = Namespace("http://purl.org/dc/terms/")
-# NS_PROV = Namespace("https://www.w3.org/TR/prov-o/#")
-# NS_XSD = Namespace("http://www.w3.org/2001/XMLSchema#")
-# NS_FNO = Namespace("https://fno.io/spec/#")
-# NS_SDO = Namespace("https://schema.org/")
-# NS_FOAF = Namespace("http://xmlns.com/foaf/")
 # https://www.w3.org/TR/vocab-dcat-3/
 
 # g = Graph()
@@ -42,17 +39,98 @@ HTTP_METHOD = Literal["GET", "PUT", "POST", "DELETE", "HEAD", "PATCH"]
 #
 # raise Exception(NS_XSD.xyz.fragment)
 
-PROP_DESCRIPTION = "description"  # http://purl.org/dc/terms/description
-PROP_SAVED_WITH = "savedWith"
-PROP_GENERATED_BY = "wasGeneratedBy"  # https://www.w3.org/TR/prov-o/#wasGeneratedBy
-PROP_DATETIME = "created"  # http://purl.org/dc/terms/created or http://www.w3.org/ns/prov#generatedAtTime # noqa: E501
-PROP_CREATOR = "creator"  # http://purl.org/dc/terms/creator
-PROP_FUNCTION = "function"  # TODO
-PROP_LOADED_WITH = "loadedWith"  # TODO
-PROP_PARAMETER = "parameter"  # TODO
-PROP_PARAMETER_NAME = "name"  # https://schema.org/name
-PROP_PARAMETER_VALUE = "@value"
-PROP_SIZE = "sizeBytes"
-PROP_FILE = "file"
-PROP_HASHSUM = "hashsum"
-PROP_JOB = "job"
+
+class Namespaces:
+    """TODO"""
+
+    # https://www.w3.org/TR/vocab-dcat-3/#normative-namespaces
+    adms = Namespace("http://www.w3.org/ns/adms#")
+    dc = Namespace("http://purl.org/dc/elements/1.1/")
+    dcat = Namespace("http://www.w3.org/ns/dcat#")
+    dcterms = Namespace("http://purl.org/dc/terms/")
+    dctype = Namespace("http://purl.org/dc/dcmitype/")
+    foaf = Namespace("http://xmlns.com/foaf/0.1/")
+    locn = Namespace("http://www.w3.org/ns/locn#")
+    odrl = Namespace("http://www.w3.org/ns/odrl/2/")
+    owl = Namespace("http://www.w3.org/2002/07/owl#")
+    prov = Namespace("http://www.w3.org/ns/prov#")
+    rdf = Namespace("http://www.w3.org/1999/02/22-rdf-syntax-ns#")
+    rdfs = Namespace("http://www.w3.org/2000/01/rdf-schema#")
+    skos = Namespace("http://www.w3.org/2004/02/skos/core#")
+    spdx = Namespace("http://spdx.org/rdf/terms#")
+    time = Namespace("http://www.w3.org/2006/time#")
+    vcard = Namespace("http://www.w3.org/2006/vcard/ns#")
+    xsd = Namespace("http://www.w3.org/2001/XMLSchema#")
+    # dcat itself:
+    dcat = Namespace("http://www.w3.org/ns/dcat#")
+
+    # other
+    fno = Namespace("https://fno.io/spec/#")
+    sdo = Namespace("https://schema.org/")
+
+    @classmethod
+    def get_prefix(cls, ns_uri: str) -> str:
+        """TODO"""
+        for k, v in Namespaces.__dict__.items():
+            if not isinstance(v, Namespace):
+                continue
+            if str(v) == ns_uri:
+                return k
+        raise KeyError(ns_uri)
+
+    @classmethod
+    def get(cls, prefix: str) -> Namespace:
+        """TODO"""
+        return getattr(cls, prefix)
+
+
+class Property:
+    """TODO"""
+
+    def __init__(self, uri: str | URIRef | None, name: str | None = None):
+        if not uri:
+            prefix, qname = None, None
+        else:
+            uri = str(uri)
+            if m := re.match(r"^([^:/#]+):([^:/#]+)$", uri):
+                # e.g. "dct:description"
+                prefix, qname = m.groups()
+                # check that it exists
+                Namespaces.get(prefix)
+            elif m := re.match(r"^(.*[/#])([^/#]+)$", uri):
+                # e.g. "http://purl.org/dc/terms/description"
+                ns_uri, qname = m.groups()
+                prefix = Namespaces.get_prefix(ns_uri)
+            else:
+                raise NotImplementedError(uri)
+        self._prefix = prefix
+        self._qname = qname
+        name = name or qname
+        if not name:
+            raise ValueError("no name")
+        self.name: str = name
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class Properties:
+    """TODO"""
+
+    DESCRIPTION = Property("dcterms:description")
+    GENERATED_BY = Property("prov:wasGeneratedBy")
+    SAVED_WITH = Property("prov:hadPlan")
+    DATETIME = Property("dcterms:issued")
+    CREATOR = Property("dcterms:creator")
+    FUNCTION = Property("prov:hadPlan")
+    LOADED_WITH = Property("prov:hadPlan")
+    PARAMETER = Property("prov:used")
+    PARAMETER_NAME = Property("dcat:hadRole")
+    SIZE = Property("dcat:byteSize")
+    FILE = Property("dcat:distribution")
+    HASHSUM = Property("spdx:checksum")
+    JOB = Property("dcterms:identifier")
+    PARAMETER_VALUE = Property(None, name="@value")
+
+
+RDF_CONTEXT = {}

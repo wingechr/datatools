@@ -26,18 +26,8 @@ from datatools.storage.http import HttpDataStorage, make_server_app
 from datatools.storage.memory import MemoryDataStorage
 from datatools.storage.sql import SqlDataStorage
 from datatools.types import (
-    PROP_CREATOR,
-    PROP_DATETIME,
-    PROP_FILE,
-    PROP_FUNCTION,
-    PROP_GENERATED_BY,
-    PROP_JOB,
-    PROP_PARAMETER,
-    PROP_PARAMETER_NAME,
-    PROP_PARAMETER_VALUE,
-    PROP_SAVED_WITH,
-    PROP_SIZE,
     SINGLE_OUTPUT_PARAM_NAME,
+    Properties as props,
 )
 from datatools.utils import (
     get_free_port,
@@ -50,8 +40,8 @@ from datatools.utils import (
 )
 from tests.base import TempdirTestCase
 
-QueryParameterUri = f'{PROP_GENERATED_BY}.{PROP_PARAMETER}[?({PROP_PARAMETER_NAME} == "uri")].{PROP_PARAMETER_VALUE}'  # noqa:E501
-QueryTimestamp = f"{PROP_GENERATED_BY}.{PROP_DATETIME}"
+QueryParameterUri = f'{props.GENERATED_BY.name}.{props.PARAMETER.name}[?({props.PARAMETER_NAME.name} == "uri")].{props.PARAMETER_VALUE.name}'  # noqa:E501
+QueryTimestamp = f"{props.GENERATED_BY.name}.{props.DATETIME.name}"
 
 
 def get_item_or_first(x):
@@ -328,14 +318,14 @@ class TestUseCases(TestCase):
             # check metadata
             metadata_all = get_item_or_first(storage.metadata(name).get("$"))
 
-            metadata_activity: dict = metadata_all[PROP_GENERATED_BY]  # type:ignore
+            metadata_activity: dict = metadata_all[props.GENERATED_BY.name]  # type:ignore
 
-            job_id = metadata_activity[PROP_JOB]
+            job_id = metadata_activity[props.JOB.name]
             self.assertTrue(job_id, "")
             activity_id = (
                 job_id.replace("job:", "activity:")
                 + "-"
-                + metadata_activity[PROP_DATETIME]
+                + metadata_activity[props.DATETIME.name]
             )
 
             metadata_all_expected = {
@@ -344,52 +334,52 @@ class TestUseCases(TestCase):
                 "@type": "Output",
                 "name": ":memory:",
                 # file info
-                PROP_FILE: {
+                props.FILE.name: {
                     "@id": "md5:34ff2335cbe2045ddc3b78993d1e971d",
                     "@type": "File",
-                    PROP_SIZE: 4,
-                },
-                # file saved with info
-                PROP_SAVED_WITH: {
-                    PROP_FUNCTION: {
-                        "@id": "sql_query_result_to_csv_bytes",
-                        "@type": "Function",
-                        "description": sql_query_result_to_csv_bytes.__doc__,
+                    props.SIZE.name: 4,
+                    # file saved with info
+                    props.SAVED_WITH.name: {
+                        props.FUNCTION.name: {
+                            "@id": "sql_query_result_to_csv_bytes",
+                            "@type": "Function",
+                            "description": sql_query_result_to_csv_bytes.__doc__,
+                        },
+                        props.PARAMETER_NAME.name: SINGLE_OUTPUT_PARAM_NAME,
                     },
-                    PROP_PARAMETER_NAME: SINGLE_OUTPUT_PARAM_NAME,
                 },
                 # file generation info
-                PROP_GENERATED_BY: {
+                props.GENERATED_BY.name: {
                     "@id": activity_id,
                     "@type": "Activity",
                     # context
-                    PROP_DATETIME: metadata_activity[PROP_DATETIME],
-                    PROP_CREATOR: metadata_activity[PROP_CREATOR],
+                    props.DATETIME.name: metadata_activity[props.DATETIME.name],
+                    props.CREATOR.name: metadata_activity[props.CREATOR.name],
                     # Job
-                    PROP_FUNCTION: {
+                    props.FUNCTION.name: {
                         "@id": "QUERY",
                         "@type": "Function",
                         "description": query_sql.__doc__,
                     },
-                    PROP_JOB: job_id,
-                    PROP_PARAMETER: [
+                    props.JOB.name: job_id,
+                    props.PARAMETER.name: [
                         {
                             "@id": activity_id + "/input/uri",
                             "@type": "Input",
-                            PROP_PARAMETER_NAME: "uri",
-                            PROP_PARAMETER_VALUE: "sqlite:///:memory:",
+                            props.PARAMETER_NAME.name: "uri",
+                            props.PARAMETER_VALUE.name: "sqlite:///:memory:",
                         },
                         {
                             "@id": activity_id + "/input/query",
                             "@type": "Input",
-                            PROP_PARAMETER_NAME: "query",
-                            PROP_PARAMETER_VALUE: "select 1 as a",
+                            props.PARAMETER_NAME.name: "query",
+                            props.PARAMETER_VALUE.name: "select 1 as a",
                         },
                         {
                             "@id": activity_id + "/input/options",
                             "@type": "Input",
-                            PROP_PARAMETER_NAME: "options",
-                            PROP_PARAMETER_VALUE: None,
+                            props.PARAMETER_NAME.name: "options",
+                            props.PARAMETER_VALUE.name: None,
                         },
                     ],
                 },
@@ -501,7 +491,9 @@ class TestUseCases(TestCase):
         task_generate = storage.task(
             generate1,
             {"output": None},
-            metadata_generator=lambda _: {f"{PROP_FILE}.mediatype": "application/json"},
+            metadata_generator=lambda _: {
+                f"{props.FILE.name}.mediatype": "application/json"
+            },
             skip_finished=True,
         )
         task_convert = storage.task(
@@ -522,12 +514,16 @@ class TestUseCases(TestCase):
         # check metadata
         self.assertEqual(
             get_item_or_first(
-                storage.metadata(key2).get(f"{PROP_GENERATED_BY}.{PROP_FUNCTION}.@id")
+                storage.metadata(key2).get(
+                    f"{props.GENERATED_BY.name}.{props.FUNCTION.name}.@id"
+                )
             ),
             fid_convert,
         )
 
         self.assertEqual(
-            get_item_or_first(storage.metadata(key1).get(f"{PROP_FILE}.mediatype")),
+            get_item_or_first(
+                storage.metadata(key1).get(f"{props.FILE.name}.mediatype")
+            ),
             "application/json",
         )

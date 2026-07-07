@@ -10,7 +10,7 @@ import rdflib
 from datatools.exceptions import StorageInvalidNameError
 from datatools.storage.base import DataStorage
 from datatools.storage.memory import PersistentMemoryMetadataStorage
-from datatools.types import Name
+from datatools.types import RDF_CONTEXT, Name
 from datatools.utils import TextFile, json_dumps, json_loads, uri_or_path_to_path
 
 
@@ -40,7 +40,7 @@ class JsonFileMetadataStorage(PersistentMemoryMetadataStorage):
         data_s = json_dumps(data)
         g = rdflib.Graph()
         g.parse(data=data_s, format="json-ld")
-        data_s_new = g.serialize(format="json-ld", context={"@vocab": "urn:dummy/"})
+        data_s_new = g.serialize(format="json-ld", context=RDF_CONTEXT)
         data_new: dict = json_loads(data_s_new)  # type:ignore
         return data_new
 

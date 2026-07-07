@@ -16,18 +16,6 @@ from datatools.exceptions import (
 from datatools.process.importer import infer_importer_class
 from datatools.process.task import AnnotatedFunction, Task, default_get_job_hashsum
 from datatools.types import (
-    PROP_CREATOR,
-    PROP_DATETIME,
-    PROP_FILE,
-    PROP_FUNCTION,
-    PROP_GENERATED_BY,
-    PROP_JOB,
-    PROP_LOADED_WITH,
-    PROP_PARAMETER,
-    PROP_PARAMETER_NAME,
-    PROP_PARAMETER_VALUE,
-    PROP_SAVED_WITH,
-    PROP_SIZE,
     SINGLE_OUTPUT_PARAM_NAME,
     ByteData,
     FunFromBytes,
@@ -39,6 +27,7 @@ from datatools.types import (
     MetadataAttribute,
     MetadataValue,
     Name,
+    Properties as props,
 )
 from datatools.utils import (
     get_now_str,
@@ -229,10 +218,10 @@ class DataStorage(ABC):
             "metadata_activity": {
                 # "@id": None,
                 "@type": "Activity",
-                PROP_DATETIME: get_now_str(),
-                PROP_CREATOR: get_user_w_host(),
-                PROP_FUNCTION: wrapped_function.get_metadata(),
-                PROP_PARAMETER: [],  # will be filled by input handlers
+                props.DATETIME.name: get_now_str(),
+                props.CREATOR.name: get_user_w_host(),
+                props.FUNCTION.name: wrapped_function.get_metadata(),
+                props.PARAMETER.name: [],  # will be filled by input handlers
             },
             "metadata_generated": {},
             "input_parameter_values": {},
@@ -244,13 +233,13 @@ class DataStorage(ABC):
                 callback_data["input_parameter_values"][name] = name_value
                 handler_w = AnnotatedFunction.assert_wrapped(handler)
 
-                callback_data["metadata_activity"][PROP_PARAMETER].append(
+                callback_data["metadata_activity"][props.PARAMETER.name].append(
                     {
                         "@type": "Input",
                         # "@id": set later when we have it
-                        PROP_PARAMETER_VALUE: name_value,
-                        PROP_PARAMETER_NAME: name,
-                        PROP_LOADED_WITH: handler_w.get_metadata(),
+                        props.PARAMETER_VALUE.name: name_value,
+                        props.PARAMETER_NAME.name: name,
+                        props.LOADED_WITH.name: handler_w.get_metadata(),
                     }
                 )
 
@@ -266,11 +255,11 @@ class DataStorage(ABC):
                     value = remove_credentials_from_netloc(value)
 
                 callback_data["input_parameter_values"][name] = value
-                callback_data["metadata_activity"][PROP_PARAMETER].append(
+                callback_data["metadata_activity"][props.PARAMETER.name].append(
                     {
                         "@type": "Input",
-                        PROP_PARAMETER_VALUE: value,
-                        PROP_PARAMETER_NAME: name,
+                        props.PARAMETER_VALUE.name: value,
+                        props.PARAMETER_NAME.name: name,
                     }
                 )
 
@@ -288,13 +277,13 @@ class DataStorage(ABC):
                     **callback_data["input_parameter_values"]
                 )
                 job_id = f"job:{job_hashsum}"
-                datatime = callback_data["metadata_activity"][PROP_DATETIME]
+                datatime = callback_data["metadata_activity"][props.DATETIME.name]
                 activity_id = f"activity:{job_hashsum}-{datatime}"
                 callback_data["metadata_activity"]["@id"] = activity_id
-                callback_data["metadata_activity"][PROP_JOB] = job_id
+                callback_data["metadata_activity"][props.JOB.name] = job_id
                 # update ids for input parameters
-                for p in callback_data["metadata_activity"][PROP_PARAMETER]:
-                    p["@id"] = activity_id + "/input/" + p[PROP_PARAMETER_NAME]
+                for p in callback_data["metadata_activity"][props.PARAMETER.name]:
+                    p["@id"] = activity_id + "/input/" + p[props.PARAMETER_NAME.name]
 
                 # generate metadata
                 if metadata_generator:
@@ -305,8 +294,8 @@ class DataStorage(ABC):
                 handler_w = AnnotatedFunction.assert_wrapped(handler)
                 meta_saved_with = {
                     # "@id": set later when we have it
-                    PROP_FUNCTION: handler_w.get_metadata(),
-                    PROP_PARAMETER_NAME: param_name,
+                    props.FUNCTION.name: handler_w.get_metadata(),
+                    props.PARAMETER_NAME.name: param_name,
                 }
             else:
                 meta_saved_with = {}
@@ -323,17 +312,19 @@ class DataStorage(ABC):
                     "@id": callback_data["metadata_activity"]["@id"]
                     + "/output/"
                     + param_name,
-                    PROP_FILE: {
+                    props.FILE.name: {
                         "@id": "md5:" + hashlib.md5(bdata).hexdigest(),  # noqa:S324
                         "@type": "File",
-                        PROP_SIZE: len(bdata),
+                        props.SIZE.name: len(bdata),
                     },
-                    PROP_GENERATED_BY: callback_data["metadata_activity"],
+                    props.GENERATED_BY.name: callback_data["metadata_activity"],
                 }
 
                 if meta_saved_with:
                     # update id
-                    output_metadata[PROP_SAVED_WITH] = meta_saved_with
+                    output_metadata[props.FILE.name][props.SAVED_WITH.name] = (
+                        meta_saved_with
+                    )
 
                 # cannot set root itself:
                 metadata = self.metadata(name)
