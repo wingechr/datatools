@@ -139,3 +139,8 @@ class TestJsonSchema(unittest.TestCase):
         validator("a1x")
         validator("a11x")
         self.assertRaises(Exception, validator, "ax")
+
+    def test_valudate_schema_against_online_metaschema(self):
+        """TODO"""
+        validator = get_jsonschema_validator("http://json-schema.org/draft-07/schema#")
+        validator({})

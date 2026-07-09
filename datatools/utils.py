@@ -1091,7 +1091,9 @@ def get_jsonschema_validator(schema):
     """
 
     if isinstance(schema, str):
-        schema = httpx.get(schema).json()
+        resp = httpx.get(schema, follow_redirects=True)
+        resp.raise_for_status()
+        schema = resp.json()
 
     validator_cls = jsonschema.validators.validator_for(schema)
     # check if schema is valid
