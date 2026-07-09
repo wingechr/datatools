@@ -432,7 +432,14 @@ def subclasses_by_name(cls: type[SubCls]) -> dict[str, type[SubCls]]:
 
 
 def get_sha256_hash(hash_data: Json) -> str:
-    """TODO"""
+    """TODO
+
+    Example:
+
+    >>> get_sha256_hash({"key": 10})
+    '63fc351b588eec4fad18ef579b3c42c83d6638e0dc4a55f4772ff8a61455630d'
+
+    """
     hash_data_s = json_dumps(
         hash_data, ensure_ascii=False, indent=0, sort_keys=True, default=json_serialize
     )

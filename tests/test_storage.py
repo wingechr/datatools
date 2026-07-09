@@ -27,8 +27,7 @@ from datatools.storage.memory import MemoryDataStorage
 from datatools.storage.sql import SqlDataStorage
 from datatools.types import (
     SINGLE_OUTPUT_PARAM_NAME,
-    RdfClasses as clss,
-    RdfProperties as props,
+    URIRefs as u,
 )
 from datatools.utils import (
     get_free_port,
@@ -41,8 +40,8 @@ from datatools.utils import (
 )
 from tests.base import TempdirTestCase, get_item_or_first
 
-QueryParameterUri = f'{props.GENERATED_BY.name}.{props.PARAMETER.name}[?({props.NAME_TITLE.name} == "uri")].{props.PARAMETER_VALUE.name}'  # noqa:E501
-QueryTimestamp = f"{props.GENERATED_BY.name}.{props.DATETIME.name}"
+QueryParameterUri = f'{u.createdBy.label}.{u.usedInput.label}[?({u.roleName.label} == "uri")].{u.value.label}'  # noqa:E501
+QueryTimestamp = f"{u.createdBy.label}.{u.datetime.label}"
 
 
 def _test_action_sequence(self: TestCase, storage: DataStorage):
@@ -317,68 +316,64 @@ class TestUseCases(TestCase):
             metadata_all: dict = get_item_or_first(storage.metadata(name).get("$"))  # type:ignore
             del metadata_all["@context"]
 
-            metadata_activity: dict = metadata_all[props.GENERATED_BY.name]  # type:ignore
+            metadata_creation_event: dict = metadata_all[u.createdBy.label]  # type:ignore
 
-            job_id = metadata_activity[props.IDENTIFIER.name]
-            self.assertTrue(job_id, "")
-            activity_id = (
-                job_id.replace("job:", "activity:")
-                + "-"
-                + metadata_activity[props.DATETIME.name]
-            )
+            task_uuid = metadata_creation_event[u.taskId.label]
+            timestamp = metadata_creation_event[u.datetime.label]
+            self.assertTrue(task_uuid, "")
+            event_id = f"event:{task_uuid}/{timestamp}"
 
             metadata_all_expected = {
-                "$schema": "TODO",
-                "@id": activity_id + "/output/" + SINGLE_OUTPUT_PARAM_NAME,
-                "@type": clss.OUTPUT_FILE.prefix_name,
-                "identifier": ":memory:",
+                # "$schema": "TODO",
+                "@id": event_id + "/output/" + SINGLE_OUTPUT_PARAM_NAME,
+                "@type": u.FileResource.label,
+                u.name.label: ":memory:",
                 # file info
-                props.FILE.name: {
-                    "@id": "urn:sha256:34ff2335cbe2045ddc3b78993d1e971d",
-                    "@type": clss.FILE.prefix_name,
-                    props.SIZE.name: 4,
-                    # file saved with info
-                    props.SAVED_WITH.name: {
-                        props.FUNCTION.name: {
-                            "@id": "sql_query_result_to_csv_bytes",
-                            "@type": clss.FUNCTION.prefix_name,
-                            "description": sql_query_result_to_csv_bytes.__doc__,
-                        },
-                        props.NAME_TITLE.name: SINGLE_OUTPUT_PARAM_NAME,
+                u.hash.label: "sha256:309b0e45a73d3fc5325e2b6ed0a01ef8b9cde6b05a5633c1f893f970d52bfddc",  # noqa:E501
+                u.bytes.label: 4,
+                # file saved with info
+                u.serializedWith.label: {
+                    "@type": u.Serialization.label,
+                    u.usedFunction.label: {
+                        "@id": "function:"
+                        + AnnotatedFunction(sql_query_result_to_csv_bytes).function_id,
+                        "@type": u.Function.label,
+                        "description": sql_query_result_to_csv_bytes.__doc__,
                     },
+                    u.roleName.label: SINGLE_OUTPUT_PARAM_NAME,
                 },
                 # file generation info
-                props.GENERATED_BY.name: {
-                    "@id": activity_id,
-                    "@type": clss.ACTIVITY.prefix_name,
+                u.createdBy.label: {
+                    "@id": event_id,
+                    "@type": u.CreationEvent.label,
                     # context
-                    props.DATETIME.name: metadata_activity[props.DATETIME.name],
-                    props.CREATOR.name: {"@id": metadata_activity[props.CREATOR.name]},
+                    u.datetime.label: metadata_creation_event[u.datetime.label],
+                    u.creator.label: metadata_creation_event[u.creator.label],
                     # Job
-                    props.FUNCTION.name: {
-                        "@id": "QUERY",
-                        "@type": clss.FUNCTION.prefix_name,
+                    u.usedFunction.label: {
+                        "@id": "function:QUERY",
+                        "@type": u.Function.label,
                         "description": query_sql.__doc__,
                     },
-                    props.IDENTIFIER.name: job_id,
-                    props.PARAMETER.name: [
+                    u.taskId.label: task_uuid,
+                    u.usedInput.label: [
                         {
-                            "@id": activity_id + "/input/uri",
-                            "@type": clss.INPUT.prefix_name,
-                            props.NAME_TITLE.name: "uri",
-                            props.PARAMETER_VALUE.name: "sqlite:///:memory:",
+                            "@id": event_id + "/input/uri",
+                            "@type": u.LiteralParameter.label,
+                            u.roleName.label: "uri",
+                            u.value.label: "sqlite:///:memory:",
                         },
                         {
-                            "@id": activity_id + "/input/query",
-                            "@type": clss.INPUT.prefix_name,
-                            props.NAME_TITLE.name: "query",
-                            props.PARAMETER_VALUE.name: "select 1 as a",
+                            "@id": event_id + "/input/query",
+                            "@type": u.LiteralParameter.label,
+                            u.roleName.label: "query",
+                            u.value.label: "select 1 as a",
                         },
                         {
-                            "@id": activity_id + "/input/options",
-                            "@type": clss.INPUT.prefix_name,
-                            props.NAME_TITLE.name: "options",
-                            props.PARAMETER_VALUE.name: None,
+                            "@id": event_id + "/input/options",
+                            "@type": u.LiteralParameter.label,
+                            u.roleName.label: "options",
+                            u.value.label: None,
                         },
                     ],
                 },
@@ -474,7 +469,7 @@ class TestUseCases(TestCase):
 
         data1 = b"[1, 2]"
 
-        fid_convert = "urn:function:convert1"
+        fid_convert = "convert1"
         fid_bytes2json = "bytes2json"
 
         def generate1() -> bytes:
@@ -490,9 +485,7 @@ class TestUseCases(TestCase):
         task_generate = storage.task(
             generate1,
             {"output": None},
-            metadata_generator=lambda _: {
-                f"{props.FILE.name}.mediatype": "application/json"
-            },
+            metadata_generator=lambda _: {f"{u.mediatype.label}": "application/json"},
             skip_finished=True,
         )
         task_convert = storage.task(
@@ -514,15 +507,13 @@ class TestUseCases(TestCase):
         self.assertEqual(
             get_item_or_first(
                 storage.metadata(key2).get(
-                    f"{props.GENERATED_BY.name}.{props.FUNCTION.name}.@id"
+                    f"{u.createdBy.label}.{u.usedFunction.label}.@id"
                 )
             ),
-            fid_convert,
+            "function:" + fid_convert,
         )
 
         self.assertEqual(
-            get_item_or_first(
-                storage.metadata(key1).get(f"{props.FILE.name}.mediatype")
-            ),
+            get_item_or_first(storage.metadata(key1).get(f"{u.mediatype.label}")),
             "application/json",
         )
