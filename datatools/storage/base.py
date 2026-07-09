@@ -16,6 +16,7 @@ from datatools.exceptions import (
 from datatools.process.importer import infer_importer_class
 from datatools.process.task import AnnotatedFunction, Task, default_get_task_uuid
 from datatools.types import (
+    JSON_SCHEMA_FILE_RESOURCE,
     RDF_CONTEXT,
     SINGLE_OUTPUT_PARAM_NAME,
     ByteData,
@@ -312,7 +313,7 @@ class DataStorage(ABC):
                 output_id = f"{creation_id}/output/{param_name}"
 
                 output_metadata = {
-                    # '$."$schema"': "TODO"
+                    '$."$schema"': JSON_SCHEMA_FILE_RESOURCE,
                     "@context": RDF_CONTEXT,
                     # "@type": u.FileResource.label,
                     "@id": output_id,

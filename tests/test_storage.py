@@ -26,6 +26,7 @@ from datatools.storage.http import HttpDataStorage, make_server_app
 from datatools.storage.memory import MemoryDataStorage
 from datatools.storage.sql import SqlDataStorage
 from datatools.types import (
+    JSON_SCHEMA_FILE_RESOURCE,
     RDF_CONTEXT,
     SINGLE_OUTPUT_PARAM_NAME,
     URIRefs as u,
@@ -325,7 +326,7 @@ class TestUseCases(TestCase):
             event_id = f"event:{task_uuid}/{timestamp}"
 
             metadata_all_expected = {
-                # "$schema": "TODO",
+                "$schema": JSON_SCHEMA_FILE_RESOURCE,
                 "@id": event_id + "/output/" + SINGLE_OUTPUT_PARAM_NAME,
                 # "@type": u.FileResource.label,
                 u.name.label: ":memory:",

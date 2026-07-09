@@ -26,8 +26,9 @@ FunHashsum = Callable[..., str]
 FunToBytes = Callable[[Any], bytes]
 FunFromBytes = Callable[[bytes], Any]
 
-# any name, must not collide with input parameters
-SINGLE_OUTPUT_PARAM_NAME = "__output"
+# any name, must be a valid parameter name
+# # but not collide with input parameters
+SINGLE_OUTPUT_PARAM_NAME = "MAIN"
 HTTP_METHOD = Literal["GET", "PUT", "POST", "DELETE", "HEAD", "PATCH"]
 
 
@@ -59,7 +60,7 @@ class MyEnum(Generic[T]):
         return cls.as_dict()[key]
 
 
-ns = Namespace("https://purl.archive.org/domain/wingechr/")
+ns = Namespace("http://purl.org/dataschema/datatools#")
 
 
 class Namespaces(MyEnum[Namespace]):
@@ -177,6 +178,10 @@ class URIRefs(MyEnum[ExtURIRef]):
     encoding = ExtURIRef(ns["encoding"])  # not used yet,e.g. "utf-8"
 
 
-RDF_CONTEXT = {"@vocab": "https://purl.archive.org/domain/wingechr#"} | {
+RDF_CONTEXT = {"@vocab": "http://purl.org/dataschema/datatools#"} | {
     k: str(v) for k, v in Namespaces.as_dict().items()
 }
+
+JSON_SCHEMA_FILE_RESOURCE = (
+    "http://purl.org/dataschema/datatools/FileResource-0.0.0.schema.json"
+)
