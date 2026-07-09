@@ -21,11 +21,12 @@ from datatools.process.task import AnnotatedFunction
 from datatools.storage.__main__ import infer_storage_class
 from datatools.storage.base import DataStorage
 from datatools.storage.cli import CliWrapperDataStorage
-from datatools.storage.file import FileDataStorage
+from datatools.storage.file import FileDataStorage, JsonFileMetadataStorage
 from datatools.storage.http import HttpDataStorage, make_server_app
 from datatools.storage.memory import MemoryDataStorage
 from datatools.storage.sql import SqlDataStorage
 from datatools.types import (
+    RDF_CONTEXT,
     SINGLE_OUTPUT_PARAM_NAME,
     URIRefs as u,
 )
@@ -517,3 +518,9 @@ class TestUseCases(TestCase):
             get_item_or_first(storage.metadata(key1).get(f"{u.mediatype.label}")),
             "application/json",
         )
+
+    def test_run_through_rdf(self):
+        """TODO"""
+        data = {"@context": RDF_CONTEXT, "@id": "urn:dummy", "key": "value"}
+        resp = JsonFileMetadataStorage._run_through_rdf(data)
+        self.assertEqual(resp, data)

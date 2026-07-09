@@ -36,11 +36,15 @@ class JsonFileMetadataStorage(PersistentMemoryMetadataStorage):
         # data = self._test_roundtrip_rdf(data)
         self._file.dump_json(data)
 
-    def _run_through_rdf(self, data: dict) -> dict:
+    @staticmethod
+    def _run_through_rdf(data: dict) -> dict:
+        """TODO"""
         data_s = json_dumps(data)
         g = rdflib.Graph()
         g.parse(data=data_s, format="json-ld")
-        data_s_new = g.serialize(format="json-ld", context=RDF_CONTEXT)
+        data_s_new = g.serialize(
+            format="json-ld", context=RDF_CONTEXT, auto_compact=True
+        )
         data_new: dict = json_loads(data_s_new)  # type:ignore
         return data_new
 
