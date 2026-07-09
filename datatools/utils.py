@@ -1091,6 +1091,7 @@ def get_jsonschema_validator(schema):
     """
 
     if isinstance(schema, str):
+        # FIXME: use webcache
         resp = httpx.get(schema, follow_redirects=True)
         resp.raise_for_status()
         schema = resp.json()
