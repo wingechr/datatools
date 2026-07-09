@@ -41,7 +41,7 @@ from datatools.utils import (
 )
 from tests.base import TempdirTestCase, get_item_or_first
 
-QueryParameterUri = f'{props.GENERATED_BY.name}.{props.PARAMETER.name}[?({props.PARAMETER_NAME.name} == "uri")].{props.PARAMETER_VALUE.name}'  # noqa:E501
+QueryParameterUri = f'{props.GENERATED_BY.name}.{props.PARAMETER.name}[?({props.NAME_TITLE.name} == "uri")].{props.PARAMETER_VALUE.name}'  # noqa:E501
 QueryTimestamp = f"{props.GENERATED_BY.name}.{props.DATETIME.name}"
 
 
@@ -330,54 +330,54 @@ class TestUseCases(TestCase):
             metadata_all_expected = {
                 "$schema": "TODO",
                 "@id": activity_id + "/output/" + SINGLE_OUTPUT_PARAM_NAME,
-                "@type": clss.OUTPUT.name,
+                "@type": clss.OUTPUT_FILE.prefix_name,
                 "identifier": ":memory:",
                 # file info
                 props.FILE.name: {
-                    "@id": "urn:md5:34ff2335cbe2045ddc3b78993d1e971d",
-                    "@type": clss.FILE.name,
+                    "@id": "urn:sha256:34ff2335cbe2045ddc3b78993d1e971d",
+                    "@type": clss.FILE.prefix_name,
                     props.SIZE.name: 4,
                     # file saved with info
                     props.SAVED_WITH.name: {
                         props.FUNCTION.name: {
                             "@id": "sql_query_result_to_csv_bytes",
-                            "@type": clss.FUNCTION.name,
+                            "@type": clss.FUNCTION.prefix_name,
                             "description": sql_query_result_to_csv_bytes.__doc__,
                         },
-                        props.PARAMETER_NAME.name: SINGLE_OUTPUT_PARAM_NAME,
+                        props.NAME_TITLE.name: SINGLE_OUTPUT_PARAM_NAME,
                     },
                 },
                 # file generation info
                 props.GENERATED_BY.name: {
                     "@id": activity_id,
-                    "@type": clss.ACTIVITY.name,
+                    "@type": clss.ACTIVITY.prefix_name,
                     # context
                     props.DATETIME.name: metadata_activity[props.DATETIME.name],
-                    props.CREATOR.name: metadata_activity[props.CREATOR.name],
+                    props.CREATOR.name: {"@id": metadata_activity[props.CREATOR.name]},
                     # Job
                     props.FUNCTION.name: {
                         "@id": "QUERY",
-                        "@type": clss.FUNCTION.name,
+                        "@type": clss.FUNCTION.prefix_name,
                         "description": query_sql.__doc__,
                     },
                     props.IDENTIFIER.name: job_id,
                     props.PARAMETER.name: [
                         {
                             "@id": activity_id + "/input/uri",
-                            "@type": clss.INPUT.name,
-                            props.PARAMETER_NAME.name: "uri",
+                            "@type": clss.INPUT.prefix_name,
+                            props.NAME_TITLE.name: "uri",
                             props.PARAMETER_VALUE.name: "sqlite:///:memory:",
                         },
                         {
                             "@id": activity_id + "/input/query",
-                            "@type": clss.INPUT.name,
-                            props.PARAMETER_NAME.name: "query",
+                            "@type": clss.INPUT.prefix_name,
+                            props.NAME_TITLE.name: "query",
                             props.PARAMETER_VALUE.name: "select 1 as a",
                         },
                         {
                             "@id": activity_id + "/input/options",
-                            "@type": clss.INPUT.name,
-                            props.PARAMETER_NAME.name: "options",
+                            "@type": clss.INPUT.prefix_name,
+                            props.NAME_TITLE.name: "options",
                             props.PARAMETER_VALUE.name: None,
                         },
                     ],
@@ -502,12 +502,12 @@ class TestUseCases(TestCase):
             skip_finished=True,
         )
 
-        key1 = f"generated_{task_generate.get_job_hashsum()}.json"
+        key1 = f"generated_{task_generate.get_task_uuid()}.json"
         task_generate(output=key1)
         task_generate(key1)  # does nothing, because already created
 
         # dynamically create id for next step (use same arguments as in actuall)
-        key2 = f"converted_{task_convert.get_job_hashsum(data=key1)}.json"
+        key2 = f"converted_{task_convert.get_task_uuid(data=key1)}.json"
         task_convert(output=key2, data=key1)
 
         # check metadata

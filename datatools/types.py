@@ -66,6 +66,7 @@ class Namespaces(MyEnum[Namespace]):
     _value_type = Namespace
 
     # https://www.w3.org/TR/vocab-dcat-3/#normative-namespaces
+
     # adms = Namespace("http://www.w3.org/ns/adms#")
     # dc = Namespace("http://purl.org/dc/elements/1.1/")
     dcat = Namespace("http://www.w3.org/ns/dcat#")
@@ -77,12 +78,12 @@ class Namespaces(MyEnum[Namespace]):
     # owl = Namespace("http://www.w3.org/2002/07/owl#")
     prov = Namespace("http://www.w3.org/ns/prov#")
     rdf = Namespace("http://www.w3.org/1999/02/22-rdf-syntax-ns#")
-    # rdfs = Namespace("http://www.w3.org/2000/01/rdf-schema#")
+    rdfs = Namespace("http://www.w3.org/2000/01/rdf-schema#")
     # skos = Namespace("http://www.w3.org/2004/02/skos/core#")
     spdx = Namespace("http://spdx.org/rdf/terms#")
     # time = Namespace("http://www.w3.org/2006/time#")
     # vcard = Namespace("http://www.w3.org/2006/vcard/ns#")
-    # xsd = Namespace("http://www.w3.org/2001/XMLSchema#")
+    xsd = Namespace("http://www.w3.org/2001/XMLSchema#")
     # dcat itself:
     dcat = Namespace("http://www.w3.org/ns/dcat#")
 
@@ -127,7 +128,9 @@ class MyUriRef:
 
     """
 
-    def __init__(self, uri: str | URIRef, name: str | None = None):
+    def __init__(
+        self, uri: str | URIRef, name: str | None = None, type_range: str | None = None
+    ):
         uri = str(uri)
         if m := re.match(r"^([^:/#]+):([^:/#]+)$", uri):
             # e.g. "dct:description"
@@ -143,6 +146,11 @@ class MyUriRef:
         self._prefix = prefix
         self._qname = qname
         self.name: str = name or qname
+        # check range
+        if type_range:
+            URIRef(type_range)
+
+        self.type_range = type_range
 
     @property
     def prefix_name(self) -> str:
@@ -158,20 +166,29 @@ class RdfProperties(MyEnum[MyUriRef]):
 
     _value_type = MyUriRef
 
-    DESCRIPTION = MyUriRef("dcterms:description")
+    DESCRIPTION = MyUriRef("dcterms:description", type_range="xsd:string")
     GENERATED_BY = MyUriRef("prov:wasGeneratedBy")
-    SAVED_WITH = MyUriRef("prov:hadPlan")
-    DATETIME = MyUriRef("dcterms:issued")
-    CREATOR = MyUriRef("dcterms:creator")
-    FUNCTION = MyUriRef("prov:hadPlan")
-    LOADED_WITH = MyUriRef("prov:hadPlan")
+    SAVED_WITH = MyUriRef("prov:qualifiedGeneration")
+    ACTIVITY = MyUriRef("prov:activity")
+    DATETIME = MyUriRef("prov:endedAtTime", type_range="xsd:dateTime")
+    CREATOR = MyUriRef("prov:wasAssociatedWith")
+    FUNCTION = MyUriRef("prov:used")
     PARAMETER = MyUriRef("prov:used")
-    PARAMETER_NAME = MyUriRef("dcat:hadRole")
-    SIZE = MyUriRef("dcat:byteSize")
-    FILE = MyUriRef("dcat:distribution")
-    HASHSUM = MyUriRef("spdx:checksum")
-    IDENTIFIER = MyUriRef("dcterms:identifier")
-    PARAMETER_VALUE = MyUriRef("rdf:value")
+    LABEL = MyUriRef("rdfs:label")
+    SIZE = MyUriRef("dcat:byteSize", name="bytes", type_range="xsd:nonNegativeInteger")
+    HASH = MyUriRef("spdx:checksum", name="hash")
+    HASHSUM = MyUriRef("spdx:checksumValue", type_range="xsd:string")
+    HASHALGO = MyUriRef(
+        "spdx:algorithm",
+        type_range="@id",  # looks weird, but is correct
+    )
+    NAME_TITLE = MyUriRef("dcterms:title", name="name", type_range="xsd:string")
+    TASK_IDENTIFIER = MyUriRef(
+        "dcterms:identifier", name="jobHash", type_range="xsd:string"
+    )
+    PARAMETER_VALUE = MyUriRef("rdf:value", type_range=None)
+    ASSOCIATION = MyUriRef("prov:qualifiedAssociation")
+    PLAN = MyUriRef("prov:hadPlan")
 
 
 class RdfClasses(MyEnum[MyUriRef]):
@@ -181,13 +198,32 @@ class RdfClasses(MyEnum[MyUriRef]):
 
     FUNCTION = MyUriRef("prov:Plan", name="Function")
     ACTIVITY = MyUriRef("prov:Activity", name="Activity")
-    OUTPUT = MyUriRef("prov:Entity", name="Output")
-    INPUT = MyUriRef("prov:Entity", name="Input")
+    INPUT_OUTPUT_FILE = MyUriRef("prov:Entity", name="Entity")
     FILE = MyUriRef("dcat:Distribution", name="File")
+    SERIALIZE = MyUriRef("prov:Generation")
+    PERSON = MyUriRef("prov:Person")
+    HASH = MyUriRef("spdx:Checksum")
+    ASSOCIATION = MyUriRef("prov:Association")
 
 
 RDF_CONTEXT = (
     {k: str(v) for k, v in Namespaces.as_dict().items()}
-    | {u.name: u.prefix_name for u in RdfProperties.as_dict().values() if u.prefix_name}
+    | {
+        u.name: {"@id": u.prefix_name}
+        | ({"@type": u.type_range} if u.type_range else {})
+        for u in RdfProperties.as_dict().values()
+        if u.prefix_name
+    }
     | {u.name: u.prefix_name for u in RdfClasses.as_dict().values() if u.prefix_name}
 )
+
+
+class RDFTerm:
+    @property
+
+
+class RDFClass(RDFTerm):
+    pass
+
+class RDFProperty(RDFTerm):
+    def __init__(self)

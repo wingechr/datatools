@@ -14,7 +14,7 @@ from datatools.exceptions import (
     StorageInvalidNameError,
 )
 from datatools.process.importer import infer_importer_class
-from datatools.process.task import AnnotatedFunction, Task, default_get_job_hashsum
+from datatools.process.task import AnnotatedFunction, Task, default_get_task_uuid
 from datatools.types import (
     RDF_CONTEXT,
     SINGLE_OUTPUT_PARAM_NAME,
@@ -32,8 +32,8 @@ from datatools.types import (
     RdfProperties as props,
 )
 from datatools.utils import (
+    get_deterministic_uuid5_from_data,
     get_now_str,
-    get_user_w_host,
     identity,
     remove_credentials_from_netloc,
 )
@@ -166,7 +166,7 @@ class DataStorage(ABC):
         output_to_bytes: FunToBytes = pickle.dumps,
         output_from_bytes: FunFromBytes = pickle.loads,
         get_name_from_hash: Callable[[str], str] = identity,
-        get_job_hashsum: FunHashsum = default_get_job_hashsum,
+        get_job_hashsum: FunHashsum = default_get_task_uuid,
     ) -> Callable:
         """TODO"""
 
@@ -181,7 +181,7 @@ class DataStorage(ABC):
 
             @functools.wraps(function)
             def _fun(*args, **kwargs):
-                hashsum = task.get_job_hashsum(*args, **kwargs)
+                hashsum = task.get_task_uuid(*args, **kwargs)
                 output_name = get_name_from_hash(hashsum)
                 # logging.error((hash_data, hashsum))
 
@@ -204,7 +204,7 @@ class DataStorage(ABC):
         output_converters: dict[str, FunToBytes | None] | FunToBytes | None = None,
         input_converters: dict[str, FunFromBytes | None] | None = None,
         metadata_generator: Callable[[Any], dict[str, Json]] | None = None,
-        get_job_hashsum: FunHashsum = default_get_job_hashsum,
+        get_job_hashsum: FunHashsum = default_get_task_uuid,
         skip_finished: bool = False,
     ) -> Task:
         """TODO"""
@@ -218,11 +218,17 @@ class DataStorage(ABC):
 
         callback_data = {
             "metadata_activity": {
-                # "@id": None,
                 "@type": clss.ACTIVITY.name,
+                # "@id": None, # Set later when we have it
                 props.DATETIME.name: get_now_str(),
-                props.CREATOR.name: get_user_w_host(),
-                props.FUNCTION.name: wrapped_function.get_metadata(),
+                props.CREATOR.name: {
+                    "@type": clss.PERSON.name,
+                    "@id": "acct:test@test.test",
+                },  # FIXME get_user_w_host(),
+                props.ASSOCIATION.name: {
+                    "@type": clss.ASSOCIATION.name,
+                    props.PLAN.name: wrapped_function.get_metadata(),
+                },
                 props.PARAMETER.name: [],  # will be filled by input handlers
             },
             "metadata_generated": {},
@@ -237,11 +243,18 @@ class DataStorage(ABC):
 
                 callback_data["metadata_activity"][props.PARAMETER.name].append(
                     {
-                        "@type": clss.INPUT.name,
-                        # "@id": set later when we have it
+                        "@type": clss.INPUT_OUTPUT_FILE.name,
+                        # "@id": ... TODO
+                        props.NAME_TITLE.name: name,
                         props.PARAMETER_VALUE.name: name_value,
-                        props.PARAMETER_NAME.name: name,
-                        props.LOADED_WITH.name: handler_w.get_metadata(),
+                        props.GENERATED_BY.name: {
+                            "@type": clss.ACTIVITY.name,
+                            # "@id": ... TODO
+                            props.ASSOCIATION.name: {
+                                "@type": clss.ASSOCIATION.name,
+                                props.PLAN.name: handler_w.get_metadata(),
+                            },
+                        },
                     }
                 )
 
@@ -259,9 +272,10 @@ class DataStorage(ABC):
                 callback_data["input_parameter_values"][name] = value
                 callback_data["metadata_activity"][props.PARAMETER.name].append(
                     {
-                        "@type": clss.INPUT.name,
+                        "@type": clss.INPUT_OUTPUT_FILE.name,
+                        # "@id": ... TODO
+                        props.NAME_TITLE.name: name,
                         props.PARAMETER_VALUE.name: value,
-                        props.PARAMETER_NAME.name: name,
                     }
                 )
 
@@ -269,23 +283,33 @@ class DataStorage(ABC):
 
             return handle_
 
-        def update_metadata_task_id(data: Any):
+        def update_metadata_job_id(data: Any):
             # generate task id (once)
-            metadata_activity = "@id" in callback_data["metadata_activity"]
+            has_metadata_activity_id = "@id" in callback_data["metadata_activity"]
 
-            if not metadata_activity:
+            if not has_metadata_activity_id:
                 task: Task = callback_data["task"]
-                job_hashsum = task.get_job_hashsum(
+                task_uuid = task.get_task_uuid(
                     **callback_data["input_parameter_values"]
                 )
-                job_id = f"urn:job:{job_hashsum}"
-                datatime = callback_data["metadata_activity"][props.DATETIME.name]
-                activity_id = f"urn:activity:{job_hashsum}-{datatime}"
-                callback_data["metadata_activity"]["@id"] = activity_id
-                callback_data["metadata_activity"][props.IDENTIFIER.name] = job_id
+                datetime = callback_data["metadata_activity"][props.DATETIME.name]
+                activity_uuid = get_deterministic_uuid5_from_data(
+                    {"task_uuid": task_uuid, "datetime": datetime}
+                )
+                activity_urn = f"urn:uuid:{activity_uuid}"
+                callback_data["metadata_activity"]["@id"] = activity_urn
+                callback_data["metadata_activity"][props.TASK_IDENTIFIER.name] = (
+                    task_uuid
+                )
                 # update ids for input parameters
+
+                # TODO: leave it anonymous?
                 for p in callback_data["metadata_activity"][props.PARAMETER.name]:
-                    p["@id"] = activity_id + "/input/" + p[props.PARAMETER_NAME.name]
+                    name = p[props.NAME_TITLE.name]
+                    input_uuid = get_deterministic_uuid5_from_data(
+                        {"activity_uuid": activity_uuid, "input": name}
+                    )
+                    p["@id"] = f"urn:uuid:{input_uuid}"
 
                 # generate metadata
                 if metadata_generator:
@@ -295,50 +319,60 @@ class DataStorage(ABC):
             if handler:
                 handler_w = AnnotatedFunction.assert_wrapped(handler)
                 meta_saved_with = {
-                    # "@id": set later when we have it
-                    props.FUNCTION.name: handler_w.get_metadata(),
-                    props.PARAMETER_NAME.name: param_name,
+                    "@type": clss.SERIALIZE.name,
+                    # "@id": TODO
+                    props.ACTIVITY.name: {
+                        "@type": clss.ACTIVITY.name,
+                        # "@id": TODO
+                        props.ASSOCIATION.name: {
+                            "@type": clss.ASSOCIATION.name,
+                            props.PLAN.name: handler_w.get_metadata(),
+                        },
+                    },
                 }
             else:
-                meta_saved_with = {}
+                meta_saved_with = None
                 handler = identity
 
             def handle_(data: Any, name: Name):
                 bdata = handler(data)
                 self.write(name, bdata)
-                update_metadata_task_id(data)
+                update_metadata_job_id(data)
 
+                activity_urn = callback_data["metadata_activity"]["@id"]
+                activity_uuid = activity_urn.split(":", 2)
+                output_uuid = get_deterministic_uuid5_from_data(
+                    {"activity_uuid": activity_uuid, "output": param_name}
+                )
+                output_urn = f"urn:uuid:{output_uuid}"
                 output_metadata = {
+                    # '$."$schema"': "TODO"
                     "@context": RDF_CONTEXT,
-                    "@type": clss.OUTPUT.name,
-                    props.IDENTIFIER.name: name,
-                    "@id": callback_data["metadata_activity"]["@id"]
-                    + "/output/"
-                    + param_name,
-                    props.FILE.name: {
-                        "@id": "urn:md5:" + hashlib.md5(bdata).hexdigest(),  # noqa:S324
-                        "@type": clss.FILE.name,
-                        props.SIZE.name: len(bdata),
+                    "@type": [
+                        clss.INPUT_OUTPUT_FILE.name,
+                        clss.FILE.name,
+                    ],
+                    "@id": output_urn,
+                    # name in storage (TODO maybe create URI?)
+                    props.NAME_TITLE.name: name,
+                    # TODO: fully spdx conform
+                    props.HASH.name: {
+                        "@type": clss.HASH.name,
+                        props.HASHALGO.name: {"@id": "spdx:checksumAlgorithm_sha256"},
+                        props.HASHSUM.name: hashlib.sha256(bdata).hexdigest(),
                     },
+                    props.SIZE.name: len(bdata),
                     props.GENERATED_BY.name: callback_data["metadata_activity"],
-                }
+                } | callback_data["metadata_generated"]
 
                 if meta_saved_with:
                     # update id
-                    output_metadata[props.FILE.name][props.SAVED_WITH.name] = (
-                        meta_saved_with
-                    )
+                    output_metadata[props.SAVED_WITH.name] = meta_saved_with
 
                 # cannot set root itself:
                 metadata = self.metadata(name)
                 for key, val in output_metadata.items():
                     metadata.set(key, val)
-
-                # generated metadata
-                for key, val in callback_data["metadata_generated"].items():
-                    metadata.set(key, val)
-
-                metadata.set('$."$schema"', "TODO")  # need to quote
 
             return handle_
 
@@ -365,7 +399,7 @@ class DataStorage(ABC):
             function,
             output_writers=wrapped_output_handlers,
             input_readers=wrapped_input_handlers,
-            get_job_hashsum=get_job_hashsum,
+            get_task_uuid=get_job_hashsum,
             check_done=check_names_exist if skip_finished else None,
         )
         callback_data["task"] = task

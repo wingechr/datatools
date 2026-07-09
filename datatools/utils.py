@@ -24,6 +24,7 @@ import time
 from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import unquote, urlparse, urlsplit
 from urllib.request import url2pathname
+import uuid
 
 import chardet
 import httpx
@@ -430,13 +431,13 @@ def subclasses_by_name(cls: type[SubCls]) -> dict[str, type[SubCls]]:
     return {c.__name__: c for c in list(iter_subclasses(cls))}
 
 
-def get_md5_hash(hash_data: Json) -> str:
+def get_sha256_hash(hash_data: Json) -> str:
     """TODO"""
     hash_data_s = json_dumps(
         hash_data, ensure_ascii=False, indent=0, sort_keys=True, default=json_serialize
     )
     hash_data_b = hash_data_s.encode("utf-8")
-    hashsum = hashlib.md5(hash_data_b).hexdigest()  # noqa:S324
+    hashsum = hashlib.sha256(hash_data_b).hexdigest()  # noqa:S324
     # logging.error("%s %s", hashsum, hash_data)
     return hashsum
 
@@ -1012,3 +1013,29 @@ def sql_query_result_to_csv_bytes(data: Iterable["Row"], **options) -> bytes:
     data_s = df.to_csv(index=False, lineterminator="\n")
     data_b = data_s.encode()
     return data_b
+
+
+def get_deterministic_uuid5(data: str) -> str:
+    """TODO
+
+    Example:
+
+    >>> get_deterministic_uuid5("test")
+    'da5b8893-d6ca-5c1c-9a9c-91f40a2a3649'
+
+    """
+    # NOTE: .hex() returns without the dashes, str() with dashes
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, data))
+
+
+def get_deterministic_uuid5_from_data(data: Json) -> str:
+    """TODO
+
+    Example:
+
+    >>> get_deterministic_uuid5_from_data({"value": 10})
+    '88bc6da5-9229-5d47-ab0c-005c5f04030b'
+
+    """
+    data_s = json_dumps(data, indent=0, sort_keys=True)
+    return get_deterministic_uuid5(data_s)

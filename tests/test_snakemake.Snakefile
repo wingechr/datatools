@@ -24,7 +24,7 @@ task_convert = data_storage.task(convert, {"output": json_dumpb}, {"data": json_
 
 rule convert:
     input:
-        "generatad.json"
+        "generated.json"
     output:
         "converted.json"
     run:
@@ -32,10 +32,10 @@ rule convert:
 
 rule generate:
     output:
-        "generatad.json"
+        "generated.json"
     run:
         task_generate(output[0], n=10)
 
 # for this simple exmaple, we could also manally just run
-# data_storage.task(generate, {"output": None}, skip_finished=True)("generatad.json")
-# data_storage.task(convert, {"output": dump}, {"data": json.loads}, skip_finished=True)("generatad.json", "converted.json")
+# data_storage.task(generate, {"output": None}, skip_finished=True)("generated.json")
+# data_storage.task(convert, {"output": dump}, {"data": json.loads}, skip_finished=True)("generated.json", "converted.json")

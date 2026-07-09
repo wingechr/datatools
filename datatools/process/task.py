@@ -43,8 +43,10 @@ from datatools.types import (
 from datatools.utils import (
     function_get_defaults,
     function_get_regular_params,
+    get_deterministic_uuid5,
+    get_deterministic_uuid5_from_data,
     get_function_description,
-    get_md5_hash,
+    get_function_id,
     names_get_argument_dict,
 )
 
@@ -66,7 +68,7 @@ class AnnotatedFunction(Generic[FunParams, FunResult]):
         self.fun = fun
         self.fun_defaults = function_get_defaults(fun)
         self.fun_parameter_names = function_get_regular_params(fun)
-        self.function_id: str = function_id or fun.__name__
+        self.function_id: str = function_id or get_function_id(fun)
         self.description = (
             get_function_description(fun) if description is None else description
         )
@@ -78,7 +80,8 @@ class AnnotatedFunction(Generic[FunParams, FunResult]):
         """TODO"""
         return {
             "@type": clss.FUNCTION.name,
-            "@id": self.function_id,
+            props.LABEL.name: self.function_id,
+            "@id": f"urn:uuid:{get_deterministic_uuid5(self.function_id)}",
             props.DESCRIPTION.name: self.description,
         }
 
@@ -124,11 +127,11 @@ def default_get_hash_data(task: "Task", input_params: dict) -> Json:
     return {"function": function_id, "parameters": input_params}
 
 
-def default_get_job_hashsum(task: "Task", *args, **kwargs) -> str:
+def default_get_task_uuid(task: "Task", *args, **kwargs) -> str:
     """TODO"""
     input_params = get_task_input_parameters(task, *args, **kwargs)
     hash_data = default_get_hash_data(task, input_params)
-    hashsum = get_md5_hash(hash_data)
+    hashsum = get_deterministic_uuid5_from_data(hash_data)
     return hashsum
 
 
@@ -180,7 +183,7 @@ class Task:
         output_writers: dict[str, Callable[[Any, str], Any]],
         input_readers: dict[str, Callable[[Any], Any]] | None = None,
         check_done: Callable[..., bool] | None = None,
-        get_job_hashsum: FunHashsum = default_get_job_hashsum,
+        get_task_uuid: FunHashsum = default_get_task_uuid,
     ):
         self.function = AnnotatedFunction.assert_wrapped(function)
         self.output_writers = output_writers
@@ -195,7 +198,7 @@ class Task:
             for k, v in self.function.fun_defaults.items()
             if k in self.input_parameter_names
         }
-        self._get_job_hashsum = get_job_hashsum
+        self._get_task_uuid = get_task_uuid
 
         # checks
 
@@ -217,13 +220,13 @@ class Task:
                 "Invalid output parameters: %s", invalid_output_parameter_names
             )
 
-    def get_job_hashsum(self, *args, **kwargs) -> str:
+    def get_task_uuid(self, *args, **kwargs) -> str:
         """TODO
 
         FIXME: create unit tests - why dont i have to pass output args like
         the same way as in __call__?
         """
-        return self._get_job_hashsum(self, *args, **kwargs)  # self is first arg (task)
+        return self._get_task_uuid(self, *args, **kwargs)  # self is first arg (task)
 
     def create_job(self, *args, **kwargs) -> Job:
         """TODO"""
