@@ -27,9 +27,13 @@ from urllib.request import url2pathname
 import uuid
 
 import chardet
+import frictionless
 import httpx
 import jsonpath_ng
 import jsonpath_ng.ext
+import jsonschema
+import jsonschema.exceptions
+import jsonschema.validators
 import numpy as np
 import pandas as pd
 from pydantic import BaseModel
@@ -1046,3 +1050,63 @@ def get_deterministic_uuid5_from_data(data: Json) -> str:
     """
     data_s = json_dumps(data, indent=0, sort_keys=True)
     return get_deterministic_uuid5(data_s)
+
+
+def validate_resource(resource_descriptor):
+    """TODO"""
+    res = frictionless.Resource(resource_descriptor)
+    rep = res.validate()
+
+    if rep.stats["errors"]:
+        errors = []
+        for task in rep.tasks:
+            for err in task.errors:
+                errors.append(err.message)
+
+        err_str = "\n".join(errors)
+        # logging.error(err_str)
+        raise ValueError(err_str)
+
+
+def get_jsonschema_validator(schema):
+    """Return validator instance for schema.
+
+    Example:
+
+    >>> schema = {"type": "object", "properties":
+    ...   {"id": {"type": "integer"}}, "required": [ "id" ]}
+    >>> validator = get_jsonschema_validator(schema)
+    >>> validator({})
+    Traceback (most recent call last):
+        ...
+    ValueError: 'id' is a required property ...
+
+    >>> validator({"id": "a"})
+    Traceback (most recent call last):
+        ...
+    ValueError: 'a' is not of type 'integer' ...
+
+    >>> validator({"id": 1})
+
+    """
+
+    if isinstance(schema, str):
+        schema = httpx.get(schema).json()
+
+    validator_cls = jsonschema.validators.validator_for(schema)
+    # check if schema is valid
+    validator_cls.check_schema(schema)
+    validator = validator_cls(schema)
+
+    def validator_function(instance):
+        errors = []
+        for err in validator.iter_errors(instance):
+            # path in data structure where error occurs
+            path = "$" + "/".join(str(x) for x in err.absolute_path)
+            errors.append(f"{err.message} in {path}")
+        if errors:
+            err_str = "\n".join(errors)
+            # logging.error(err_str)
+            raise ValueError(err_str)
+
+    return validator_function
