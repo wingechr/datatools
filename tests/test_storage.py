@@ -327,18 +327,18 @@ class TestUseCases(TestCase):
             metadata_all_expected = {
                 # "$schema": "TODO",
                 "@id": event_id + "/output/" + SINGLE_OUTPUT_PARAM_NAME,
-                "@type": u.FileResource.label,
+                # "@type": u.FileResource.label,
                 u.name.label: ":memory:",
                 # file info
                 u.hash.label: "sha256:309b0e45a73d3fc5325e2b6ed0a01ef8b9cde6b05a5633c1f893f970d52bfddc",  # noqa:E501
                 u.bytes.label: 4,
                 # file saved with info
                 u.serializedWith.label: {
-                    "@type": u.Serialization.label,
+                    # "@type": u.Serialization.label,
                     u.usedFunction.label: {
                         "@id": "function:"
                         + AnnotatedFunction(sql_query_result_to_csv_bytes).function_id,
-                        "@type": u.Function.label,
+                        # "@type": u.Function.label,
                         "description": sql_query_result_to_csv_bytes.__doc__,
                     },
                     u.roleName.label: SINGLE_OUTPUT_PARAM_NAME,
@@ -346,33 +346,33 @@ class TestUseCases(TestCase):
                 # file generation info
                 u.createdBy.label: {
                     "@id": event_id,
-                    "@type": u.CreationEvent.label,
+                    # "@type": u.CreationEvent.label,
                     # context
                     u.datetime.label: metadata_creation_event[u.datetime.label],
                     u.creator.label: metadata_creation_event[u.creator.label],
                     # Job
                     u.usedFunction.label: {
                         "@id": "function:QUERY",
-                        "@type": u.Function.label,
+                        # "@type": u.Function.label,
                         "description": query_sql.__doc__,
                     },
                     u.taskId.label: task_uuid,
                     u.usedInput.label: [
                         {
                             "@id": event_id + "/input/uri",
-                            "@type": u.LiteralParameter.label,
+                            # "@type": u.LiteralParameter.label,
                             u.roleName.label: "uri",
                             u.value.label: "sqlite:///:memory:",
                         },
                         {
                             "@id": event_id + "/input/query",
-                            "@type": u.LiteralParameter.label,
+                            # "@type": u.LiteralParameter.label,
                             u.roleName.label: "query",
                             u.value.label: "select 1 as a",
                         },
                         {
                             "@id": event_id + "/input/options",
-                            "@type": u.LiteralParameter.label,
+                            # "@type": u.LiteralParameter.label,
                             u.roleName.label: "options",
                             u.value.label: None,
                         },

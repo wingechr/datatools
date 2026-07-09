@@ -71,7 +71,7 @@ class AnnotatedFunction(Generic[FunParams, FunResult]):
     def get_metadata(self) -> dict[str, Json]:
         """TODO"""
         return {
-            "@type": u.Function.label,
+            # "@type": u.Function.label,
             "@id": f"function:{self.function_id}",
             u.description.label: self.description,
         }

@@ -217,7 +217,7 @@ class DataStorage(ABC):
 
         callback_data = {
             "metadata_creation_event": {
-                "@type": u.CreationEvent.label,
+                # "@type": u.CreationEvent.label,
                 # "@id": None, # Set later when we have it
                 u.datetime.label: get_now_str(),
                 u.creator.label: get_user_w_host(),
@@ -236,7 +236,7 @@ class DataStorage(ABC):
 
                 callback_data["metadata_creation_event"][u.usedInput.label].append(
                     {
-                        "@type": u.Deserialization.label,
+                        # "@type": u.Deserialization.label,
                         # "@id": ... TODO
                         u.roleName.label: name,
                         u.value.label: name_value,
@@ -258,7 +258,7 @@ class DataStorage(ABC):
                 callback_data["input_parameter_values"][name] = value
                 callback_data["metadata_creation_event"][u.usedInput.label].append(
                     {
-                        "@type": u.LiteralParameter.label,
+                        # "@type": u.LiteralParameter.label,
                         # "@id": ... TODO
                         u.roleName.label: name,
                         u.value.label: value,
@@ -295,7 +295,7 @@ class DataStorage(ABC):
             if handler:
                 handler_w = AnnotatedFunction.assert_wrapped(handler)
                 meta_saved_with = {
-                    "@type": u.Serialization.label,
+                    # "@type": u.Serialization.label,
                     u.roleName.label: param_name,
                     u.usedFunction.label: handler_w.get_metadata(),
                 }
@@ -314,7 +314,7 @@ class DataStorage(ABC):
                 output_metadata = {
                     # '$."$schema"': "TODO"
                     "@context": RDF_CONTEXT,
-                    "@type": u.FileResource.label,
+                    # "@type": u.FileResource.label,
                     "@id": output_id,
                     # name in storage (TODO maybe create URI?)
                     u.name.label: name,
