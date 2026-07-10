@@ -16,6 +16,7 @@ T = TypeVar("T")
 
 Json: TypeAlias = str | int | float | bool | None | list["Json"] | dict[str, "Json"]
 StrPath = Path | str
+ByteData = bytes | Iterable[bytes]
 Name = str
 MetadataAttribute = str
 MetadataValue: TypeAlias = Json
@@ -24,8 +25,10 @@ MetadataPairs: TypeAlias = (
     | Iterable[tuple[MetadataAttribute, MetadataValue]]
 )
 FunHashsum = Callable[..., str]
-FunToBytes = Callable[[Any], bytes | Iterable[bytes]]
-FunFromBytes = Callable[[bytes | Iterable[bytes]], Any]
+FunToByteData = Callable[[Any], bytes] | Callable[[Any], Iterable[bytes]]
+FunFromByteData = Callable[[Iterable[bytes]], Any] | Callable[[bytes], Any]
+FunToBytes = Callable[[Any], bytes]
+FunFromBytes = Callable[[bytes], Any]
 
 # any name, must be a valid parameter name
 # # but not collide with input parameters

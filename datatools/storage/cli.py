@@ -14,6 +14,7 @@ from datatools.exceptions import (
 from datatools.storage.base import DataStorage, MetadataStorage
 from datatools.types import MetadataAttribute, MetadataValue, Name
 from datatools.utils import (
+    as_bytes,
     json_dumps,
     json_loadb,
     reverse_prints,
@@ -67,7 +68,7 @@ class CliWrapperDataStorage(DataStorage):
         # )
         logging.debug("CLI " + " ".join(cmd))
         # FIXME: streaming / chunked writing?
-        bdata = b"".join(data) if data else None
+        bdata = as_bytes(data) if data else None
         result = self._clirunner.invoke(self._storage_main_cli, cmd, input=bdata)
         if result.exit_code:
             raise SubprocessStatus(result.exit_code)
@@ -109,7 +110,7 @@ class CliWrapperDataStorage(DataStorage):
         """TODO"""
         info_remote = self._request("info")
 
-        bdata = b"".join(info_remote)  # i dont think there is a point in streaming this
+        bdata = as_bytes(info_remote)  # i dont think there is a point in streaming this
         info_remote = json_loadb(bdata)
         info_client = super().info()
         info_client.update({"remote": info_remote})

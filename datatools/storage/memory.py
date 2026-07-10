@@ -8,7 +8,7 @@ from typing_extensions import override
 
 from datatools.storage.base import DataStorage, MetadataStorage
 from datatools.types import MetadataAttribute, MetadataValue, Name
-from datatools.utils import jsonpath_get, jsonpath_update
+from datatools.utils import as_bytes, jsonpath_get, jsonpath_update
 
 
 class MemoryMetadataStorage(MetadataStorage):
@@ -70,7 +70,7 @@ class MemoryDataStorage(DataStorage):
         return [bdata]
 
     def _write(self, name: Name, data: Iterable[bytes]) -> None:
-        bdata = b"".join(data)
+        bdata = as_bytes(data)
         self.__data[name] = bdata
 
     def _delete(self, name: Name) -> None:

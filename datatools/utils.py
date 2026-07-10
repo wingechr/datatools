@@ -22,7 +22,7 @@ import subprocess
 import sys
 from threading import Thread
 import time
-from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar, cast
 from urllib.parse import unquote, urlparse, urlsplit
 from urllib.request import url2pathname
 import uuid
@@ -41,7 +41,7 @@ import sqlalchemy as sa
 import sqlparse
 import tzlocal
 
-from datatools.types import DEFAULT_CHUNK_SIZE, Json, StrPath, SubCls
+from datatools.types import DEFAULT_CHUNK_SIZE, ByteData, Json, StrPath, SubCls
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import CursorResult
@@ -1000,14 +1000,6 @@ def wait_for_url(url: str, timeout_s=30):
             continue
 
 
-def http_get(uri: str, **options) -> bytes:
-    """TODO"""
-    resp = httpx.get(uri, follow_redirects=True)
-    resp.raise_for_status()
-    data = resp.content
-    return data
-
-
 def http_get_stream(
     uri: str, chunk_size: int = DEFAULT_CHUNK_SIZE, **options
 ) -> Iterable[bytes]:
@@ -1213,3 +1205,19 @@ class CollectStatsIteratorHash(CollectStatsIterator[bytes, Any, str]):
     def value(self) -> str:
         """TODO"""
         return self._value.hexdigest()
+
+
+def as_byte_iterable(data: ByteData) -> Iterable[bytes]:
+    """TODO"""
+    if isinstance(data, bytes):
+        yield data
+    else:
+        yield from cast(Iterable[bytes], data)
+
+
+def as_bytes(data: ByteData) -> bytes:
+    """TODO"""
+    if isinstance(data, bytes):
+        return data
+    else:
+        return b"".join(cast(Iterable[bytes], data))

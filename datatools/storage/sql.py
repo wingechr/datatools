@@ -17,7 +17,7 @@ from datatools.exceptions import StorageFileNotFoundError
 from datatools.storage.base import DataStorage, MetadataStorage
 from datatools.storage.memory import PersistentMemoryMetadataStorage
 from datatools.types import Name
-from datatools.utils import json_dumps, json_loads
+from datatools.utils import as_bytes, json_dumps, json_loads
 
 sql_base = MetaData()
 
@@ -126,7 +126,7 @@ class SqlDataStorage(DataStorage):
 
     def _write(self, name: Name, data: Iterable[bytes]) -> None:
         with self._engine.begin() as con:
-            bdata: bytes = b"".join(data)
+            bdata = as_bytes(data)
             con.execute(table_data.insert().values(name=name, data=bdata))
 
     def _delete(self, name: Name) -> None:

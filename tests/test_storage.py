@@ -485,15 +485,15 @@ class TestUseCases(TestCase):
 
         # "output": None -> already bytes
         task_generate = storage.task(
-            generate1,
-            {"output": None},
+            function=generate1,
+            output_converters={"output": None},
             metadata_generator=lambda _: {f"{u.mediatype.label}": "application/json"},
             skip_finished=True,
         )
         task_convert = storage.task(
-            convert,
-            {"output": json_dumpb},
-            {"data": loads},
+            function=convert,
+            output_converters={"output": json_dumpb},
+            input_converters={"data": loads},
             skip_finished=True,
         )
 

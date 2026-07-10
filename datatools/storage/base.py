@@ -18,11 +18,13 @@ from datatools.types import (
     JSON_SCHEMA_FILE_RESOURCE,
     RDF_CONTEXT,
     SINGLE_OUTPUT_PARAM_NAME,
+    ByteData,
+    FunFromByteData,
     FunFromBytes,
     FunHashsum,
     FunParams,
     FunResult,
-    FunToBytes,
+    FunToByteData,
     Json,
     MetadataAttribute,
     MetadataValue,
@@ -32,6 +34,8 @@ from datatools.types import (
 from datatools.utils import (
     CollectStatsIteratorHash,
     CollectStatsIteratorSize,
+    as_byte_iterable,
+    as_bytes,
     get_now_str,
     get_user_w_host,
     identity,
@@ -112,18 +116,14 @@ class DataStorage(ABC):
         if not self.has(name):
             raise StorageFileNotFoundError(f"Not found: {name}")
         iter_bytes = self._read(name=name)
-        return b"".join(iter_bytes)
+        return as_bytes(iter_bytes)
 
-    def write(self, name: Name, data: bytes | Iterable[bytes]) -> None:
+    def write(self, name: Name, data: ByteData) -> None:
         """TODO"""
         self._assert_valid_name(name=name)
         if self.has(name):
             raise StorageFileExistsError(f"Already exists: {name}")
-        iter_bytes: Iterable[bytes]
-        if isinstance(data, bytes):
-            iter_bytes = [data]
-        else:
-            iter_bytes = data
+        iter_bytes = as_byte_iterable(data)
         return self._write(name=name, data=iter_bytes)
 
     def delete(self, name: Name) -> None:
@@ -171,7 +171,7 @@ class DataStorage(ABC):
 
     def cache(
         self,
-        output_to_bytes: FunToBytes = pickle.dumps,
+        output_to_bytes: FunToByteData = pickle.dumps,
         output_from_bytes: FunFromBytes = pickle.loads,
         get_name_from_hash: Callable[[str], str] = identity,
         get_job_hashsum: FunHashsum = default_get_task_uuid,
@@ -198,8 +198,8 @@ class DataStorage(ABC):
                     task(output_name, *args, **kwargs)
 
                 # retrieval
-                data = self.read(output_name)
-                result = output_from_bytes(data)
+                bdata = self.read(output_name)
+                result = output_from_bytes(bdata)
                 return result
 
             return _fun
@@ -209,8 +209,10 @@ class DataStorage(ABC):
     def task(
         self,
         function: Callable,
-        output_converters: dict[str, FunToBytes | None] | FunToBytes | None = None,
-        input_converters: dict[str, FunFromBytes | None] | None = None,
+        output_converters: dict[str, FunToByteData | None]
+        | FunToByteData
+        | None = None,
+        input_converters: dict[str, FunFromByteData | None] | None = None,
         metadata_generator: Callable[[Any], dict[str, Json]] | None = None,
         get_job_hashsum: FunHashsum = default_get_task_uuid,
         skip_finished: bool = False,
@@ -315,9 +317,14 @@ class DataStorage(ABC):
             def handle_(data: Any, name: Name):
                 bytes_iterable = handler(data)
 
+                # FIXME
+                if isinstance(bytes_iterable, bytes):
+                    bytes_iterable = [bytes_iterable]
+
+                hash_algo = DEFAULT_HASH_ALGORITHM
                 bytes_iterable_size = CollectStatsIteratorSize(bytes_iterable)
                 bytes_iterable_hash = CollectStatsIteratorHash(
-                    bytes_iterable_size, algorithm=DEFAULT_HASH_ALGORITHM
+                    bytes_iterable_size, algorithm=hash_algo
                 )
                 bytes_iterable = bytes_iterable_hash
 
@@ -334,7 +341,7 @@ class DataStorage(ABC):
                     "@id": output_id,
                     # name in storage (TODO maybe create URI?)
                     u.name.label: name,
-                    u.hash.label: f"{DEFAULT_HASH_ALGORITHM}:{bytes_iterable_hash.value}",
+                    u.hash.label: f"{hash_algo}:{bytes_iterable_hash.value}",
                     u.bytes.label: bytes_iterable_size.value,
                     u.createdBy.label: callback_data["metadata_creation_event"],
                 } | callback_data["metadata_generated"]

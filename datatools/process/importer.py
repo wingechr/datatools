@@ -7,7 +7,7 @@ import re
 from typing_extensions import override
 
 from datatools.process.task import AnnotatedFunction
-from datatools.types import FunToBytes, Name
+from datatools.types import FunToByteData, Name
 from datatools.utils import (
     get_name_from_uri,
     http_get_stream,
@@ -24,7 +24,7 @@ from datatools.utils import (
 class Importer(ABC):
     """TODO"""
 
-    output_to_bytes: FunToBytes | None = None
+    output_to_bytes: FunToByteData | None = None
     get_data: Callable
 
     @classmethod
@@ -96,7 +96,7 @@ class SqlImporter(Importer):
 
     # use generic id (tool does not matter)
     get_data = AnnotatedFunction.wrap(function_id="QUERY")(query_sql)
-    output_to_bytes: FunToBytes = AnnotatedFunction.wrap()(
+    output_to_bytes: FunToByteData = AnnotatedFunction.wrap()(
         sql_query_result_to_csv_bytes
     )
 
