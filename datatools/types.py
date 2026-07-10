@@ -2,6 +2,7 @@
 
 from collections.abc import Callable, Iterable, Mapping
 from functools import cache
+import io
 from pathlib import Path
 from typing import Any, ClassVar, Generic, Literal, ParamSpec, TypeAlias, TypeVar
 
@@ -15,7 +16,6 @@ T = TypeVar("T")
 Json: TypeAlias = str | int | float | bool | None | list["Json"] | dict[str, "Json"]
 StrPath = Path | str
 Name = str
-ByteData = bytes
 MetadataAttribute = str
 MetadataValue: TypeAlias = Json
 MetadataPairs: TypeAlias = (
@@ -30,7 +30,7 @@ FunFromBytes = Callable[[bytes], Any]
 # # but not collide with input parameters
 SINGLE_OUTPUT_PARAM_NAME = "MAIN"
 HTTP_METHOD = Literal["GET", "PUT", "POST", "DELETE", "HEAD", "PATCH"]
-
+DEFAULT_CHUNK_SIZE = io.DEFAULT_BUFFER_SIZE  # 8192 bytes currently
 
 # https://www.w3.org/TR/vocab-dcat-3/
 

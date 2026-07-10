@@ -19,7 +19,6 @@ from datatools.types import (
     JSON_SCHEMA_FILE_RESOURCE,
     RDF_CONTEXT,
     SINGLE_OUTPUT_PARAM_NAME,
-    ByteData,
     FunFromBytes,
     FunHashsum,
     FunParams,
@@ -68,10 +67,10 @@ class DataStorage(ABC):
     def _has(self, name: Name) -> bool: ...
 
     @abstractmethod
-    def _read(self, name: Name) -> ByteData: ...
+    def _read(self, name: Name) -> Iterable[bytes]: ...
 
     @abstractmethod
-    def _write(self, name: Name, data: ByteData) -> None: ...
+    def _write(self, name: Name, data: Iterable[bytes]) -> None: ...
 
     @abstractmethod
     def _delete(self, name: Name) -> None: ...
@@ -104,19 +103,21 @@ class DataStorage(ABC):
         self._assert_valid_name(name=name)
         return self._has(name=name)
 
-    def read(self, name: Name) -> ByteData:
+    def read(self, name: Name) -> bytes:
         """TODO"""
         self._assert_valid_name(name=name)
         if not self.has(name):
             raise StorageFileNotFoundError(f"Not found: {name}")
-        return self._read(name=name)
+        iter_bytes = self._read(name=name)
+        return b"".join(iter_bytes)
 
-    def write(self, name: Name, data: ByteData) -> None:
+    def write(self, name: Name, data: bytes) -> None:
         """TODO"""
         self._assert_valid_name(name=name)
         if self.has(name):
             raise StorageFileExistsError(f"Already exists: {name}")
-        return self._write(name=name, data=data)
+        iter_bytes = [data]
+        return self._write(name=name, data=iter_bytes)
 
     def delete(self, name: Name) -> None:
         """TODO"""

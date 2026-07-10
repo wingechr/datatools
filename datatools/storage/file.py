@@ -10,7 +10,7 @@ import rdflib
 from datatools.exceptions import StorageInvalidNameError
 from datatools.storage.base import DataStorage
 from datatools.storage.memory import PersistentMemoryMetadataStorage
-from datatools.types import RDF_CONTEXT, Name
+from datatools.types import DEFAULT_CHUNK_SIZE, RDF_CONTEXT, Name
 from datatools.utils import TextFile, json_dumps, json_loads, uri_or_path_to_path
 
 
@@ -68,16 +68,22 @@ class FileDataStorage(DataStorage):
         path = self._get_abs_path(name)
         return path.exists()
 
-    def _read(self, name: Name) -> bytes:
+    def _read(
+        self, name: Name, chunk_size: int = DEFAULT_CHUNK_SIZE
+    ) -> Iterable[bytes]:
         path = self._get_abs_path(name)
         logging.debug("Reading %s", path)
-        return path.read_bytes()
+        with path.open("rb") as file:
+            while chunk := file.read(chunk_size):
+                yield chunk
 
-    def _write(self, name: Name, data: bytes) -> None:
+    def _write(self, name: Name, data: Iterable[bytes]) -> None:
         path = self._get_abs_path(name)
         logging.debug("Writing %s", path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(data)
+        with path.open("bw") as file:
+            for chunk in data:
+                file.write(chunk)
 
     def _delete(self, name: Name) -> None:
         path = self._get_abs_path(name)

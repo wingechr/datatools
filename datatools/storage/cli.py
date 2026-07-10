@@ -24,14 +24,15 @@ from datatools.utils import (
 class TestCliMetadataDataStorage(MetadataStorage):
     """TODO"""
 
-    def __init__(self, name: Name, request: Callable):
+    def __init__(self, name: Name, request: Callable[..., Iterable[bytes]]):
         self._name = name
         self._request = request
 
     @override
     def get(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
         data = self._request("metadata", "get", self._name, str(attribute))
-        return try_parse_json_str(data)
+        sdata = "\n".join(reverse_prints(data))
+        return try_parse_json_str(sdata)
 
     @override
     def set(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
@@ -57,19 +58,24 @@ class CliWrapperDataStorage(DataStorage):
 
         self._storage_main_cli = storage_main_cli
 
-    def _request(self, *args: str, data: bytes | None = None) -> bytes:
+    def _request(
+        self, *args: str, data: Iterable[bytes] | None = None
+    ) -> Iterable[bytes]:
         cmd = ["-l", str(self._location)] + list(args)
         # stdout, _stderr = call_script(
         #    self._script, cmd, data
         # )
         logging.debug("CLI " + " ".join(cmd))
-        result = self._clirunner.invoke(self._storage_main_cli, cmd, input=data)
+        # FIXME: streaming / chunked writing?
+        bdata = b"".join(data) if data else None
+        result = self._clirunner.invoke(self._storage_main_cli, cmd, input=bdata)
         if result.exit_code:
             raise SubprocessStatus(result.exit_code)
 
+        # FIXME: streaming / chunked reading
         stdout = result.stdout_bytes
 
-        return stdout
+        return [stdout]
 
     def _has(self, name: Name) -> bool:
         try:
@@ -78,10 +84,10 @@ class CliWrapperDataStorage(DataStorage):
             return False
         return True
 
-    def _read(self, name: Name) -> bytes:
+    def _read(self, name: Name) -> Iterable[bytes]:
         return self._request("read", name)
 
-    def _write(self, name: Name, data: bytes) -> None:
+    def _write(self, name: Name, data: Iterable[bytes]) -> None:
         self._request("write", name, data=data)
 
     def _delete(self, name: Name) -> None:
@@ -102,7 +108,9 @@ class CliWrapperDataStorage(DataStorage):
     def info(self) -> dict:
         """TODO"""
         info_remote = self._request("info")
-        info_remote = json_loadb(info_remote)
+
+        bdata = b"".join(info_remote)  # i dont think there is a point in streaming this
+        info_remote = json_loadb(bdata)
         info_client = super().info()
         info_client.update({"remote": info_remote})
 

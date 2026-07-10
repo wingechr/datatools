@@ -10,7 +10,13 @@ from typing_extensions import override
 
 from datatools.exceptions import StorageException, StorageFileNotFoundError
 from datatools.storage.base import DataStorage, MetadataStorage
-from datatools.types import HTTP_METHOD, MetadataAttribute, MetadataValue, Name
+from datatools.types import (
+    DEFAULT_CHUNK_SIZE,
+    HTTP_METHOD,
+    MetadataAttribute,
+    MetadataValue,
+    Name,
+)
 from datatools.utils import parse_cmd_vals
 
 
@@ -123,8 +129,8 @@ class HttpDataStorage(DataStorage):
         path: str = "/",
         method: HTTP_METHOD = "GET",
         params: dict | None = None,
-        data: bytes | None = None,
-    ):
+        data: Iterable[bytes] | None = None,
+    ) -> httpx.Response:
         url = self._location + path
         resp = httpx.request(method=method, url=url, params=params, content=data)
 
@@ -145,11 +151,13 @@ class HttpDataStorage(DataStorage):
         except StorageFileNotFoundError:
             return False
 
-    def _read(self, name: Name) -> bytes:
+    def _read(
+        self, name: Name, chunk_size: int = DEFAULT_CHUNK_SIZE
+    ) -> Iterable[bytes]:
         resp = self._request(path=f"/data/{name}", method="GET")
-        return resp.content
+        return resp.iter_bytes(chunk_size=chunk_size)
 
-    def _write(self, name: Name, data: bytes) -> None:
+    def _write(self, name: Name, data: Iterable[bytes]) -> None:
         self._request(path=f"/data/{name}", method="PUT", data=data)
 
     def _delete(self, name: Name) -> None:

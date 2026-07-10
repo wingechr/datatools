@@ -65,11 +65,13 @@ class MemoryDataStorage(DataStorage):
     def _has(self, name: Name) -> bool:
         return name in self.__data
 
-    def _read(self, name: Name) -> Any:
-        return self.__data[name]
+    def _read(self, name: Name) -> Iterable[bytes]:
+        bdata: bytes = self.__data[name]
+        return [bdata]
 
-    def _write(self, name: Name, data: Any) -> None:
-        self.__data[name] = data
+    def _write(self, name: Name, data: Iterable[bytes]) -> None:
+        bdata = b"".join(data)
+        self.__data[name] = bdata
 
     def _delete(self, name: Name) -> None:
         del self.__data[name]

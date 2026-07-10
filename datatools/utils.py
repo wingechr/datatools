@@ -1,5 +1,6 @@
 """TODO"""
 
+import codecs
 from collections.abc import Callable, Iterable
 import csv
 import datetime
@@ -289,11 +290,33 @@ def file_uri_to_path(uri: str) -> Path:
     return path
 
 
-def reverse_prints(stdout_data: bytes) -> list[str]:
-    """TODO"""
-    text = stdout_data.decode(sys.stdout.encoding, errors="replace")
-    lines = text.splitlines(keepends=False)[::-1]
-    return lines
+def reverse_prints(
+    stdout_data: Iterable[bytes],
+    encoding: str = "utf-8",
+    errors: str = "replace",
+) -> Iterable[str]:
+    r"""Streaming decode byte chunks into lines.
+
+    Example:
+
+    >>> list(reverse_prints([b'partial', b'line\nline2\r\npartial', b'line']))
+    ['partialline', 'line2', 'partialline']
+
+    """
+
+    def strip_oel(x: str) -> str:
+        return x.rstrip("\r\n")
+
+    decoder = codecs.getincrementaldecoder(encoding)(errors)
+    buffer = ""
+    for chunk in stdout_data:
+        buffer += decoder.decode(chunk)
+        while (idx := buffer.find("\n")) != -1:
+            yield strip_oel(buffer[: idx + 1])
+            buffer = buffer[idx + 1 :]
+    buffer += decoder.decode(b"", final=True)  # flush trailing partial sequence
+    if buffer:
+        yield strip_oel(buffer)  # last line, even without trailing \n
 
 
 def try_parse_json_str(s: str) -> Any:
