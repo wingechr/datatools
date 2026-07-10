@@ -10,10 +10,10 @@ from datatools.process.task import AnnotatedFunction
 from datatools.types import FunToBytes, Name
 from datatools.utils import (
     get_name_from_uri,
-    http_get,
+    http_get_stream,
     is_file_uri_or_path,
     query_sql,
-    read_file_uri,
+    read_file_uri_stream,
     remove_credentials_from_netloc,
     sql_query_result_to_csv_bytes,
     subclasses_by_name,
@@ -51,7 +51,7 @@ class HttpImporter(Importer):
     """TODO"""
 
     # use generic id (tool does not matter)
-    get_data = AnnotatedFunction.wrap(function_id="GET")(http_get)
+    get_data = AnnotatedFunction.wrap(function_id="GET")(http_get_stream)
 
     @classmethod
     @override
@@ -68,7 +68,7 @@ class FileImporter(Importer):
     """TODO"""
 
     # use generic id (tool does not matter)
-    get_data = AnnotatedFunction.wrap(function_id="COPY")(read_file_uri)
+    get_data = AnnotatedFunction.wrap(function_id="COPY")(read_file_uri_stream)
 
     @classmethod
     def can_handle(cls, uri: str, **options) -> bool:
@@ -96,7 +96,9 @@ class SqlImporter(Importer):
 
     # use generic id (tool does not matter)
     get_data = AnnotatedFunction.wrap(function_id="QUERY")(query_sql)
-    output_to_bytes = AnnotatedFunction.wrap()(sql_query_result_to_csv_bytes)
+    output_to_bytes: FunToBytes = AnnotatedFunction.wrap()(
+        sql_query_result_to_csv_bytes
+    )
 
     @classmethod
     @override

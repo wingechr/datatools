@@ -102,7 +102,9 @@ class HttpMetadataStorage(MetadataStorage):
         data: dict | None = None,
     ):
         url = self._url
-        resp = httpx.request(method=method, url=url, params=params, json=data)
+        resp = httpx.request(
+            method=method, url=url, params=params, json=data, follow_redirects=True
+        )
         resp.raise_for_status()
         return resp
 
@@ -132,7 +134,9 @@ class HttpDataStorage(DataStorage):
         data: Iterable[bytes] | None = None,
     ) -> httpx.Response:
         url = self._location + path
-        resp = httpx.request(method=method, url=url, params=params, content=data)
+        resp = httpx.request(
+            method=method, url=url, params=params, content=data, follow_redirects=True
+        )
 
         if resp.is_error:
             if resp.status_code == 404:

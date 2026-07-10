@@ -1,7 +1,7 @@
 """TODO"""
 
 import codecs
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 import csv
 import datetime
 from functools import cache, partial
@@ -22,7 +22,7 @@ import subprocess
 import sys
 from threading import Thread
 import time
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar
 from urllib.parse import unquote, urlparse, urlsplit
 from urllib.request import url2pathname
 import uuid
@@ -33,7 +33,6 @@ import httpx
 import jsonpath_ng
 import jsonpath_ng.ext
 import jsonschema
-import jsonschema.exceptions
 import jsonschema.validators
 import numpy as np
 import pandas as pd
@@ -42,7 +41,7 @@ import sqlalchemy as sa
 import sqlparse
 import tzlocal
 
-from datatools.types import Json, StrPath, SubCls
+from datatools.types import DEFAULT_CHUNK_SIZE, Json, StrPath, SubCls
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import CursorResult
@@ -1009,11 +1008,23 @@ def http_get(uri: str, **options) -> bytes:
     return data
 
 
-def read_file_uri(uri: str, **options) -> bytes:
+def http_get_stream(
+    uri: str, chunk_size: int = DEFAULT_CHUNK_SIZE, **options
+) -> Iterable[bytes]:
+    """TODO"""
+    resp = httpx.get(uri, follow_redirects=True)
+    resp.raise_for_status()
+    return resp.iter_bytes(chunk_size=chunk_size)
+
+
+def read_file_uri_stream(
+    uri: str, chunk_size: int = DEFAULT_CHUNK_SIZE, **options
+) -> Iterable[bytes]:
     """TODO"""
     path = uri_or_path_to_path(uri).resolve()
-    data = path.read_bytes()
-    return data
+    with path.open("rb") as file:
+        while chunk := file.read(chunk_size):
+            yield chunk
 
 
 def query_sql(uri: str, query: str, **options) -> Iterable["Row"]:
@@ -1041,12 +1052,14 @@ def wrap_exception(
         sys.exit(1)
 
 
-def sql_query_result_to_csv_bytes(data: Iterable["Row"], **options) -> bytes:
+def sql_query_result_to_csv_bytes(data: Iterable["Row"], **options) -> Iterable[bytes]:
     """TODO"""
     df = pd.DataFrame(data)
     data_s = df.to_csv(index=False, lineterminator="\n")
     data_b = data_s.encode()
-    return data_b
+    # for now, we just return the whole thing.
+    # since df i in memory anyways
+    return [data_b]
 
 
 def get_deterministic_uuid5(data: str) -> str:
@@ -1136,3 +1149,67 @@ def get_jsonschema_validator(schema):
             raise ValueError(err_str)
 
     return validator_function
+
+
+IterType = TypeVar("IterType")
+Accumulator = TypeVar("Accumulator")
+Value = TypeVar("Value")
+
+
+class CollectStatsIterator(Generic[IterType, Accumulator, Value]):
+    """pass"""
+
+    def __init__(
+        self,
+        iterator: Iterable[IterType],
+        initial_value: Accumulator,
+        update_value: Callable[[Accumulator, IterType], Accumulator],
+    ):
+        self._source = iterator
+        self._update_value = update_value
+        self._value: Accumulator = initial_value
+
+    def __iter__(self) -> Iterator[IterType]:
+        self._iter = iter(self._source)
+        return self
+
+    def __next__(self) -> IterType:
+        item = next(self._iter)
+        self._value = self._update_value(self._value, item)
+        return item
+
+    @property
+    def value(self) -> Value:
+        """TODO"""
+        return self._value  # type:ignore
+
+
+class CollectStatsIteratorSize(CollectStatsIterator[bytes, int, int]):
+    """TODO"""
+
+    def __init__(
+        self,
+        iterator: Iterable[bytes],
+    ):
+        def update(acc: int, v: bytes) -> int:
+            return acc + len(v)
+
+        super().__init__(iterator, initial_value=0, update_value=update)
+
+
+class CollectStatsIteratorHash(CollectStatsIterator[bytes, Any, str]):
+    """TODO"""
+
+    def __init__(self, iterator: Iterable[bytes], algorithm: Literal["md5", "sha256"]):
+        accumulator = getattr(hashlib, algorithm)()
+
+        def update(acc, v: bytes):
+            acc.update(v)
+            return acc
+
+        super().__init__(iterator, initial_value=accumulator, update_value=update)
+
+    @property
+    def value(self) -> str:
+        """TODO"""
+        return self._value.hexdigest()

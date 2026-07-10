@@ -4,7 +4,6 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
 import contextlib
 import functools
-import hashlib
 import pickle
 from typing import Any
 
@@ -31,11 +30,15 @@ from datatools.types import (
     URIRefs as u,
 )
 from datatools.utils import (
+    CollectStatsIteratorHash,
+    CollectStatsIteratorSize,
     get_now_str,
     get_user_w_host,
     identity,
     remove_credentials_from_netloc,
 )
+
+DEFAULT_HASH_ALGORITHM = "sha256"
 
 
 class MetadataStorage(ABC):  # TODO: subclass AbstractContextManager ?
@@ -111,12 +114,16 @@ class DataStorage(ABC):
         iter_bytes = self._read(name=name)
         return b"".join(iter_bytes)
 
-    def write(self, name: Name, data: bytes) -> None:
+    def write(self, name: Name, data: bytes | Iterable[bytes]) -> None:
         """TODO"""
         self._assert_valid_name(name=name)
         if self.has(name):
             raise StorageFileExistsError(f"Already exists: {name}")
-        iter_bytes = [data]
+        iter_bytes: Iterable[bytes]
+        if isinstance(data, bytes):
+            iter_bytes = [data]
+        else:
+            iter_bytes = data
         return self._write(name=name, data=iter_bytes)
 
     def delete(self, name: Name) -> None:
@@ -306,8 +313,15 @@ class DataStorage(ABC):
                 handler = identity
 
             def handle_(data: Any, name: Name):
-                bdata = handler(data)
-                self.write(name, bdata)
+                bytes_iterable = handler(data)
+
+                bytes_iterable_size = CollectStatsIteratorSize(bytes_iterable)
+                bytes_iterable_hash = CollectStatsIteratorHash(
+                    bytes_iterable_size, algorithm=DEFAULT_HASH_ALGORITHM
+                )
+                bytes_iterable = bytes_iterable_hash
+
+                self.write(name, bytes_iterable)
                 update_metadata_job_id(data)
 
                 creation_id = callback_data["metadata_creation_event"]["@id"]
@@ -320,8 +334,8 @@ class DataStorage(ABC):
                     "@id": output_id,
                     # name in storage (TODO maybe create URI?)
                     u.name.label: name,
-                    u.hash.label: f"sha256:{hashlib.sha256(bdata).hexdigest()}",
-                    u.bytes.label: len(bdata),
+                    u.hash.label: f"{DEFAULT_HASH_ALGORITHM}:{bytes_iterable_hash.value}",
+                    u.bytes.label: bytes_iterable_size.value,
                     u.createdBy.label: callback_data["metadata_creation_event"],
                 } | callback_data["metadata_generated"]
 
