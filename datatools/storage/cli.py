@@ -31,8 +31,8 @@ class TestCliMetadataDataStorage(MetadataStorage):
 
     @override
     def get(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
-        data = self._request("metadata", "get", self._name, str(attribute))
-        sdata = "\n".join(reverse_prints(data))
+        bytes_iterable = self._request("metadata", "get", self._name, str(attribute))
+        sdata = "\n".join(reverse_prints(bytes_iterable))
         return try_parse_json_str(sdata)
 
     @override
@@ -70,13 +70,17 @@ class CliWrapperDataStorage(DataStorage):
         # FIXME: streaming / chunked writing?
         bdata = as_bytes(data) if data else None
         result = self._clirunner.invoke(self._storage_main_cli, cmd, input=bdata)
+
         if result.exit_code:
             raise SubprocessStatus(result.exit_code)
 
         # FIXME: streaming / chunked reading
         stdout = result.stdout_bytes
 
-        yield stdout
+        # IMPORTANT: do not use yield,
+        # otherwise calls that dont have/consume output will not
+        # execute the function
+        return [stdout]
 
     def _has(self, name: Name) -> bool:
         try:
@@ -86,7 +90,7 @@ class CliWrapperDataStorage(DataStorage):
         return True
 
     def _read(self, name: Name) -> Iterable[bytes]:
-        return self._request("read", name)
+        yield from self._request("read", name)
 
     def _write(self, name: Name, data: Iterable[bytes]) -> None:
         self._request("write", name, data=data)

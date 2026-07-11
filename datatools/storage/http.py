@@ -4,8 +4,9 @@ from collections.abc import Iterable
 import functools
 import re
 
-from fastapi import Body, FastAPI, HTTPException, Query, Response
+from fastapi import Body, FastAPI, HTTPException, Query
 import httpx
+from starlette.responses import StreamingResponse
 from typing_extensions import override
 
 from datatools.exceptions import StorageException, StorageFileNotFoundError
@@ -65,8 +66,8 @@ def make_server_app(data_storage: DataStorage) -> FastAPI:
     @app.get("/data/{name:path}")
     @catch_exceptions
     def read(name: str):
-        data = data_storage.read(name)
-        return Response(content=data)
+        iter_bytes = data_storage.iter_bytes(name)
+        return StreamingResponse(iter_bytes)
 
     @app.put("/data/{name:path}")
     @catch_exceptions

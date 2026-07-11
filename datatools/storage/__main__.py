@@ -1,7 +1,9 @@
 """TODO"""
 
+from io import BufferedReader
 import logging
 import sys
+from typing import cast
 
 import click
 import uvicorn
@@ -9,6 +11,7 @@ import uvicorn
 from datatools.storage.base import DataStorage
 from datatools.storage.http import make_server_app
 from datatools.utils import (
+    buffer_to_byte_iterable,
     json_dumps,
     parse_cmd_vals,
     subclasses_by_name,
@@ -81,8 +84,8 @@ def has(ctx_data_storage: DataStorage, name: str) -> None:
 @click.argument("name")
 def read(ctx_data_storage: DataStorage, name: str) -> None:
     """TODO"""
-    bdata: bytes = ctx_data_storage.read(name)
-    sys.stdout.buffer.write(bdata)
+    for bdata in ctx_data_storage.iter_bytes(name):
+        sys.stdout.buffer.write(bdata)
     sys.stdout.buffer.flush()
 
 
@@ -92,8 +95,8 @@ def read(ctx_data_storage: DataStorage, name: str) -> None:
 def write(ctx_data_storage: DataStorage, name: str) -> None:
     """TODO"""
     # FIXME: validate name before actually reading data
-    bdata: bytes = sys.stdin.buffer.read()
-    ctx_data_storage.write(name, bdata)
+    byte_iterable = buffer_to_byte_iterable(cast(BufferedReader, sys.stdin.buffer))
+    ctx_data_storage.write(name, byte_iterable)
 
 
 @main.command()

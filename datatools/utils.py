@@ -1290,14 +1290,15 @@ def write_bytes_locked(
         fd, tmp_path = tempfile.mkstemp(
             dir=path.parent, prefix=path.name + ".", suffix=tempfile_suffix
         )
-        try:
-            with os.fdopen(fd, "wb") as tmp_file:
-                for chunk in data:
-                    tmp_file.write(chunk)
-                tmp_file.flush()
-                os.fsync(tmp_file.fileno())
-            os.replace(tmp_path, path)  # atomic on both POSIX and Windows (Py 3.3+)
-        except BaseException:
-            if os.path.exists(tmp_path):
-                os.unlink(tmp_path)
-            raise
+        # try:
+        with os.fdopen(fd, "wb") as tmp_file:
+            for chunk in data:
+                tmp_file.write(chunk)
+            tmp_file.flush()
+            os.fsync(tmp_file.fileno())
+        os.replace(tmp_path, path)  # atomic on both POSIX and Windows (Py 3.3+)
+        # # we actually want to keep the tmp file in case we want to use the data
+        # except BaseException:
+        #     if os.path.exists(tmp_path):
+        #         os.unlink(tmp_path)
+        #     raise

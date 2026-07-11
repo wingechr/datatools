@@ -35,7 +35,6 @@ from datatools.utils import (
     CollectStatsIteratorHash,
     CollectStatsIteratorSize,
     as_byte_iterable,
-    as_bytes,
     byte_iterable_as_buffer,
     get_now_str,
     get_user_w_host,
@@ -111,7 +110,8 @@ class DataStorage(ABC):
         self._assert_valid_name(name=name)
         return self._has(name=name)
 
-    def _read_checked(self, name: Name) -> Iterable[bytes]:
+    def iter_bytes(self, name: Name) -> Iterable[bytes]:
+        """TODO"""
         self._assert_valid_name(name=name)
         if not self.has(name):
             raise StorageFileNotFoundError(f"Not found: {name}")
@@ -119,11 +119,12 @@ class DataStorage(ABC):
 
     def open(self, name: Name) -> BufferedReader:
         """TODO"""
-        return byte_iterable_as_buffer(self._read_checked(name))
+        return byte_iterable_as_buffer(self.iter_bytes(name))
 
     def read(self, name: Name) -> bytes:
         """TODO"""
-        return as_bytes(self._read_checked(name))
+        with self.open(name) as buf:
+            return buf.read()
 
     def write(self, name: Name, data: ByteData) -> None:
         """TODO"""
@@ -206,7 +207,11 @@ class DataStorage(ABC):
                     task(output_name, *args, **kwargs)
 
                 # retrieval
-                bdata = self.read(output_name)
+
+                # TODO: use buffer
+                with self.open(output_name) as file:
+                    bdata = file.read()
+
                 result = output_from_bytes(bdata)
                 return result
 
