@@ -126,7 +126,7 @@ def default_get_task_uuid(task: "Task", *args, **kwargs) -> str:
     return hashsum
 
 
-class Job:
+class _Job:
     """TODO"""
 
     def __init__(
@@ -219,10 +219,10 @@ class Task:
         """
         return self._get_task_uuid(self, *args, **kwargs)  # self is first arg (task)
 
-    def create_job(self, *args, **kwargs) -> Job:
+    def _create_job(self, *args, **kwargs) -> _Job:
         """TODO"""
         output_names, input_params = self.get_input_output_parameters(*args, **kwargs)
-        job = Job(
+        job = _Job(
             output_names=output_names,
             output_writers=self.output_writers,
             input_readers=self.input_readers,
@@ -234,7 +234,7 @@ class Task:
 
     def __call__(self, *args, **kwargs):
         """TODO"""
-        job = self.create_job(*args, **kwargs)
+        job = self._create_job(*args, **kwargs)
         job()
 
     def get_input_output_parameters(

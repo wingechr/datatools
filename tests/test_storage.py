@@ -1,6 +1,7 @@
 """TODO"""
 
 import datetime
+import json
 from pathlib import Path
 import pickle
 from tempfile import TemporaryDirectory
@@ -34,7 +35,6 @@ from datatools.types import (
 from datatools.utils import (
     get_free_port,
     json_dumpb,
-    json_loadb,
     query_sql,
     sql_query_result_to_csv_bytes,
     start_http_server,
@@ -438,7 +438,7 @@ class TestUseCases(TestCase):
 
         task_create_output = storage.task(
             function,
-            input_converters=dict.fromkeys(inputs, pickle.loads),
+            input_converters=dict.fromkeys(inputs, pickle.load),
             output_converters=dict.fromkeys(outputs, pickle.dumps),
         )
 
@@ -481,7 +481,7 @@ class TestUseCases(TestCase):
         def convert(data: list) -> list:
             return [x + 1 for x in data]
 
-        loads = AnnotatedFunction(json_loadb, function_id=fid_bytes2json)
+        loads = AnnotatedFunction(json.load, function_id=fid_bytes2json)
 
         # "output": None -> already bytes
         task_generate = storage.task(

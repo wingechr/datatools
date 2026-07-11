@@ -233,12 +233,14 @@ def json_loads(text: str) -> Json:
 
 
 def json_loadb(
-    data: bytes,
+    data: ByteData,
     encoding="utf-8",
     errors: Literal["strict", "replace", "ignore"] = "strict",
 ) -> Json:
     """TODO"""
-    text = str_load(data, encoding=encoding, errors=errors)
+    # TODO: streaming
+    bdata = as_bytes(as_byte_iterable(data))
+    text = str_load(bdata, encoding=encoding, errors=errors)
     return json_loads(text)
 
 

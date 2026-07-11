@@ -20,6 +20,7 @@ from datatools.types import (
     RDF_CONTEXT,
     SINGLE_OUTPUT_PARAM_NAME,
     ByteData,
+    FunFromByteBuffer,
     FunFromBytes,
     FunHashsum,
     FunParams,
@@ -225,7 +226,7 @@ class DataStorage(ABC):
         output_converters: dict[str, FunToByteData | None]
         | FunToByteData
         | None = None,
-        input_converters: dict[str, FunFromBytes | None] | None = None,
+        input_converters: dict[str, FunFromByteBuffer | None] | None = None,
         metadata_generator: Callable[[Any], dict[str, Json]] | None = None,
         get_job_hashsum: FunHashsum = default_get_task_uuid,
         skip_finished: bool = False,
@@ -253,7 +254,7 @@ class DataStorage(ABC):
             "task": None,  # will be filled later
         }
 
-        def wrap_input_handler(name: str, handler: FunFromBytes):
+        def wrap_input_handler(name: str, handler: FunFromByteBuffer):
             def handle_(name_value: Name):
                 callback_data["input_parameter_values"][name] = name_value
                 handler_w = AnnotatedFunction.assert_wrapped(handler)
@@ -268,8 +269,8 @@ class DataStorage(ABC):
                     }
                 )
 
-                bdata = self.read(name_value)
-                return handler(bdata)
+                with self.open(name_value) as file:
+                    return handler(file)
 
             return handle_
 
