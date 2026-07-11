@@ -24,7 +24,7 @@ from datatools.utils import (
 class Importer(ABC):
     """TODO"""
 
-    output_to_bytes: FunToByteData | None = None
+    output_to_byte_data: FunToByteData | None = None
     get_data: Callable
 
     @classmethod
@@ -96,7 +96,7 @@ class SqlImporter(Importer):
 
     # use generic id (tool does not matter)
     get_data = AnnotatedFunction.wrap(function_id="QUERY")(query_sql)
-    output_to_bytes: FunToByteData = AnnotatedFunction.wrap()(
+    output_to_byte_data: FunToByteData = AnnotatedFunction.wrap()(
         sql_query_result_to_csv_bytes
     )
 

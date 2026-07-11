@@ -10,8 +10,21 @@ import rdflib
 from datatools.exceptions import StorageInvalidNameError
 from datatools.storage.base import DataStorage
 from datatools.storage.memory import PersistentMemoryMetadataStorage
-from datatools.types import DEFAULT_CHUNK_SIZE, RDF_CONTEXT, Name
-from datatools.utils import TextFile, json_dumps, json_loads, uri_or_path_to_path
+from datatools.types import (
+    DEFAULT_CHUNK_SIZE,
+    LOCKFILE_SUFFIX,
+    RDF_CONTEXT,
+    TEMPFILE_SUFFIX,
+    Name,
+)
+from datatools.utils import (
+    TextFile,
+    buffer_to_byte_iterable,
+    json_dumps,
+    json_loads,
+    uri_or_path_to_path,
+    write_bytes_locked,
+)
 
 
 class JsonFileMetadataStorage(PersistentMemoryMetadataStorage):
@@ -74,16 +87,18 @@ class FileDataStorage(DataStorage):
         path = self._get_abs_path(name)
         logging.debug("Reading %s", path)
         with path.open("rb") as file:
-            while chunk := file.read(chunk_size):
-                yield chunk
+            yield from buffer_to_byte_iterable(file, chunk_size=chunk_size)
 
     def _write(self, name: Name, data: Iterable[bytes]) -> None:
         path = self._get_abs_path(name)
         logging.debug("Writing %s", path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("bw") as file:
-            for chunk in data:
-                file.write(chunk)
+        write_bytes_locked(
+            path=path,
+            data=data,
+            tempfile_suffix=TEMPFILE_SUFFIX,
+            lockfile_suffix=LOCKFILE_SUFFIX,
+        )
 
     def _delete(self, name: Name) -> None:
         path = self._get_abs_path(name)
@@ -94,6 +109,8 @@ class FileDataStorage(DataStorage):
         for root, _, fs in os.walk(self._location):
             for f in fs:
                 if f.endswith(self.metadata_sufix):
+                    continue
+                if f.endswith(LOCKFILE_SUFFIX) or f.endswith(TEMPFILE_SUFFIX):
                     continue
                 path = Path(root) / str(f)
                 name = str(path.relative_to(self._location))

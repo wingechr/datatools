@@ -76,7 +76,7 @@ class CliWrapperDataStorage(DataStorage):
         # FIXME: streaming / chunked reading
         stdout = result.stdout_bytes
 
-        return [stdout]
+        yield stdout
 
     def _has(self, name: Name) -> bool:
         try:

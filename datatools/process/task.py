@@ -131,10 +131,10 @@ class Job:
 
     def __init__(
         self,
-        output_names: dict,
-        output_writers: dict,
-        input_readers: dict,
-        input_params: dict,
+        output_names: dict[str, str],
+        output_writers: dict[str, Callable],
+        input_readers: dict[str, Callable],
+        input_params: dict[str, Any],
         function: Callable,
         check_done: Callable | None,
     ):

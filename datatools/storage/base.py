@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
 import contextlib
 import functools
+from io import BufferedReader
 import pickle
 from typing import Any
 
@@ -19,7 +20,6 @@ from datatools.types import (
     RDF_CONTEXT,
     SINGLE_OUTPUT_PARAM_NAME,
     ByteData,
-    FunFromByteData,
     FunFromBytes,
     FunHashsum,
     FunParams,
@@ -36,6 +36,7 @@ from datatools.utils import (
     CollectStatsIteratorSize,
     as_byte_iterable,
     as_bytes,
+    byte_iterable_as_buffer,
     get_now_str,
     get_user_w_host,
     identity,
@@ -110,13 +111,19 @@ class DataStorage(ABC):
         self._assert_valid_name(name=name)
         return self._has(name=name)
 
-    def read(self, name: Name) -> bytes:
-        """TODO"""
+    def _read_checked(self, name: Name) -> Iterable[bytes]:
         self._assert_valid_name(name=name)
         if not self.has(name):
             raise StorageFileNotFoundError(f"Not found: {name}")
-        iter_bytes = self._read(name=name)
-        return as_bytes(iter_bytes)
+        yield from self._read(name=name)
+
+    def open(self, name: Name) -> BufferedReader:
+        """TODO"""
+        return byte_iterable_as_buffer(self._read_checked(name))
+
+    def read(self, name: Name) -> bytes:
+        """TODO"""
+        return as_bytes(self._read_checked(name))
 
     def write(self, name: Name, data: ByteData) -> None:
         """TODO"""
@@ -124,6 +131,7 @@ class DataStorage(ABC):
         if self.has(name):
             raise StorageFileExistsError(f"Already exists: {name}")
         iter_bytes = as_byte_iterable(data)
+
         return self._write(name=name, data=iter_bytes)
 
     def delete(self, name: Name) -> None:
@@ -163,7 +171,7 @@ class DataStorage(ABC):
         task = self.task(
             function=importer_class.get_data,
             output_converters={
-                SINGLE_OUTPUT_PARAM_NAME: importer_class.output_to_bytes
+                SINGLE_OUTPUT_PARAM_NAME: importer_class.output_to_byte_data
             },
         )
         task(name, uri, **options)
@@ -171,7 +179,7 @@ class DataStorage(ABC):
 
     def cache(
         self,
-        output_to_bytes: FunToByteData = pickle.dumps,
+        output_to_byte_data: FunToByteData = pickle.dumps,
         output_from_bytes: FunFromBytes = pickle.loads,
         get_name_from_hash: Callable[[str], str] = identity,
         get_job_hashsum: FunHashsum = default_get_task_uuid,
@@ -183,7 +191,7 @@ class DataStorage(ABC):
 
             task = self.task(
                 function=function,
-                output_converters={SINGLE_OUTPUT_PARAM_NAME: output_to_bytes},
+                output_converters={SINGLE_OUTPUT_PARAM_NAME: output_to_byte_data},
                 get_job_hashsum=get_job_hashsum,
             )
 
@@ -212,7 +220,7 @@ class DataStorage(ABC):
         output_converters: dict[str, FunToByteData | None]
         | FunToByteData
         | None = None,
-        input_converters: dict[str, FunFromByteData | None] | None = None,
+        input_converters: dict[str, FunFromBytes | None] | None = None,
         metadata_generator: Callable[[Any], dict[str, Json]] | None = None,
         get_job_hashsum: FunHashsum = default_get_task_uuid,
         skip_finished: bool = False,
@@ -240,7 +248,7 @@ class DataStorage(ABC):
             "task": None,  # will be filled later
         }
 
-        def wrap_input_handler(name: str, handler: Callable):
+        def wrap_input_handler(name: str, handler: FunFromBytes):
             def handle_(name_value: Name):
                 callback_data["input_parameter_values"][name] = name_value
                 handler_w = AnnotatedFunction.assert_wrapped(handler)
@@ -302,7 +310,7 @@ class DataStorage(ABC):
                 if metadata_generator:
                     callback_data["metadata_generated"] = metadata_generator(data)
 
-        def wrap_output_handler(param_name: str, handler: Callable | None = None):
+        def wrap_output_handler(param_name: str, handler: FunToByteData | None = None):
             if handler:
                 handler_w = AnnotatedFunction.assert_wrapped(handler)
                 meta_saved_with = {
@@ -315,13 +323,12 @@ class DataStorage(ABC):
                 handler = identity
 
             def handle_(data: Any, name: Name):
-                bytes_iterable = handler(data)
+                bytes_data = handler(data)
 
-                # FIXME
-                if isinstance(bytes_iterable, bytes):
-                    bytes_iterable = [bytes_iterable]
+                bytes_iterable = as_byte_iterable(bytes_data)
 
                 hash_algo = DEFAULT_HASH_ALGORITHM
+
                 bytes_iterable_size = CollectStatsIteratorSize(bytes_iterable)
                 bytes_iterable_hash = CollectStatsIteratorHash(
                     bytes_iterable_size, algorithm=hash_algo

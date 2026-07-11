@@ -122,7 +122,7 @@ class SqlDataStorage(DataStorage):
         if not row:
             raise StorageFileNotFoundError(f"Not found: {name}")
         bdata: bytes = row[0]
-        return [bdata]
+        yield bdata
 
     def _write(self, name: Name, data: Iterable[bytes]) -> None:
         with self._engine.begin() as con:

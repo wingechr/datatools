@@ -3,6 +3,7 @@
 from collections.abc import Callable, Iterable, Mapping
 from functools import cache
 import io
+from io import BufferedReader
 from pathlib import Path
 from typing import Any, ClassVar, Generic, Literal, ParamSpec, TypeAlias, TypeVar
 
@@ -16,7 +17,7 @@ T = TypeVar("T")
 
 Json: TypeAlias = str | int | float | bool | None | list["Json"] | dict[str, "Json"]
 StrPath = Path | str
-ByteData = bytes | Iterable[bytes]
+ByteData = bytes | Iterable[bytes] | BufferedReader
 Name = str
 MetadataAttribute = str
 MetadataValue: TypeAlias = Json
@@ -25,10 +26,10 @@ MetadataPairs: TypeAlias = (
     | Iterable[tuple[MetadataAttribute, MetadataValue]]
 )
 FunHashsum = Callable[..., str]
-FunToByteData = Callable[[Any], bytes] | Callable[[Any], Iterable[bytes]]
-FunFromByteData = Callable[[Iterable[bytes]], Any] | Callable[[bytes], Any]
+FunToByteData = Callable[[Any], ByteData]
 FunToBytes = Callable[[Any], bytes]
 FunFromBytes = Callable[[bytes], Any]
+FunFromByteBuffer = Callable[[BufferedReader], Any]
 
 # any name, must be a valid parameter name
 # # but not collide with input parameters
@@ -189,3 +190,6 @@ RDF_CONTEXT = {"@vocab": "http://purl.org/dataschema/datatools#"} | {
 JSON_SCHEMA_FILE_RESOURCE = (
     "http://purl.org/dataschema/datatools/FileResource-0.0.0.schema.json"
 )
+
+LOCKFILE_SUFFIX = ".__lock"
+TEMPFILE_SUFFIX = ".__temp"

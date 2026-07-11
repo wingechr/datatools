@@ -67,7 +67,7 @@ class MemoryDataStorage(DataStorage):
 
     def _read(self, name: Name) -> Iterable[bytes]:
         bdata: bytes = self.__data[name]
-        return [bdata]
+        yield bdata
 
     def _write(self, name: Name, data: Iterable[bytes]) -> None:
         bdata = as_bytes(data)

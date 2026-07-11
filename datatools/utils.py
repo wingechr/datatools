@@ -10,6 +10,8 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import importlib
 import inspect
 from inspect import Parameter, Signature
+import io
+from io import BufferedReader
 import json
 import logging
 import math
@@ -20,6 +22,7 @@ import site
 import socket
 import subprocess
 import sys
+import tempfile
 from threading import Thread
 import time
 from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar, cast
@@ -28,6 +31,7 @@ from urllib.request import url2pathname
 import uuid
 
 import chardet
+from filelock import FileLock
 import frictionless
 import httpx
 import jsonpath_ng
@@ -39,9 +43,18 @@ import pandas as pd
 from pydantic import BaseModel
 import sqlalchemy as sa
 import sqlparse
+from typing_extensions import override
 import tzlocal
 
-from datatools.types import DEFAULT_CHUNK_SIZE, ByteData, Json, StrPath, SubCls
+from datatools.types import (
+    DEFAULT_CHUNK_SIZE,
+    LOCKFILE_SUFFIX,
+    TEMPFILE_SUFFIX,
+    ByteData,
+    Json,
+    StrPath,
+    SubCls,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import CursorResult
@@ -1006,7 +1019,7 @@ def http_get_stream(
     """TODO"""
     resp = httpx.get(uri, follow_redirects=True)
     resp.raise_for_status()
-    return resp.iter_bytes(chunk_size=chunk_size)
+    yield from resp.iter_bytes(chunk_size=chunk_size)
 
 
 def read_file_uri_stream(
@@ -1015,8 +1028,7 @@ def read_file_uri_stream(
     """TODO"""
     path = uri_or_path_to_path(uri).resolve()
     with path.open("rb") as file:
-        while chunk := file.read(chunk_size):
-            yield chunk
+        yield from buffer_to_byte_iterable(file, chunk_size=chunk_size)
 
 
 def query_sql(uri: str, query: str, **options) -> Iterable["Row"]:
@@ -1207,17 +1219,85 @@ class CollectStatsIteratorHash(CollectStatsIterator[bytes, Any, str]):
         return self._value.hexdigest()
 
 
-def as_byte_iterable(data: ByteData) -> Iterable[bytes]:
+def as_byte_iterable(
+    data: ByteData, chunk_size_if_buffer: int = DEFAULT_CHUNK_SIZE
+) -> Iterable[bytes]:
     """TODO"""
     if isinstance(data, bytes):
         yield data
-    else:
+    elif isinstance(data, BufferedReader):
+        yield from buffer_to_byte_iterable(data, chunk_size=chunk_size_if_buffer)
+    elif isinstance(data, Iterable):
         yield from cast(Iterable[bytes], data)
-
-
-def as_bytes(data: ByteData) -> bytes:
-    """TODO"""
-    if isinstance(data, bytes):
-        return data
     else:
-        return b"".join(cast(Iterable[bytes], data))
+        raise TypeError(f"Unexpected type: {type(data)}")
+
+
+def as_bytes(data: Iterable[bytes]) -> bytes:
+    """TODO"""
+    return b"".join(c for c in data)
+
+
+class IterableStream(io.RawIOBase):
+    """Convert bytes iterator in read only buffer with lazy consumption"""
+
+    def __init__(self, iterable: Iterable[bytes]):
+        self._iter = iter(iterable)
+        self._leftover = b""
+
+    @override
+    def readable(self) -> bool:
+        return True
+
+    @override
+    def readinto(self, b: bytearray) -> int:
+        if not self._leftover:
+            try:
+                self._leftover = next(self._iter)
+            except StopIteration:
+                return 0  # EOF
+        n = len(b)
+        chunk, self._leftover = self._leftover[:n], self._leftover[n:]
+        b[: len(chunk)] = chunk
+        return len(chunk)
+
+
+def byte_iterable_as_buffer(iterable: Iterable[bytes]) -> BufferedReader:
+    """TODO"""
+    return BufferedReader(IterableStream(iterable))  # type:ignore
+
+
+def buffer_to_byte_iterable(
+    buf: BufferedReader, chunk_size: int = DEFAULT_CHUNK_SIZE
+) -> Iterator[bytes]:
+    """TODO"""
+    while chunk := buf.read(chunk_size):
+        yield chunk
+
+
+def write_bytes_locked(
+    path: Path,
+    data: Iterable[bytes],
+    timeout: float = 30,
+    lockfile_suffix: str = LOCKFILE_SUFFIX,
+    tempfile_suffix: str = TEMPFILE_SUFFIX,
+) -> None:
+    """Write bytes to `path` atomically, guarded by a cross-platform file lock."""
+    lock_path = path.with_name(path.name + lockfile_suffix)
+
+    # raises filelock.Timeout if it can't acquire in time
+    with FileLock(lock_path, timeout=timeout):
+        fd, tmp_path = tempfile.mkstemp(
+            dir=path.parent, prefix=path.name + ".", suffix=tempfile_suffix
+        )
+        try:
+            with os.fdopen(fd, "wb") as tmp_file:
+                for chunk in data:
+                    tmp_file.write(chunk)
+                tmp_file.flush()
+                os.fsync(tmp_file.fileno())
+            os.replace(tmp_path, path)  # atomic on both POSIX and Windows (Py 3.3+)
+        except BaseException:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+            raise
