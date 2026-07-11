@@ -63,24 +63,23 @@ class CliWrapperDataStorage(DataStorage):
         self, *args: str, data: Iterable[bytes] | None = None
     ) -> Iterable[bytes]:
         cmd = ["-l", str(self._location)] + list(args)
-        # stdout, _stderr = call_script(
-        #    self._script, cmd, data
-        # )
         logging.debug("CLI " + " ".join(cmd))
-        # FIXME: streaming / chunked writing?
+
+        # NOTE: this is really only for testing
+        # making it also streaming/chunked requires to set up separate threads
+        # and pathing into sys.stdout buffers - so it's not worth it
         bdata = as_bytes(data) if data else None
         result = self._clirunner.invoke(self._storage_main_cli, cmd, input=bdata)
+        exit_code = result.exit_code
+        stdout_bytes = result.stdout_bytes
 
-        if result.exit_code:
-            raise SubprocessStatus(result.exit_code)
-
-        # FIXME: streaming / chunked reading
-        stdout = result.stdout_bytes
+        if exit_code:
+            raise SubprocessStatus(exit_code)
 
         # IMPORTANT: do not use yield,
         # otherwise calls that dont have/consume output will not
         # execute the function
-        return [stdout]
+        return [stdout_bytes]
 
     def _has(self, name: Name) -> bool:
         try:
