@@ -1304,3 +1304,25 @@ def write_bytes_locked(
         #     if os.path.exists(tmp_path):
         #         os.unlink(tmp_path)
         #     raise
+
+
+def get_item_or_first(x):
+    """TODO
+
+    Example:
+
+    >>> get_item_or_first(1)
+    1
+    >>> get_item_or_first([1])
+    1
+    >>> repr(get_item_or_first([]))
+    'None'
+
+
+
+    """
+    if isinstance(x, list):
+        if not x:
+            return None
+        return x[0]
+    return x

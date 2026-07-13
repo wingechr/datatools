@@ -35,13 +35,14 @@ from datatools.types import (
 )
 from datatools.utils import (
     get_free_port,
+    get_item_or_first,
     json_dumpb,
     query_sql,
     sql_query_result_to_csv_bytes,
     start_http_server,
     wait_for_url,
 )
-from tests.base import TempdirTestCase, get_item_or_first
+from tests.base import TempdirTestCase
 
 QueryParameterUri = f'{u.createdBy.label}.{u.usedInput.label}[?({u.roleName.label} == "uri")].{u.value.label}'  # noqa:E501
 QueryTimestamp = f"{u.createdBy.label}.{u.datetime.label}"

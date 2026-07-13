@@ -37,6 +37,7 @@ from datatools.utils import (
     CollectStatsIteratorSize,
     as_byte_iterable,
     byte_iterable_as_buffer,
+    get_item_or_first,
     get_now_str,
     get_user_w_host,
     identity,
@@ -273,8 +274,18 @@ class DataStorage(ABC):
                     }
                 )
 
+                # get additional kwargs from metadata
+                # first one is main data
+                kwarg_names = handler_w.fun_parameter_names[1:]
+                # TODO: query all at onece
+                kwargs = {}
+                for kwarg_name in kwarg_names:
+                    value = get_item_or_first(self.metadata(name_value).get(kwarg_name))
+                    if value is not None:
+                        kwargs[kwarg_name] = value
+
                 with self.open(name_value) as file:
-                    return handler(file)
+                    return handler(file, **kwargs)
 
             return handle_
 
