@@ -1,6 +1,7 @@
 """TODO"""
 
 import datetime
+from io import BufferedReader
 import json
 from pathlib import Path
 import pickle
@@ -525,3 +526,29 @@ class TestUseCases(TestCase):
         data = {"@context": RDF_CONTEXT, "@id": "urn:dummy", "key": "value"}
         resp = JsonFileMetadataStorage._run_through_rdf(data)
         self.assertEqual(resp, data)
+
+    def test_use_metadata_for_loaders(self):
+        """loader/dumper functions should get their default valuesfrom metadata."""
+
+        def loadb(buf: BufferedReader, encoding: str = "utf-8"):
+            return buf.read().decode(encoding=encoding)
+
+        def dumpb(text: str) -> bytes:
+            return text.encode()
+
+        st = MemoryDataStorage()
+        st.write("data", "Ünicöde".encode(encoding="windows-1252"))
+
+        task = st.task(
+            dumpb,
+            input_converters=loadb,
+        )
+
+        # running task as is should fail
+        self.assertRaises(UnicodeDecodeError, task, "data2", text="data")
+
+        # but if someone writes puts encoding info in metadata, it should pick it up
+        # TODO: where exactly in metadata? directly in FileResource?
+        st.metadata("data").set("encoding", "windows-1252")
+        # now it works
+        task("data2", text="data")
