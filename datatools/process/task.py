@@ -32,12 +32,13 @@ from collections.abc import Callable
 import logging
 from typing import Any, Generic
 
-from datatools.types import PROP_DESCRIPTION, FunHashsum, FunParams, FunResult, Json
+from datatools.types import FunHashsum, FunParams, FunResult, Json, URIRefs as u
 from datatools.utils import (
     function_get_defaults,
     function_get_regular_params,
+    get_deterministic_uuid5_from_data,
     get_function_description,
-    get_md5_hash,
+    get_function_id,
     names_get_argument_dict,
 )
 
@@ -59,7 +60,7 @@ class AnnotatedFunction(Generic[FunParams, FunResult]):
         self.fun = fun
         self.fun_defaults = function_get_defaults(fun)
         self.fun_parameter_names = function_get_regular_params(fun)
-        self.function_id: str = function_id or fun.__name__
+        self.function_id: str = function_id or get_function_id(fun)
         self.description = (
             get_function_description(fun) if description is None else description
         )
@@ -70,9 +71,9 @@ class AnnotatedFunction(Generic[FunParams, FunResult]):
     def get_metadata(self) -> dict[str, Json]:
         """TODO"""
         return {
-            "@type": "Function",
-            "@id": self.function_id,
-            PROP_DESCRIPTION: self.description,
+            # "@type": u.Function.label,
+            "@id": f"function:{self.function_id}",
+            u.description.label: self.description,
         }
 
     @classmethod
@@ -117,23 +118,23 @@ def default_get_hash_data(task: "Task", input_params: dict) -> Json:
     return {"function": function_id, "parameters": input_params}
 
 
-def default_get_job_hashsum(task: "Task", *args, **kwargs) -> str:
+def default_get_task_uuid(task: "Task", *args, **kwargs) -> str:
     """TODO"""
     input_params = get_task_input_parameters(task, *args, **kwargs)
     hash_data = default_get_hash_data(task, input_params)
-    hashsum = get_md5_hash(hash_data)
+    hashsum = get_deterministic_uuid5_from_data(hash_data)
     return hashsum
 
 
-class Job:
+class _Job:
     """TODO"""
 
     def __init__(
         self,
-        output_names: dict,
-        output_writers: dict,
-        input_readers: dict,
-        input_params: dict,
+        output_names: dict[str, str],
+        output_writers: dict[str, Callable],
+        input_readers: dict[str, Callable],
+        input_params: dict[str, Any],
         function: Callable,
         check_done: Callable | None,
     ):
@@ -141,8 +142,19 @@ class Job:
         self.output_writers = output_writers
         self.input_readers = input_readers
         self.input_params = input_params
-        self.function = function
+        self.function = AnnotatedFunction.assert_wrapped(function)
         self.check_done = check_done
+
+        # check for missing output arguments
+        for name in self.output_writers:
+            if not self.output_names.get(name):
+                raise KeyError(f"No value was provided for output {name}")
+
+        # check for missing input arguments - not directly possible
+        # because Literal parser may be able to use None as value
+        # for name in self.input_readers:
+        #    if not self.input_params.get(name):
+        #        raise KeyError(f"No value was provided for input {name}")
 
     def __call__(self):
         """TODO"""
@@ -173,7 +185,7 @@ class Task:
         output_writers: dict[str, Callable[[Any, str], Any]],
         input_readers: dict[str, Callable[[Any], Any]] | None = None,
         check_done: Callable[..., bool] | None = None,
-        get_job_hashsum: FunHashsum = default_get_job_hashsum,
+        get_task_uuid: FunHashsum = default_get_task_uuid,
     ):
         self.function = AnnotatedFunction.assert_wrapped(function)
         self.output_writers = output_writers
@@ -188,7 +200,7 @@ class Task:
             for k, v in self.function.fun_defaults.items()
             if k in self.input_parameter_names
         }
-        self._get_job_hashsum = get_job_hashsum
+        self._get_task_uuid = get_task_uuid
 
         # checks
 
@@ -210,18 +222,18 @@ class Task:
                 "Invalid output parameters: %s", invalid_output_parameter_names
             )
 
-    def get_job_hashsum(self, *args, **kwargs) -> str:
+    def get_task_uuid(self, *args, **kwargs) -> str:
         """TODO
 
         FIXME: create unit tests - why dont i have to pass output args like
         the same way as in __call__?
         """
-        return self._get_job_hashsum(self, *args, **kwargs)  # self is first arg (task)
+        return self._get_task_uuid(self, *args, **kwargs)  # self is first arg (task)
 
-    def create_job(self, *args, **kwargs) -> Job:
+    def _create_job(self, *args, **kwargs) -> _Job:
         """TODO"""
         output_names, input_params = self.get_input_output_parameters(*args, **kwargs)
-        job = Job(
+        job = _Job(
             output_names=output_names,
             output_writers=self.output_writers,
             input_readers=self.input_readers,
@@ -233,7 +245,7 @@ class Task:
 
     def __call__(self, *args, **kwargs):
         """TODO"""
-        job = self.create_job(*args, **kwargs)
+        job = self._create_job(*args, **kwargs)
         job()
 
     def get_input_output_parameters(

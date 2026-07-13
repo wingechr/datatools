@@ -10,8 +10,21 @@ import rdflib
 from datatools.exceptions import StorageInvalidNameError
 from datatools.storage.base import DataStorage
 from datatools.storage.memory import PersistentMemoryMetadataStorage
-from datatools.types import Name
-from datatools.utils import TextFile, json_dumps, json_loads, uri_or_path_to_path
+from datatools.types import (
+    DEFAULT_CHUNK_SIZE,
+    LOCKFILE_SUFFIX,
+    RDF_CONTEXT,
+    TEMPFILE_SUFFIX,
+    Name,
+)
+from datatools.utils import (
+    TextFile,
+    buffer_to_byte_iterable,
+    json_dumps,
+    json_loads,
+    uri_or_path_to_path,
+    write_bytes_locked,
+)
 
 
 class JsonFileMetadataStorage(PersistentMemoryMetadataStorage):
@@ -33,41 +46,20 @@ class JsonFileMetadataStorage(PersistentMemoryMetadataStorage):
             return data
 
     def _dump(self, data: dict) -> None:
+        # data = self._test_roundtrip_rdf(data)
         self._file.dump_json(data)
 
-
-class JsonLdFileMetadataStorage(JsonFileMetadataStorage):
-    """FIXME
-
-    this is all still very experimental: clients expect to use
-    jsonpath queries, so we convert from / to json
-
-    for now, we just parse json as jsonld and back to see if its possible
-
-    """
-
-    def __init__(self, path: Path, name: Name):
-        self.name = name
-        self.context = {"@vocab": "urn:dummy/"}
-        super().__init__(path)
-
-    def _load_or_init(self) -> dict | None:
-        data = super()._load_or_init()
-        if not data:
-            data = {"@id": self.name, "@context": self.context}
-
-        return data
-
-    def _dump(self, data: dict) -> None:
-        # rdf roundtrip test
-
+    @staticmethod
+    def _run_through_rdf(data: dict) -> dict:
+        """TODO"""
         data_s = json_dumps(data)
         g = rdflib.Graph()
         g.parse(data=data_s, format="json-ld")
-        data_s_new = g.serialize(format="json-ld", context=self.context)
+        data_s_new = g.serialize(
+            format="json-ld", context=RDF_CONTEXT, auto_compact=True
+        )
         data_new: dict = json_loads(data_s_new)  # type:ignore
-
-        super()._dump(data_new)
+        return data_new
 
 
 class FileDataStorage(DataStorage):
@@ -85,22 +77,30 @@ class FileDataStorage(DataStorage):
         self._location: Path  # absolute, resolved location
         super().__init__(location=path)
 
-    def _contains(self, name: Name) -> bool:
+    def _has(self, name: Name) -> bool:
         path = self._get_abs_path(name)
         return path.exists()
 
-    def _getitem(self, name: Name) -> bytes:
+    def _read(
+        self, name: Name, chunk_size: int = DEFAULT_CHUNK_SIZE
+    ) -> Iterable[bytes]:
         path = self._get_abs_path(name)
         logging.debug("Reading %s", path)
-        return path.read_bytes()
+        with path.open("rb") as file:
+            yield from buffer_to_byte_iterable(file, chunk_size=chunk_size)
 
-    def _setitem(self, name: Name, data: bytes) -> None:
+    def _write(self, name: Name, data: Iterable[bytes]) -> None:
         path = self._get_abs_path(name)
         logging.debug("Writing %s", path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(data)
+        write_bytes_locked(
+            path=path,
+            data=data,
+            tempfile_suffix=TEMPFILE_SUFFIX,
+            lockfile_suffix=LOCKFILE_SUFFIX,
+        )
 
-    def _delitem(self, name: Name) -> None:
+    def _delete(self, name: Name) -> None:
         path = self._get_abs_path(name)
         logging.debug("Deleting %s", path)
         os.remove(path)
@@ -109,6 +109,8 @@ class FileDataStorage(DataStorage):
         for root, _, fs in os.walk(self._location):
             for f in fs:
                 if f.endswith(self.metadata_sufix):
+                    continue
+                if f.endswith(LOCKFILE_SUFFIX) or f.endswith(TEMPFILE_SUFFIX):
                     continue
                 path = Path(root) / str(f)
                 name = str(path.relative_to(self._location))
@@ -127,19 +129,19 @@ class FileDataStorage(DataStorage):
         """should be a relative path"""
         name = name.strip()
         abs_path = self._get_abs_path(name)
+
         if not abs_path.is_relative_to(self._location):
             raise StorageInvalidNameError(
                 f"Cannot use name outside of storage location: {name}", name=Name()
             )
         if abs_path.exists() and not abs_path.is_file():
             raise StorageInvalidNameError(f"name must be a file: {name}", name=Name())
+
+        if (
+            name.endswith(self.metadata_sufix)
+            or name.endswith(LOCKFILE_SUFFIX)
+            or name.endswith(TEMPFILE_SUFFIX)
+        ):
+            raise StorageInvalidNameError(f"Reserved name: {name}", name=Name())
+
         return abs_path.relative_to(self._location).as_posix()
-
-
-class FileDataStorageWithRdfMetadata(FileDataStorage):
-    """TODO"""
-
-    def _metadata(self, name: Name) -> JsonLdFileMetadataStorage:
-        path = self._get_abs_path(name)
-        path_metadata = path.with_name(path.name + self.metadata_sufix).resolve()
-        return JsonLdFileMetadataStorage(path_metadata, name=name)

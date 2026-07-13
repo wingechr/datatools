@@ -3,18 +3,30 @@
 import os
 from pathlib import Path
 import subprocess
+import sys
+import unittest
+
+import pytest
 
 from datatools.storage.file import FileDataStorage
 from tests.base import TempdirTestCase
 
 
+@unittest.skipIf(
+    sys.version_info < (3, 11),
+    "Requires Python 3.11+",
+)
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Requires Python 3.11+",
+)
 class TestSnakemake(TempdirTestCase):
     """TODO"""
 
     def test_snakemake(self):
         """TODO"""
         data_storage = FileDataStorage(str(self.temp_dir))
-        self.assertFalse("converted.json" in data_storage)
+        self.assertFalse(data_storage.has("converted.json"))
 
         snakefile = Path(__file__).parent / "test_snakemake.Snakefile"
         env = os.environ.copy()
@@ -26,4 +38,4 @@ class TestSnakemake(TempdirTestCase):
             cwd=self.temp_dir,
         )
 
-        self.assertTrue("converted.json" in data_storage)
+        self.assertTrue(data_storage.has("converted.json"))

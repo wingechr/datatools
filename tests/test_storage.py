@@ -1,7 +1,8 @@
 """TODO"""
 
 import datetime
-import logging
+from io import BufferedReader
+import json
 from pathlib import Path
 import pickle
 from tempfile import TemporaryDirectory
@@ -22,28 +23,22 @@ from datatools.process.task import AnnotatedFunction
 from datatools.storage.__main__ import infer_storage_class
 from datatools.storage.base import DataStorage
 from datatools.storage.cli import CliWrapperDataStorage
-from datatools.storage.file import FileDataStorage, FileDataStorageWithRdfMetadata
+from datatools.storage.file import FileDataStorage, JsonFileMetadataStorage
 from datatools.storage.http import HttpDataStorage, make_server_app
 from datatools.storage.memory import MemoryDataStorage
 from datatools.storage.sql import SqlDataStorage
 from datatools.types import (
-    PROP_CREATOR,
-    PROP_DATETIME,
-    PROP_FILE,
-    PROP_FUNCTION,
-    PROP_GENERATED_BY,
-    PROP_JOB,
-    PROP_PARAMETER,
-    PROP_PARAMETER_NAME,
-    PROP_PARAMETER_VALUE,
-    PROP_SAVED_WITH,
-    PROP_SIZE,
+    JSON_SCHEMA_FILE_RESOURCE,
+    LOCKFILE_SUFFIX,
+    RDF_CONTEXT,
     SINGLE_OUTPUT_PARAM_NAME,
+    TEMPFILE_SUFFIX,
+    URIRefs as u,
 )
 from datatools.utils import (
     get_free_port,
+    get_item_or_first,
     json_dumpb,
-    json_loadb,
     query_sql,
     sql_query_result_to_csv_bytes,
     start_http_server,
@@ -51,15 +46,8 @@ from datatools.utils import (
 )
 from tests.base import TempdirTestCase
 
-QueryParameterUri = f'{PROP_GENERATED_BY}.{PROP_PARAMETER}[?({PROP_PARAMETER_NAME} == "uri")].{PROP_PARAMETER_VALUE}'  # noqa:E501
-QueryTimestamp = f"{PROP_GENERATED_BY}.{PROP_DATETIME}"
-
-
-def get_item_or_first(x):
-    """TODO"""
-    if isinstance(x, list):
-        return x[0]
-    return x
+QueryParameterUri = f'{u.createdBy.label}.{u.usedInput.label}[?({u.roleName.label} == "uri")].{u.value.label}'  # noqa:E501
+QueryTimestamp = f"{u.createdBy.label}.{u.datetime.label}"
 
 
 def _test_action_sequence(self: TestCase, storage: DataStorage):
@@ -72,47 +60,51 @@ def _test_action_sequence(self: TestCase, storage: DataStorage):
     storage.info()
 
     # prevent invalid name
-    self.assertRaises(StorageInvalidNameError, storage.__setitem__, "\n" + name1, data1)
+    self.assertRaises(StorageInvalidNameError, storage.write, "\n" + name1, data1)
 
-    storage[name1] = data1
+    storage.write(name1, data1)
     # now it exists
-    self.assertTrue(name1 in storage)
+    self.assertTrue(storage.read(name1))
     # now we cannot add it again
-    self.assertRaises(StorageFileExistsError, storage.__setitem__, name1, data1)
+    self.assertRaises(StorageFileExistsError, storage.write, name1, data1)
     # we can retreive it
-    self.assertEqual(storage[name1], data1)
+    self.assertEqual(storage.read(name1), data1)
 
     name2 = "data2"
     data2 = b"data2"
     mdata2_key, mdata2_val = "metadata2_a", 10
-    self.assertFalse(name2 in storage)
+    self.assertFalse(storage.has(name2))
     # but even though it does not exist, we can add metadata
-    storage.metadata(name2)[mdata2_key] = mdata2_val
+    storage.metadata(name2).set(mdata2_key, mdata2_val)
     # and can retrieve it
-    self.assertEqual(next(iter(storage.metadata(name2)[mdata2_key])), mdata2_val)
+    self.assertEqual(
+        get_item_or_first(storage.metadata(name2).get(mdata2_key)), mdata2_val
+    )
     # now we insert and retrieve data
-    storage[name2] = data2
-    self.assertEqual(storage[name2], data2)
+    storage.write(name2, data2)
+    self.assertEqual(storage.read(name2), data2)
     # list all names:
     self.assertEqual(set(storage.find()), {name1, name2})
     # list via iterator
-    self.assertEqual(set(storage), {name1, name2})
+    self.assertEqual(set(storage.find()), {name1, name2})
 
     # filter by metadata
     self.assertEqual(set(storage.find(**{mdata2_key: mdata2_val})), {name2})
 
     # delete
-    del storage[name1]
-    self.assertFalse(name1 in storage)
+    storage.delete(name1)
+    self.assertFalse(storage.has(name1))
 
     # try if exception is raised
-    self.assertRaises(StorageFileNotFoundError, storage.__getitem__, name1)
-    self.assertRaises(StorageFileNotFoundError, storage.__delitem__, name1)
+    self.assertRaises(StorageFileNotFoundError, storage.read, name1)
+    self.assertRaises(StorageFileNotFoundError, storage.delete, name1)
 
     # change/update metadata
-    storage.metadata(name2)[mdata2_key] = "CHANGED"
+    storage.metadata(name2).set(mdata2_key, "CHANGED")
     # and can retrieve it
-    self.assertEqual(next(iter(storage.metadata(name2)[mdata2_key])), "CHANGED")
+    self.assertEqual(
+        get_item_or_first(storage.metadata(name2).get(mdata2_key)), "CHANGED"
+    )
 
 
 class TestStorageMemory(TestCase):
@@ -145,6 +137,28 @@ class TestStorageFiles(TempdirTestCase):
         )
         self.assertRaises(StorageInvalidNameError, storage._assert_valid_name, "../xyz")
 
+    def test_temp_and_lockfiles(self):
+        """TODO"""
+        storage = FileDataStorage(str(self.temp_dir))
+        name = "example.txt"
+        name_temp = "example.txt" + TEMPFILE_SUFFIX
+        name_lock = "example.txt" + LOCKFILE_SUFFIX
+        (self.temp_dir / name).touch()
+        # create lock/tempfile
+        (self.temp_dir / (name_lock)).touch()
+        (self.temp_dir / (name_temp)).touch()
+
+        # lock/tempfile should not be found
+        self.assertEqual(list(storage.find()), [name])
+
+        # namesshould not ba allowed
+        self.assertRaises(
+            StorageInvalidNameError, storage._assert_valid_name, name_temp
+        )
+        self.assertRaises(
+            StorageInvalidNameError, storage._assert_valid_name, name_lock
+        )
+
     def test_existing_invalid_metadata(self):
         """raise exception"""
         # create invalid json
@@ -155,19 +169,9 @@ class TestStorageFiles(TempdirTestCase):
     def test_new_name_is_path(self):
         """TODO"""
         storage = FileDataStorage(str(self.temp_dir))
-        storage["a/b"] = b""
+        storage.write("a/b", b"")
         # "a" is alreaedy used as path
-        self.assertRaises(StorageInvalidNameError, storage.__setitem__, "a", b"")
-
-
-class TestStorageFilesWithRdfMetadata(TestCase):
-    """TODO"""
-
-    def test_action_sequence(self):
-        """TODO"""
-        with TemporaryDirectory() as tmpdir:
-            storage = FileDataStorageWithRdfMetadata(tmpdir)
-            _test_action_sequence(self, storage)
+        self.assertRaises(StorageInvalidNameError, storage.write, "a", b"")
 
 
 class TestStorageSql(TestCase):
@@ -181,7 +185,7 @@ class TestStorageSql(TestCase):
     def test_does_not_exist(self):
         """bypass check from base class."""
         storage = SqlDataStorage()
-        self.assertRaises(StorageFileNotFoundError, storage._getitem, "KEY")
+        self.assertRaises(StorageFileNotFoundError, storage.read, "KEY")
 
 
 class TestCliWrapperDataStorage(TestCase):
@@ -223,14 +227,12 @@ class TestCliWrapperDataStorage(TestCase):
                 main,
                 ["storage", "-l", url, "import", str(path), "data"],
             )
-            logging.error((resp.return_value, resp.stdout_bytes, resp.stderr_bytes))
 
             # retrieve
             resp = runner2.invoke(
                 main,
-                ["storage", "-l", url, "get", "data"],
+                ["storage", "-l", url, "read", "data"],
             )
-            logging.error((resp.return_value, resp.stdout_bytes, resp.stderr_bytes))
 
             self.assertEqual(resp.stdout_bytes, test_data)
 
@@ -279,10 +281,10 @@ class TestStorageHttpServer(TestCase):
             resp = httpx.put(url + "/data//a", content=b"data")
             self.assertEqual(resp.status_code, 400)
 
-            self.assertTrue(storage._contains("a/b"))
-            self.assertFalse(storage._contains("b"))
-            self.assertRaises(Exception, storage._contains, "/a")
-            self.assertRaises(Exception, storage._contains, "a")
+            self.assertTrue(storage._has("a/b"))
+            self.assertFalse(storage._has("b"))
+            self.assertRaises(Exception, storage._has, "/a")
+            self.assertRaises(Exception, storage._has, "a")
 
 
 class TestUseCases(TestCase):
@@ -311,19 +313,19 @@ class TestUseCases(TestCase):
             uri = base_url + "/" + filename
             name = storage.import_from_uri(uri)
 
-            self.assertEqual(storage[name], test_data)
+            self.assertEqual(storage.read(name), test_data)
             # should have meta data from import action
             self.assertEqual(
-                get_item_or_first(storage.metadata(name)[QueryParameterUri]),
+                get_item_or_first(storage.metadata(name).get(QueryParameterUri)),
                 uri,
             )
 
             # import from path
             uri = filepath.as_uri()
             name = storage.import_from_uri(uri)
-            self.assertEqual(storage[name], test_data)
+            self.assertEqual(storage.read(name), test_data)
             self.assertEqual(
-                get_item_or_first(storage.metadata(name)[QueryParameterUri]),
+                get_item_or_first(storage.metadata(name).get(QueryParameterUri)),
                 uri,
             )
 
@@ -331,78 +333,75 @@ class TestUseCases(TestCase):
             query = "select 1 as a"
             uri = "sqlite:///:memory:"
             name = storage.import_from_uri(uri, query=query)
-            self.assertEqual(storage[name].replace(b"\r", b""), b"a\n1\n")
+            self.assertEqual(storage.read(name).replace(b"\r", b""), b"a\n1\n")
             # TODO add query?
             self.assertEqual(
-                get_item_or_first(storage.metadata(name)[QueryParameterUri]),
+                get_item_or_first(storage.metadata(name).get(QueryParameterUri)),
                 uri,
             )
 
             # check metadata
-            metadata_all = get_item_or_first(storage.metadata(name)["$"])
+            metadata_all: dict = get_item_or_first(storage.metadata(name).get("$"))  # type:ignore
+            del metadata_all["@context"]
 
-            metadata_activity: dict = metadata_all[PROP_GENERATED_BY]  # type:ignore
+            metadata_creation_event: dict = metadata_all[u.createdBy.label]  # type:ignore
 
-            job_id = metadata_activity[PROP_JOB]
-            self.assertTrue(job_id, "")
-            activity_id = (
-                job_id.replace("job:", "activity:")
-                + "-"
-                + metadata_activity[PROP_DATETIME]
-            )
+            task_uuid = metadata_creation_event[u.taskId.label]
+            timestamp = metadata_creation_event[u.datetime.label]
+            self.assertTrue(task_uuid, "")
+            event_id = f"event:{task_uuid}/{timestamp}"
 
             metadata_all_expected = {
-                "$schema": "TODO",
-                "@id": activity_id + "/output/" + SINGLE_OUTPUT_PARAM_NAME,
-                "@type": "Output",
-                "name": ":memory:",
+                "$schema": JSON_SCHEMA_FILE_RESOURCE,
+                "@id": event_id + "/output/" + SINGLE_OUTPUT_PARAM_NAME,
+                # "@type": u.FileResource.label,
+                u.name.label: ":memory:",
                 # file info
-                PROP_FILE: {
-                    "@id": "md5:34ff2335cbe2045ddc3b78993d1e971d",
-                    "@type": "File",
-                    PROP_SIZE: 4,
-                },
+                u.hash.label: "sha256:309b0e45a73d3fc5325e2b6ed0a01ef8b9cde6b05a5633c1f893f970d52bfddc",  # noqa:E501
+                u.bytes.label: 4,
                 # file saved with info
-                PROP_SAVED_WITH: {
-                    PROP_FUNCTION: {
-                        "@id": "sql_query_result_to_csv_bytes",
-                        "@type": "Function",
+                u.serializedWith.label: {
+                    # "@type": u.Serialization.label,
+                    u.usedFunction.label: {
+                        "@id": "function:"
+                        + AnnotatedFunction(sql_query_result_to_csv_bytes).function_id,
+                        # "@type": u.Function.label,
                         "description": sql_query_result_to_csv_bytes.__doc__,
                     },
-                    PROP_PARAMETER_NAME: SINGLE_OUTPUT_PARAM_NAME,
+                    u.roleName.label: SINGLE_OUTPUT_PARAM_NAME,
                 },
                 # file generation info
-                PROP_GENERATED_BY: {
-                    "@id": activity_id,
-                    "@type": "Activity",
+                u.createdBy.label: {
+                    "@id": event_id,
+                    # "@type": u.CreationEvent.label,
                     # context
-                    PROP_DATETIME: metadata_activity[PROP_DATETIME],
-                    PROP_CREATOR: metadata_activity[PROP_CREATOR],
+                    u.datetime.label: metadata_creation_event[u.datetime.label],
+                    u.creator.label: metadata_creation_event[u.creator.label],
                     # Job
-                    PROP_FUNCTION: {
-                        "@id": "QUERY",
-                        "@type": "Function",
+                    u.usedFunction.label: {
+                        "@id": "function:QUERY",
+                        # "@type": u.Function.label,
                         "description": query_sql.__doc__,
                     },
-                    PROP_JOB: job_id,
-                    PROP_PARAMETER: [
+                    u.taskId.label: task_uuid,
+                    u.usedInput.label: [
                         {
-                            "@id": activity_id + "/input/uri",
-                            "@type": "Input",
-                            PROP_PARAMETER_NAME: "uri",
-                            PROP_PARAMETER_VALUE: "sqlite:///:memory:",
+                            "@id": event_id + "/input/uri",
+                            # "@type": u.LiteralParameter.label,
+                            u.roleName.label: "uri",
+                            u.value.label: "sqlite:///:memory:",
                         },
                         {
-                            "@id": activity_id + "/input/query",
-                            "@type": "Input",
-                            PROP_PARAMETER_NAME: "query",
-                            PROP_PARAMETER_VALUE: "select 1 as a",
+                            "@id": event_id + "/input/query",
+                            # "@type": u.LiteralParameter.label,
+                            u.roleName.label: "query",
+                            u.value.label: "select 1 as a",
                         },
                         {
-                            "@id": activity_id + "/input/options",
-                            "@type": "Input",
-                            PROP_PARAMETER_NAME: "options",
-                            PROP_PARAMETER_VALUE: None,
+                            "@id": event_id + "/input/options",
+                            # "@type": u.LiteralParameter.label,
+                            u.roleName.label: "options",
+                            u.value.label: None,
                         },
                     ],
                 },
@@ -461,27 +460,32 @@ class TestUseCases(TestCase):
 
         # generate inputs
         for name in inputs.values():
-            storage[name] = pickle.dumps(3)
+            storage.write(name, pickle.dumps(3))
 
         task_create_output = storage.task(
             function,
-            input_converters=dict.fromkeys(inputs, pickle.loads),
+            input_converters=dict.fromkeys(inputs, pickle.load),
             output_converters=dict.fromkeys(outputs, pickle.dumps),
         )
 
+        # call without output name should cause error
+        self.assertRaises(Exception, task_create_output)
+        # call without input name should cause error
+        self.assertRaises(Exception, task_create_output, "OUTPUT")
+
         # try to call mutliple times - but only of output does not exist
         for _ in range(2):
-            if not all(name in storage for name in outputs.values()):
+            if not all(storage.has(name) for name in outputs.values()):
                 task_create_output(**outputs, **inputs)
 
-        self.assertTrue(all(name in storage for name in outputs.values()))
+        self.assertTrue(all(storage.has(name) for name in outputs.values()))
 
         self.assertEqual(count_calls, 1)
 
         # check that metadata should also be writtem
         for name in outputs.values():
             task_timestamp_s = str(
-                get_item_or_first(storage.metadata(name)[QueryTimestamp])
+                get_item_or_first(storage.metadata(name).get(QueryTimestamp))
             )
             datetime.datetime.fromisoformat(task_timestamp_s)
 
@@ -498,7 +502,7 @@ class TestUseCases(TestCase):
 
         data1 = b"[1, 2]"
 
-        fid_convert = "function://convert1"
+        fid_convert = "convert1"
         fid_bytes2json = "bytes2json"
 
         def generate1() -> bytes:
@@ -508,39 +512,73 @@ class TestUseCases(TestCase):
         def convert(data: list) -> list:
             return [x + 1 for x in data]
 
-        loads = AnnotatedFunction(json_loadb, function_id=fid_bytes2json)
+        loads = AnnotatedFunction(json.load, function_id=fid_bytes2json)
 
         # "output": None -> already bytes
         task_generate = storage.task(
-            generate1,
-            {"output": None},
-            metadata_generator=lambda _: {f"{PROP_FILE}.mediatype": "application/json"},
+            function=generate1,
+            output_converters={"output": None},
+            metadata_generator=lambda _: {f"{u.mediatype.label}": "application/json"},
             skip_finished=True,
         )
         task_convert = storage.task(
-            convert,
-            {"output": json_dumpb},
-            {"data": loads},
+            function=convert,
+            output_converters={"output": json_dumpb},
+            input_converters={"data": loads},
             skip_finished=True,
         )
 
-        key1 = f"generated_{task_generate.get_job_hashsum()}.json"
+        key1 = f"generated_{task_generate.get_task_uuid()}.json"
         task_generate(output=key1)
         task_generate(key1)  # does nothing, because already created
 
         # dynamically create id for next step (use same arguments as in actuall)
-        key2 = f"converted_{task_convert.get_job_hashsum(data=key1)}.json"
+        key2 = f"converted_{task_convert.get_task_uuid(data=key1)}.json"
         task_convert(output=key2, data=key1)
 
         # check metadata
         self.assertEqual(
             get_item_or_first(
-                storage.metadata(key2)[f"{PROP_GENERATED_BY}.{PROP_FUNCTION}.@id"]
+                storage.metadata(key2).get(
+                    f"{u.createdBy.label}.{u.usedFunction.label}.@id"
+                )
             ),
-            fid_convert,
+            "function:" + fid_convert,
         )
 
         self.assertEqual(
-            get_item_or_first(storage.metadata(key1)[f"{PROP_FILE}.mediatype"]),
+            get_item_or_first(storage.metadata(key1).get(f"{u.mediatype.label}")),
             "application/json",
         )
+
+    def test_run_through_rdf(self):
+        """TODO"""
+        data = {"@context": RDF_CONTEXT, "@id": "urn:dummy", "key": "value"}
+        resp = JsonFileMetadataStorage._run_through_rdf(data)
+        self.assertEqual(resp, data)
+
+    def test_use_metadata_for_loaders(self):
+        """loader/dumper functions should get their default valuesfrom metadata."""
+
+        def loadb(buf: BufferedReader, encoding: str = "utf-8"):
+            return buf.read().decode(encoding=encoding)
+
+        def dumpb(text: str) -> bytes:
+            return text.encode()
+
+        st = MemoryDataStorage()
+        st.write("data", "Ünicöde".encode(encoding="windows-1252"))
+
+        task = st.task(
+            dumpb,
+            input_converters=loadb,
+        )
+
+        # running task as is should fail
+        self.assertRaises(UnicodeDecodeError, task, "data2", text="data")
+
+        # but if someone writes puts encoding info in metadata, it should pick it up
+        # TODO: where exactly in metadata? directly in FileResource?
+        st.metadata("data").set("encoding", "windows-1252")
+        # now it works
+        task("data2", text="data")

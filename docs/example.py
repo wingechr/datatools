@@ -1,7 +1,7 @@
 """Example script."""
 # ruff: noqa: S101, D103
 
-from io import BytesIO
+from io import BufferedReader
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -36,8 +36,11 @@ with TemporaryDirectory() as tempdir:
     assert name3 == "result.csv", name3
 
     # create some functions
-    def load_csv(data: bytes) -> pd.DataFrame:
-        return pd.read_csv(BytesIO(data))
+    def load_csv(data: BufferedReader) -> pd.DataFrame:
+        return pd.read_csv(data)
+
+    def len_bytes(data: BufferedReader) -> int:
+        return len(data.read())
 
     def sum_values(value1: int, value2: int, value3: pd.DataFrame) -> int:
         """sum of input values"""
@@ -49,8 +52,8 @@ with TemporaryDirectory() as tempdir:
         # to / from bytes convert fro output/input
         output_converters=json_dumpb,
         input_converters={
-            "value1": len,
-            "value2": len,
+            "value1": len_bytes,
+            "value2": len_bytes,
             "value3": load_csv,
         },
         skip_finished=True,
@@ -61,9 +64,9 @@ with TemporaryDirectory() as tempdir:
     task(name4, value1=name1, value2=name2, value3=name3)
 
     # check result and metadata
-    assert len(st[name1]) == len(st[name2])  # imported same files 2 times
-    assert json_loadb(st[name4]) == 2 * len(st[name1]) + 1
+    assert len(st.read(name1)) == len(st.read(name2))  # imported same files 2 times
+    assert json_loadb(st.read(name4)) == 2 * len(st.read(name1)) + 1
 
-    assert st.metadata(name1)[QueryParameterUri][0] == uri1
-    assert st.metadata(name2)[QueryParameterUri][0] == uri2
-    assert st.metadata(name3)[QueryParameterUri][0] == uri3
+    assert st.metadata(name1).get(QueryParameterUri)[0] == uri1
+    assert st.metadata(name2).get(QueryParameterUri)[0] == uri2
+    assert st.metadata(name3).get(QueryParameterUri)[0] == uri3

@@ -1,6 +1,7 @@
 """TODO"""
 
-from collections.abc import Callable, Iterable
+import codecs
+from collections.abc import Callable, Iterable, Iterator
 import csv
 import datetime
 from functools import cache, partial
@@ -9,6 +10,8 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import importlib
 import inspect
 from inspect import Parameter, Signature
+import io
+from io import BufferedReader
 import json
 import logging
 import math
@@ -19,24 +22,39 @@ import site
 import socket
 import subprocess
 import sys
+import tempfile
 from threading import Thread
 import time
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar, cast
 from urllib.parse import unquote, urlparse, urlsplit
 from urllib.request import url2pathname
+import uuid
 
 import chardet
+from filelock import FileLock
+import frictionless
 import httpx
 import jsonpath_ng
 import jsonpath_ng.ext
+import jsonschema
+import jsonschema.validators
 import numpy as np
 import pandas as pd
 from pydantic import BaseModel
 import sqlalchemy as sa
 import sqlparse
+from typing_extensions import override
 import tzlocal
 
-from datatools.types import Json, StrPath, SubCls
+from datatools.types import (
+    DEFAULT_CHUNK_SIZE,
+    LOCKFILE_SUFFIX,
+    TEMPFILE_SUFFIX,
+    ByteData,
+    Json,
+    StrPath,
+    SubCls,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import CursorResult
@@ -215,12 +233,14 @@ def json_loads(text: str) -> Json:
 
 
 def json_loadb(
-    data: bytes,
+    data: ByteData,
     encoding="utf-8",
     errors: Literal["strict", "replace", "ignore"] = "strict",
 ) -> Json:
     """TODO"""
-    text = str_load(data, encoding=encoding, errors=errors)
+    # TODO: streaming
+    bdata = as_bytes(as_byte_iterable(data))
+    text = str_load(bdata, encoding=encoding, errors=errors)
     return json_loads(text)
 
 
@@ -284,11 +304,33 @@ def file_uri_to_path(uri: str) -> Path:
     return path
 
 
-def reverse_prints(stdout_data: bytes) -> list[str]:
-    """TODO"""
-    text = stdout_data.decode(sys.stdout.encoding, errors="replace")
-    lines = text.splitlines(keepends=False)[::-1]
-    return lines
+def reverse_prints(
+    stdout_data: Iterable[bytes],
+    encoding: str = "utf-8",
+    errors: str = "replace",
+) -> Iterable[str]:
+    r"""Streaming decode byte chunks into lines.
+
+    Example:
+
+    >>> list(reverse_prints([b'partial', b'line\nline2\r\npartial', b'line']))
+    ['partialline', 'line2', 'partialline']
+
+    """
+
+    def strip_oel(x: str) -> str:
+        return x.rstrip("\r\n")
+
+    decoder = codecs.getincrementaldecoder(encoding)(errors)
+    buffer = ""
+    for chunk in stdout_data:
+        buffer += decoder.decode(chunk)
+        while (idx := buffer.find("\n")) != -1:
+            yield strip_oel(buffer[: idx + 1])
+            buffer = buffer[idx + 1 :]
+    buffer += decoder.decode(b"", final=True)  # flush trailing partial sequence
+    if buffer:
+        yield strip_oel(buffer)  # last line, even without trailing \n
 
 
 def try_parse_json_str(s: str) -> Any:
@@ -430,13 +472,20 @@ def subclasses_by_name(cls: type[SubCls]) -> dict[str, type[SubCls]]:
     return {c.__name__: c for c in list(iter_subclasses(cls))}
 
 
-def get_md5_hash(hash_data: Json) -> str:
-    """TODO"""
+def get_sha256_hash(hash_data: Json) -> str:
+    """TODO
+
+    Example:
+
+    >>> get_sha256_hash({"key": 10})
+    '63fc351b588eec4fad18ef579b3c42c83d6638e0dc4a55f4772ff8a61455630d'
+
+    """
     hash_data_s = json_dumps(
         hash_data, ensure_ascii=False, indent=0, sort_keys=True, default=json_serialize
     )
     hash_data_b = hash_data_s.encode("utf-8")
-    hashsum = hashlib.md5(hash_data_b).hexdigest()  # noqa:S324
+    hashsum = hashlib.sha256(hash_data_b).hexdigest()  # noqa:S324
     # logging.error("%s %s", hashsum, hash_data)
     return hashsum
 
@@ -726,9 +775,9 @@ def get_df_table_schema(df: pd.DataFrame) -> dict[str, Any]:
     """TODO
 
     >>> from pandas import DataFrame
-    >>> df = DataFrame([{"f1": 1, "f2": "x"}, {"f1": 2}])
+    >>> df = DataFrame([{"f1": 1, "f2": 2.2}, {"f1": 2}])
     >>> get_df_table_schema(df)
-    {'fields': [{'name': 'f1', 'data_type': 'int64', 'is_nullable': False}, {'name': 'f2', 'data_type': 'str', 'is_nullable': True}]}
+    {'fields': [{'name': 'f1', 'data_type': 'int64', 'is_nullable': False}, {'name': 'f2', 'data_type': 'float64', 'is_nullable': True}]}
 
     """  # noqa W501
     fields: list[dict[str, Any]] = []
@@ -925,7 +974,7 @@ def get_function_id(fun: Callable) -> str:
     >>> get_function_id(lambda x:x)
     '<lambda>'
     >>> from pandas import DataFrame
-    >>> get_function_id(DataFrame)
+    >>> get_function_id(DataFrame).replace(".core.frame:", ":") # older pandas
     'pandas:DataFrame'
     >>> get_function_id(open)
     'io:open'
@@ -966,19 +1015,22 @@ def wait_for_url(url: str, timeout_s=30):
             continue
 
 
-def http_get(uri: str, **options) -> bytes:
+def http_get_stream(
+    uri: str, chunk_size: int = DEFAULT_CHUNK_SIZE, **options
+) -> Iterable[bytes]:
     """TODO"""
     resp = httpx.get(uri, follow_redirects=True)
     resp.raise_for_status()
-    data = resp.content
-    return data
+    yield from resp.iter_bytes(chunk_size=chunk_size)
 
 
-def read_file_uri(uri: str, **options) -> bytes:
+def read_file_uri_stream(
+    uri: str, chunk_size: int = DEFAULT_CHUNK_SIZE, **options
+) -> Iterable[bytes]:
     """TODO"""
     path = uri_or_path_to_path(uri).resolve()
-    data = path.read_bytes()
-    return data
+    with path.open("rb") as file:
+        yield from buffer_to_byte_iterable(file, chunk_size=chunk_size)
 
 
 def query_sql(uri: str, query: str, **options) -> Iterable["Row"]:
@@ -1006,9 +1058,290 @@ def wrap_exception(
         sys.exit(1)
 
 
-def sql_query_result_to_csv_bytes(data: Iterable["Row"], **options) -> bytes:
+def sql_query_result_to_csv_bytes(data: Iterable["Row"], **options) -> Iterable[bytes]:
     """TODO"""
     df = pd.DataFrame(data)
     data_s = df.to_csv(index=False, lineterminator="\n")
     data_b = data_s.encode()
-    return data_b
+    # for now, we just return the whole thing.
+    # since df i in memory anyways
+    return [data_b]
+
+
+def get_deterministic_uuid5(data: str) -> str:
+    """TODO
+
+    Example:
+
+    >>> get_deterministic_uuid5("test")
+    'da5b8893-d6ca-5c1c-9a9c-91f40a2a3649'
+
+    """
+    # NOTE: .hex() returns without the dashes, str() with dashes
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, data))
+
+
+def get_deterministic_uuid5_from_data(data: Json) -> str:
+    """TODO
+
+    Example:
+
+    >>> get_deterministic_uuid5_from_data({"value": 10})
+    '88bc6da5-9229-5d47-ab0c-005c5f04030b'
+
+    """
+    data_s = json_dumps(data, indent=0, sort_keys=True)
+    return get_deterministic_uuid5(data_s)
+
+
+def validate_resource(resource_descriptor):
+    """TODO"""
+    res = frictionless.Resource(resource_descriptor)
+    rep = res.validate()
+
+    if rep.stats["errors"]:
+        errors = []
+        for task in rep.tasks:
+            for err in task.errors:
+                errors.append(err.message)
+
+        err_str = "\n".join(errors)
+        # logging.error(err_str)
+        raise ValueError(err_str)
+
+
+def get_jsonschema_validator(schema):
+    """Return validator instance for schema.
+
+    Example:
+
+    >>> schema = {"type": "object", "properties":
+    ...   {"id": {"type": "integer"}}, "required": [ "id" ]}
+    >>> validator = get_jsonschema_validator(schema)
+    >>> validator({})
+    Traceback (most recent call last):
+        ...
+    ValueError: 'id' is a required property ...
+
+    >>> validator({"id": "a"})
+    Traceback (most recent call last):
+        ...
+    ValueError: 'a' is not of type 'integer' ...
+
+    >>> validator({"id": 1})
+
+    """
+
+    if isinstance(schema, str):
+        # FIXME: use webcache
+        resp = httpx.get(schema, follow_redirects=True)
+        resp.raise_for_status()
+        schema = resp.json()
+
+    validator_cls = jsonschema.validators.validator_for(schema)
+    # check if schema is valid
+    validator_cls.check_schema(schema)
+    validator = validator_cls(schema)
+
+    def validator_function(instance):
+        errors = []
+        for err in validator.iter_errors(instance):
+            # path in data structure where error occurs
+            path = "$" + "/".join(str(x) for x in err.absolute_path)
+            errors.append(f"{err.message} in {path}")
+        if errors:
+            err_str = "\n".join(errors)
+            # logging.error(err_str)
+            raise ValueError(err_str)
+
+    return validator_function
+
+
+IterType = TypeVar("IterType")
+Accumulator = TypeVar("Accumulator")
+Value = TypeVar("Value")
+
+
+class CollectStatsIterator(Generic[IterType, Accumulator, Value]):
+    """pass"""
+
+    def __init__(
+        self,
+        iterator: Iterable[IterType],
+        initial_value: Accumulator,
+        update_value: Callable[[Accumulator, IterType], Accumulator],
+    ):
+        self._source = iterator
+        self._update_value = update_value
+        self._value: Accumulator = initial_value
+
+    def __iter__(self) -> Iterator[IterType]:
+        self._iter = iter(self._source)
+        return self
+
+    def __next__(self) -> IterType:
+        item = next(self._iter)
+        self._value = self._update_value(self._value, item)
+        return item
+
+    @property
+    def value(self) -> Value:
+        """TODO"""
+        return self._value  # type:ignore
+
+
+class CollectStatsIteratorSize(CollectStatsIterator[bytes, int, int]):
+    """TODO"""
+
+    def __init__(
+        self,
+        iterator: Iterable[bytes],
+    ):
+        def update(acc: int, v: bytes) -> int:
+            return acc + len(v)
+
+        super().__init__(iterator, initial_value=0, update_value=update)
+
+
+class CollectStatsIteratorHash(CollectStatsIterator[bytes, Any, str]):
+    """TODO"""
+
+    def __init__(self, iterator: Iterable[bytes], algorithm: Literal["md5", "sha256"]):
+        accumulator = getattr(hashlib, algorithm)()
+
+        def update(acc, v: bytes):
+            acc.update(v)
+            return acc
+
+        super().__init__(iterator, initial_value=accumulator, update_value=update)
+
+    @property
+    def value(self) -> str:
+        """TODO"""
+        return self._value.hexdigest()
+
+
+def as_byte_iterable(
+    data: ByteData, chunk_size_if_buffer: int = DEFAULT_CHUNK_SIZE
+) -> Iterable[bytes]:
+    """TODO
+
+    Example:
+
+    >>> next(as_byte_iterable(b'a'))
+    b'a'
+    >>> next(as_byte_iterable([b'a']))
+    b'a'
+    >>> from io import BufferedReader, BytesIO
+    >>> buf = BufferedReader(BytesIO(b'a'))
+    >>> next(as_byte_iterable(buf))
+    b'a'
+    >>> next(as_byte_iterable(1))
+    Traceback (most recent call last):
+    ...
+    TypeError:
+
+    """
+    if isinstance(data, bytes):
+        yield data
+    elif isinstance(data, BufferedReader):
+        yield from buffer_to_byte_iterable(data, chunk_size=chunk_size_if_buffer)
+    elif isinstance(data, Iterable):
+        # we cannot really testm only assume that items are bytes
+        # because we dont want to consume them
+        yield from cast(Iterable[bytes], data)
+    else:
+        raise TypeError(f"Unexpected type: {type(data)}")
+
+
+def as_bytes(data: Iterable[bytes]) -> bytes:
+    """TODO"""
+    return b"".join(c for c in data)
+
+
+class IterableStream(io.RawIOBase):
+    """Convert bytes iterator in read only buffer with lazy consumption"""
+
+    def __init__(self, iterable: Iterable[bytes]):
+        self._iter = iter(iterable)
+        self._leftover = b""
+
+    @override
+    def readable(self) -> bool:
+        return True
+
+    @override
+    def readinto(self, b: bytearray) -> int:
+        if not self._leftover:
+            try:
+                self._leftover = next(self._iter)
+            except StopIteration:
+                return 0  # EOF
+        n = len(b)
+        chunk, self._leftover = self._leftover[:n], self._leftover[n:]
+        b[: len(chunk)] = chunk
+        return len(chunk)
+
+
+def byte_iterable_as_buffer(iterable: Iterable[bytes]) -> BufferedReader:
+    """TODO"""
+    return BufferedReader(IterableStream(iterable))  # type:ignore
+
+
+def buffer_to_byte_iterable(
+    buf: BufferedReader, chunk_size: int = DEFAULT_CHUNK_SIZE
+) -> Iterator[bytes]:
+    """TODO"""
+    while chunk := buf.read(chunk_size):
+        yield chunk
+
+
+def write_bytes_locked(
+    path: Path,
+    data: Iterable[bytes],
+    timeout: float = 30,
+    lockfile_suffix: str = LOCKFILE_SUFFIX,
+    tempfile_suffix: str = TEMPFILE_SUFFIX,
+) -> None:
+    """Write bytes to `path` atomically, guarded by a cross-platform file lock."""
+    lock_path = path.with_name(path.name + lockfile_suffix)
+
+    # raises filelock.Timeout if it can't acquire in time
+    with FileLock(lock_path, timeout=timeout):
+        fd, tmp_path = tempfile.mkstemp(
+            dir=path.parent, prefix=path.name + ".", suffix=tempfile_suffix
+        )
+        # try:
+        with os.fdopen(fd, "wb") as tmp_file:
+            for chunk in data:
+                tmp_file.write(chunk)
+            tmp_file.flush()
+            os.fsync(tmp_file.fileno())
+        os.replace(tmp_path, path)  # atomic on both POSIX and Windows (Py 3.3+)
+        # # we actually want to keep the tmp file in case we want to use the data
+        # except BaseException:
+        #     if os.path.exists(tmp_path):
+        #         os.unlink(tmp_path)
+        #     raise
+
+
+def get_item_or_first(x):
+    """TODO
+
+    Example:
+
+    >>> get_item_or_first(1)
+    1
+    >>> get_item_or_first([1])
+    1
+    >>> repr(get_item_or_first([]))
+    'None'
+
+
+
+    """
+    if isinstance(x, list):
+        if not x:
+            return None
+        return x[0]
+    return x

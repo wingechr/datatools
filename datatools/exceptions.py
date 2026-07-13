@@ -29,7 +29,7 @@ class StorageInvalidNameError(KeyError, StorageException):
 
     def __init__(self, message, name: Name):
         super().__init__(message)
-        self.name = Name  # corrected Name
+        self.name = name  # corrected Name
 
 
 class SubprocessStatus(StorageException):

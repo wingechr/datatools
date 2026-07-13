@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from click.testing import CliRunner
+from typing_extensions import override
 
 from datatools.exceptions import (
     SubprocessStatus,
@@ -13,8 +14,9 @@ from datatools.exceptions import (
 from datatools.storage.base import DataStorage, MetadataStorage
 from datatools.types import MetadataAttribute, MetadataValue, Name
 from datatools.utils import (
+    as_bytes,
     json_dumps,
-    json_loads,
+    json_loadb,
     reverse_prints,
     try_parse_json_str,
 )
@@ -23,15 +25,18 @@ from datatools.utils import (
 class TestCliMetadataDataStorage(MetadataStorage):
     """TODO"""
 
-    def __init__(self, name: Name, request: Callable):
+    def __init__(self, name: Name, request: Callable[..., Iterable[bytes]]):
         self._name = name
         self._request = request
 
-    def _getitem(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
-        data = self._request("metadata", "get", self._name, str(attribute))
-        return try_parse_json_str(data)
+    @override
+    def get(self, attribute: MetadataAttribute) -> Iterable[MetadataValue]:
+        bytes_iterable = self._request("metadata", "get", self._name, str(attribute))
+        sdata = "\n".join(reverse_prints(bytes_iterable))
+        return try_parse_json_str(sdata)
 
-    def _setitem(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
+    @override
+    def set(self, attribute: MetadataAttribute, value: MetadataValue) -> None:
         self._request(
             "metadata",
             "set",
@@ -54,51 +59,62 @@ class CliWrapperDataStorage(DataStorage):
 
         self._storage_main_cli = storage_main_cli
 
-    def _request(self, *args: str, data: bytes | None = None) -> bytes:
+    def _request(
+        self, *args: str, data: Iterable[bytes] | None = None
+    ) -> Iterable[bytes]:
         cmd = ["-l", str(self._location)] + list(args)
-        # stdout, _stderr = call_script(
-        #    self._script, cmd, data
-        # )
         logging.debug("CLI " + " ".join(cmd))
-        result = self._clirunner.invoke(self._storage_main_cli, cmd, input=data)
-        if result.exit_code:
-            raise SubprocessStatus(result.exit_code)
 
-        stdout = result.stdout_bytes
+        # NOTE: this is really only for testing
+        # making it also streaming/chunked requires to set up separate threads
+        # and pathing into sys.stdout buffers - so it's not worth it
+        bdata = as_bytes(data) if data else None
+        result = self._clirunner.invoke(self._storage_main_cli, cmd, input=bdata)
+        exit_code = result.exit_code
+        stdout_bytes = result.stdout_bytes
 
-        return stdout
+        if exit_code:
+            raise SubprocessStatus(exit_code)
 
-    def _contains(self, name: Name) -> bool:
+        # IMPORTANT: do not use yield,
+        # otherwise calls that dont have/consume output will not
+        # execute the function
+        return [stdout_bytes]
+
+    def _has(self, name: Name) -> bool:
         try:
             self._request("has", name)
         except SubprocessStatus:
             return False
         return True
 
-    def _getitem(self, name: Name) -> bytes:
-        return self._request("get", name)
+    def _read(self, name: Name) -> Iterable[bytes]:
+        yield from self._request("read", name)
 
-    def _setitem(self, name: Name, data: bytes) -> None:
-        self._request("put", name, data=data)
+    def _write(self, name: Name, data: Iterable[bytes]) -> None:
+        self._request("write", name, data=data)
 
-    def _delitem(self, name: Name) -> None:
+    def _delete(self, name: Name) -> None:
         self._request("delete", name)
 
     def _metadata(self, name: Name) -> MetadataStorage:
         return TestCliMetadataDataStorage(name, self._request)
 
-    def _find(self, **filters: MetadataValue) -> Iterable[Name]:
+    @override
+    def find(self, **filters: MetadataValue) -> Iterable[Name]:
         filters_str = [f"{k}={v}" for k, v in filters.items()]
         data = self._request("find", *filters_str)
         return reverse_prints(data)
 
     def _list(self) -> Iterable[Name]:
-        return self._find()
+        raise NotImplementedError()  # we implement find # pragma: no coverage
 
     def info(self) -> dict:
         """TODO"""
         info_remote = self._request("info")
-        info_remote = json_loads(info_remote)
+
+        bdata = as_bytes(info_remote)  # i dont think there is a point in streaming this
+        info_remote = json_loadb(bdata)
         info_client = super().info()
         info_client.update({"remote": info_remote})
 

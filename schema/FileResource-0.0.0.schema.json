@@ -1,0 +1,106 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "http://purl.org/dataschema/datatools/FileResource-0.0.0.schema.json",
+  "title": "datatools FileResource schema",
+  "version": "0.0.0",
+  "$defs": {
+    "@id": {
+      "type": "string",
+      "format": "uri-reference"
+    },
+    "Function": {
+      "type": "object",
+      "properties": {
+        "@id": { "$ref": "#/$defs/@id" },
+        "description": { "$ref": "#/$defs/description" }
+      },
+      "required": ["@id"],
+      "allowOthers": true
+    },
+    "CreationEvent": {
+      "type": "object",
+      "properties": {
+        "@id": { "$ref": "#/$defs/@id" },
+        "usedFunction": { "$ref": "#/$defs/usedFunction" },
+        "usedInput": { "$ref": "#/$defs/usedInput" },
+        "creator": { "$ref": "#/$defs/creator" },
+        "datetime": { "$ref": "#/$defs/datetime" },
+        "taskId": { "$ref": "#/$defs/taskId" }
+      },
+      "required": ["@id", "usedFunction", "creator", "datetime", "usedInput"],
+      "allowOthers": true
+    },
+    "Serialization": {
+      "type": "object",
+      "properties": {
+        "@id": { "$ref": "#/$defs/@id" },
+        "roleName": { "$ref": "#/$defs/roleName" },
+        "usedFunction": { "$ref": "#/$defs/usedFunction" }
+      },
+      "required": ["@id", "usedFunction"],
+      "allowOthers": false
+    },
+    "Deserialization": {
+      "type": "object",
+      "properties": {
+        "@id": { "$ref": "#/$defs/@id" },
+        "value": { "$ref": "#/$defs/value" },
+        "roleName": { "$ref": "#/$defs/roleName" },
+        "usedFunction": { "$ref": "#/$defs/usedFunction" }
+      },
+      "required": ["@id", "roleName", "value", "usedFunction"],
+      "allowOthers": false
+    },
+    "LiteralParameter": {
+      "type": "object",
+      "properties": {
+        "@id": { "$ref": "#/$defs/@id" },
+        "value": { "$ref": "#/$defs/value" },
+        "roleName": { "$ref": "#/$defs/roleName" }
+      },
+      "required": ["@id", "roleName", "value"],
+      "allowOthers": false
+    },
+    "createdBy": { "$ref": "#/$defs/CreationEvent" },
+    "serializedWith": { "$ref": "#/$defs/Serialization" },
+    "event": {
+      "type": "object",
+      "properties": { "@id": { "$ref": "#/$defs/@id" } }
+    },
+    "usedFunction": { "$ref": "#/$defs/Function" },
+    "usedInput": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "$ref": "#/$defs/Deserialization" },
+          { "$ref": "#/$defs/LiteralParameter" }
+        ]
+      }
+    },
+    "roleName": { "type": "string" },
+    "value": {},
+    "taskId": { "type": "string" },
+    "datetime": { "type": "string", "format": "datetime" },
+    "creator": { "type": "string" },
+    "description": { "type": "string" },
+    "name": { "type": "string" },
+    "bytes": { "type": "integer" },
+    "hash": { "type": "string" },
+    "format": { "type": "string" },
+    "mediatype": { "type": "string" },
+    "encoding": { "type": "string" }
+  },
+  "type": "object",
+  "properties": {
+    "@id": { "$ref": "#/$defs/@id" },
+    "createdBy": { "$ref": "#/$defs/CreationEvent" },
+    "name": { "$ref": "#/$defs/name" },
+    "bytes": { "$ref": "#/$defs/bytes" },
+    "hash": { "$ref": "#/$defs/hash" },
+    "format": { "$ref": "#/$defs/format" },
+    "mediatype": { "$ref": "#/$defs/mediatype" },
+    "encoding": { "$ref": "#/$defs/encoding" }
+  },
+  "required": ["@id", "name", "createdBy"],
+  "allowOthers": true
+}

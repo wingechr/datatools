@@ -13,8 +13,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-      - run: |
-          pip install uv
-          uv sync --group=docs
-      - run: |
-          uv run mkdocs gh-deploy --force
+      - run: pip install uv
+      - run: uv run --group=docs mkdocs gh-deploy --force
