@@ -14,23 +14,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-      - run: |
-          pip install uv
-          uv sync --group=test
-      - run: |
-          uv run tox
-
+      - run: pip install uv
+      - run: uv run --group=test tox
   codecov:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-      - run: |
-          pip install uv
-          uv sync --group=test
-      - run: |
-          uv run -p3.11 pytest -v --cov=datatools --cov-report=term-missing --cov-report=xml:coverage.xml
+      - run: uv run -p3.11 --group=test pytest -v --cov=datatools --cov-report=term-missing --cov-report=xml:coverage.xml
       - uses: codecov/codecov-action@v4
         with:
           files: coverage.xml
