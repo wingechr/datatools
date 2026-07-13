@@ -120,7 +120,8 @@ class SqlDataStorage(DataStorage):
         )
         row = resp.fetchone()
         if not row:
-            raise StorageFileNotFoundError(f"Not found: {name}")
+            # should not happen - we always check existence first
+            raise StorageFileNotFoundError(f"Not found: {name}")  # pragma: no coverage
         bdata: bytes = row[0]
         yield bdata
 

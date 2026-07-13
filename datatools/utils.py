@@ -1224,12 +1224,31 @@ class CollectStatsIteratorHash(CollectStatsIterator[bytes, Any, str]):
 def as_byte_iterable(
     data: ByteData, chunk_size_if_buffer: int = DEFAULT_CHUNK_SIZE
 ) -> Iterable[bytes]:
-    """TODO"""
+    """TODO
+
+    Example:
+
+    >>> next(as_byte_iterable(b'a'))
+    b'a'
+    >>> next(as_byte_iterable([b'a']))
+    b'a'
+    >>> from io import BufferedReader, BytesIO
+    >>> buf = BufferedReader(BytesIO(b'a'))
+    >>> next(as_byte_iterable(buf))
+    b'a'
+    >>> next(as_byte_iterable(1))
+    Traceback (most recent call last):
+    ...
+    TypeError:
+
+    """
     if isinstance(data, bytes):
         yield data
     elif isinstance(data, BufferedReader):
         yield from buffer_to_byte_iterable(data, chunk_size=chunk_size_if_buffer)
     elif isinstance(data, Iterable):
+        # we cannot really testm only assume that items are bytes
+        # because we dont want to consume them
         yield from cast(Iterable[bytes], data)
     else:
         raise TypeError(f"Unexpected type: {type(data)}")

@@ -29,8 +29,10 @@ from datatools.storage.memory import MemoryDataStorage
 from datatools.storage.sql import SqlDataStorage
 from datatools.types import (
     JSON_SCHEMA_FILE_RESOURCE,
+    LOCKFILE_SUFFIX,
     RDF_CONTEXT,
     SINGLE_OUTPUT_PARAM_NAME,
+    TEMPFILE_SUFFIX,
     URIRefs as u,
 )
 from datatools.utils import (
@@ -134,6 +136,28 @@ class TestStorageFiles(TempdirTestCase):
             StorageInvalidNameError, storage._assert_valid_name, "/root/dir"
         )
         self.assertRaises(StorageInvalidNameError, storage._assert_valid_name, "../xyz")
+
+    def test_temp_and_lockfiles(self):
+        """TODO"""
+        storage = FileDataStorage(str(self.temp_dir))
+        name = "example.txt"
+        name_temp = "example.txt" + TEMPFILE_SUFFIX
+        name_lock = "example.txt" + LOCKFILE_SUFFIX
+        (self.temp_dir / name).touch()
+        # create lock/tempfile
+        (self.temp_dir / (name_lock)).touch()
+        (self.temp_dir / (name_temp)).touch()
+
+        # lock/tempfile should not be found
+        self.assertEqual(list(storage.find()), [name])
+
+        # namesshould not ba allowed
+        self.assertRaises(
+            StorageInvalidNameError, storage._assert_valid_name, name_temp
+        )
+        self.assertRaises(
+            StorageInvalidNameError, storage._assert_valid_name, name_lock
+        )
 
     def test_existing_invalid_metadata(self):
         """raise exception"""
@@ -443,6 +467,11 @@ class TestUseCases(TestCase):
             input_converters=dict.fromkeys(inputs, pickle.load),
             output_converters=dict.fromkeys(outputs, pickle.dumps),
         )
+
+        # call without output name should cause error
+        self.assertRaises(Exception, task_create_output)
+        # call without input name should cause error
+        self.assertRaises(Exception, task_create_output, "OUTPUT")
 
         # try to call mutliple times - but only of output does not exist
         for _ in range(2):

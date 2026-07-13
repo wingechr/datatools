@@ -84,7 +84,7 @@ commands = [["pytest"]]
 
 
 [tool.poe.tasks]
-cov = "uv run pytest --cov=datatools --cov-report=term-missing --cov-report=html:htmlcov --cov-report=xml:coverage.xml"
+cov = "uv run -p3.11 pytest -v --cov=datatools --cov-report=term-missing --cov-report=html:htmlcov --cov-report=xml:coverage.xml"
 test = "uv run tox"
 docs = "uv run mkdocs build"
 run = "uv run -m datatools -l debug"

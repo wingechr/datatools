@@ -129,10 +129,19 @@ class FileDataStorage(DataStorage):
         """should be a relative path"""
         name = name.strip()
         abs_path = self._get_abs_path(name)
+
         if not abs_path.is_relative_to(self._location):
             raise StorageInvalidNameError(
                 f"Cannot use name outside of storage location: {name}", name=Name()
             )
         if abs_path.exists() and not abs_path.is_file():
             raise StorageInvalidNameError(f"name must be a file: {name}", name=Name())
+
+        if (
+            name.endswith(self.metadata_sufix)
+            or name.endswith(LOCKFILE_SUFFIX)
+            or name.endswith(TEMPFILE_SUFFIX)
+        ):
+            raise StorageInvalidNameError(f"Reserved name: {name}", name=Name())
+
         return abs_path.relative_to(self._location).as_posix()
