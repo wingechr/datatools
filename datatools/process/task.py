@@ -142,8 +142,19 @@ class _Job:
         self.output_writers = output_writers
         self.input_readers = input_readers
         self.input_params = input_params
-        self.function = function
+        self.function = AnnotatedFunction.assert_wrapped(function)
         self.check_done = check_done
+
+        # check for missing output arguments
+        for name in self.output_writers:
+            if not self.output_names.get(name):
+                raise KeyError(f"No value was provided for output {name}")
+
+        # check for missing input arguments - not directly possible
+        # because Literal parser may be able to use None as value
+        # for name in self.input_readers:
+        #    if not self.input_params.get(name):
+        #        raise KeyError(f"No value was provided for input {name}")
 
     def __call__(self):
         """TODO"""

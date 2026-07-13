@@ -226,7 +226,9 @@ class DataStorage(ABC):
         output_converters: dict[str, FunToByteData | None]
         | FunToByteData
         | None = None,
-        input_converters: dict[str, FunFromByteBuffer | None] | None = None,
+        input_converters: dict[str, FunFromByteBuffer | None]
+        | FunFromByteBuffer
+        | None = None,
         metadata_generator: Callable[[Any], dict[str, Json]] | None = None,
         get_job_hashsum: FunHashsum = default_get_task_uuid,
         skip_finished: bool = False,
@@ -256,6 +258,8 @@ class DataStorage(ABC):
 
         def wrap_input_handler(name: str, handler: FunFromByteBuffer):
             def handle_(name_value: Name):
+                if name_value is None:
+                    raise KeyError("No value provided for input {name}")
                 callback_data["input_parameter_values"][name] = name_value
                 handler_w = AnnotatedFunction.assert_wrapped(handler)
 
@@ -379,6 +383,12 @@ class DataStorage(ABC):
         }
 
         input_converters = input_converters or {}
+        if not isinstance(input_converters, dict):
+            # input_converters is single function
+            # we map it to first input of function
+            param_name = wrapped_function.fun_parameter_names[0]
+            input_converters = {param_name: input_converters}
+
         # !! we need to wrap all input parameters
         wrapped_input_handlers = {
             name: (
