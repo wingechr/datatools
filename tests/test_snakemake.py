@@ -3,11 +3,23 @@
 import os
 from pathlib import Path
 import subprocess
+import sys
+import unittest
+
+import pytest
 
 from datatools.storage.file import FileDataStorage
 from tests.base import TempdirTestCase
 
 
+@unittest.skipIf(
+    sys.version_info < (3, 11),
+    "Requires Python 3.11+",
+)
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Requires Python 3.11+",
+)
 class TestSnakemake(TempdirTestCase):
     """TODO"""
 

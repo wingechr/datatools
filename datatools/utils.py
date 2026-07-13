@@ -775,9 +775,9 @@ def get_df_table_schema(df: pd.DataFrame) -> dict[str, Any]:
     """TODO
 
     >>> from pandas import DataFrame
-    >>> df = DataFrame([{"f1": 1, "f2": "x"}, {"f1": 2}])
+    >>> df = DataFrame([{"f1": 1, "f2": 2.2}, {"f1": 2}])
     >>> get_df_table_schema(df)
-    {'fields': [{'name': 'f1', 'data_type': 'int64', 'is_nullable': False}, {'name': 'f2', 'data_type': 'str', 'is_nullable': True}]}
+    {'fields': [{'name': 'f1', 'data_type': 'int64', 'is_nullable': False}, {'name': 'f2', 'data_type': 'float64', 'is_nullable': True}]}
 
     """  # noqa W501
     fields: list[dict[str, Any]] = []
@@ -974,7 +974,7 @@ def get_function_id(fun: Callable) -> str:
     >>> get_function_id(lambda x:x)
     '<lambda>'
     >>> from pandas import DataFrame
-    >>> get_function_id(DataFrame)
+    >>> get_function_id(DataFrame).replace(".core.frame:", ":") # older pandas
     'pandas:DataFrame'
     >>> get_function_id(open)
     'io:open'
