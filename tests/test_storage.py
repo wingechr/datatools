@@ -1,7 +1,7 @@
 """TODO"""
 
 import datetime
-from io import BufferedReader
+from io import BufferedReader, BytesIO
 import json
 from pathlib import Path
 import pickle
@@ -11,6 +11,8 @@ from unittest import TestCase
 
 from click.testing import CliRunner
 import httpx
+import pandas as pd
+from pandas.testing import assert_frame_equal
 import uvicorn
 
 from datatools.__main__ import main
@@ -582,3 +584,51 @@ class TestUseCases(TestCase):
         st.metadata("data").set("encoding", "windows-1252")
         # now it works
         task("data2", text="data")
+
+
+class TestCache(TestCase):
+    """TODO"""
+
+    def test_cache(self):
+        """TODO"""
+        df = pd.DataFrame([{"a": 1, "b": "Ö", "c": 1.2}, {"a": 2, "b": "ß"}])
+
+        # fixme also use buffer / byte iterator / string iterator
+        c_pickle = MemoryDataStorage().cache(pickle.dumps, pickle.loads)
+        # use orient="table" to preserve index names
+        c_json = MemoryDataStorage().cache(
+            lambda df: df.to_json(orient="table").encode("utf-8"),
+            lambda bts: pd.read_json(BytesIO(bts), orient="table"),
+        )
+
+        # FIXME: must save index names and col dims in metadata
+        # for round trip
+        _c_csv = MemoryDataStorage().cache(
+            lambda df: df.to_csv().encode("utf-8"),
+            lambda bts: pd.read_csv(BytesIO(bts), encoding="utf-8"),
+        )
+
+        def f_single_index():
+            return df.set_index("a")
+
+        def f_multi_index():
+            return df.set_index(["a", "b"])
+
+        # test mastrix of functions and cache types
+        for f in [f_single_index, f_multi_index]:
+            for i, cache in enumerate(
+                [
+                    c_pickle,
+                    c_json,
+                    # c_csv,  # FIXME: must save index names and col dims in metadata
+                ]
+            ):
+                df1 = f()
+                df2 = cache(f)()
+                try:
+                    assert_frame_equal(f(), cache(f)())
+                except Exception:
+                    print("=====", f.__name__, f"cache:{i}")
+                    print(df1)
+                    print(df2)
+                    raise

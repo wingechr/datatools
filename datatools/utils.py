@@ -17,6 +17,7 @@ import logging
 import math
 import os
 from pathlib import Path
+from queue import Queue
 import re
 import site
 import socket
@@ -54,9 +55,11 @@ from datatools.types import (
     Json,
     StrPath,
     SubCls,
+    T,
 )
 
 if TYPE_CHECKING:
+    from _typeshed import SupportsWrite
     from sqlalchemy.engine import CursorResult
     from sqlalchemy.engine.row import Row
 
@@ -65,6 +68,7 @@ DATETIMETZ_FMT = "%Y-%m-%dT%H:%M:%S%z"
 DATE_FMT = "%Y-%m-%d"
 TIME_FMT = "%H:%M:%S"
 ANONYMOUS_USER = "ANONYMOUS"
+DEFAULT_ENCODING = "utf-8"
 
 
 class TextFile:
@@ -73,7 +77,7 @@ class TextFile:
     def __init__(
         self,
         path: str | Path,
-        encoding="utf-8",
+        encoding=DEFAULT_ENCODING,
         errors: Literal["strict", "replace", "ignore"] = "strict",
         ensure_ascii=False,
         sort_keys=False,
@@ -1345,3 +1349,61 @@ def get_item_or_first(x):
             return None
         return x[0]
     return x
+
+
+class BufferIter(Generic[T]):
+    r"""TODO
+
+    Example:
+
+    >>> import json
+    >>> f = BufferIter(json.dump, ensure_ascii=False)
+    >>> chunks = list(f({"äbc": 1}))
+    >>> b"".join(chunks)
+    b'{"\xc3\xa4bc": 1}'
+
+    """
+
+    EOF = object()
+    NEXT = object()
+
+    def write(self, data: bytes | str):
+        """TODO"""
+        # FIXME: determine on init, dont check on every write call
+        if isinstance(data, str):
+            data = data.encode(encoding=self._encoding_if_str)
+        self._queue.put(data)
+
+    def __init__(
+        self,
+        dump: Callable[[T, "SupportsWrite[bytes]"], None],
+        encoding_if_str: str | None = None,
+        **kwargs,
+    ):
+        self._queue = Queue()
+        self._reverse_queue = Queue()
+        self._dump = dump
+        self._kwargs = kwargs
+        self._encoding_if_str: str = encoding_if_str or DEFAULT_ENCODING
+
+    def __call__(self, data: T) -> Iterable[bytes]:
+        """TODO"""
+
+        def f():
+            self._dump(data, self, **self._kwargs)
+            # wait for consumer thread to finish processing
+            self._reverse_queue.get()
+            # send close signal
+            self._queue.put(self.EOF)
+
+        thread = Thread(target=f, daemon=False)
+        thread.start()
+        while True:
+            chunk = self._queue.get(block=True, timeout=None)
+            if chunk is self.EOF:
+                break
+            yield chunk
+            # chunk consumned:
+            self._reverse_queue.put(self.NEXT)
+
+        thread.join()  # TODO: do we need it?
