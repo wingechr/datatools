@@ -185,7 +185,7 @@ def serve(ctx_data_storage: DataStorage, host: str, port: int) -> None:
 @click.option("--imap-port", "-p", type=int, default=DEFAULT_IMAP_PORT)
 @click.option("--imap-folder", "-f", type=str, default=DEFAULT_IMAP_FOLDER)
 @click.option("--email-whitelist", "-w", type=str, multiple=True)
-def monitor_mailbox(
+def monitor_mailbox(  # pragma: no cover - we test the imap monitor directly
     ctx_data_storage: DataStorage,
     login_mail: str,
     imap_port: int,
@@ -200,7 +200,7 @@ def monitor_mailbox(
         imap_port=imap_port,
         imap_folder=imap_folder,
     )
-    monitor.serve()
+    monitor.serve_forever()
 
 
 if __name__ == "__main__":  # pragma: no cover

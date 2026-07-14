@@ -7,10 +7,10 @@ from email.message import Message
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import parseaddr
 from io import BytesIO
 import json
 import logging
-import re
 import smtplib
 import ssl
 from typing import TYPE_CHECKING
@@ -97,6 +97,8 @@ class MailAttachmentHandler(ABC):
         imap_port: int = DEFAULT_IMAP_PORT,
         imap_folder: str = DEFAULT_IMAP_FOLDER,
         idle_check_timeout: int = 10,
+        use_ssl: bool = False,
+        use_starttls: bool = True,
     ):  #
         user, passwd, host = split_email(login_mail)
 
@@ -109,6 +111,8 @@ class MailAttachmentHandler(ABC):
         self.email_whitelist_lower = {
             x.lower() for x in set(email_whitelist) | {self.login_mail}
         }
+        self.use_ssl = use_ssl
+        self.use_starttls = use_starttls
 
     def try_get_date_str(self, message: Message) -> str | None:
         """TODO"""
@@ -123,25 +127,13 @@ class MailAttachmentHandler(ABC):
     def extract_mail(self, mail: str | None) -> str | None:
         """TODO"""
         if not mail:
-            return ""
-        match = re.match(".*<([^>@]+@[^>@]+)>", mail)
-        if not match:
-            logging.warning(f"Unexpected mail string: {mail}")
-            return mail
-
-        return match.groups()[0]
-
-    def try_extract_from_mail(self, mail: str | None) -> str | None:
-        """TODO"""
-        if not mail:
-            return ""
-        mail = re.sub(r"\s+", " ", mail)
-        match = re.match(".*From:[^<]*<([^>@]+@[^>@]+)>", mail)
-        if not match:
-            logging.warning("Could not get From mail")
             return None
-
-        return match.groups()[0]
+        try:
+            _name, mail = parseaddr(mail)
+        except Exception:
+            logging.warning("Could not get original From mail: %s", mail)
+            return None
+        return mail
 
     def connect_client(self) -> IMAPClient:
         """TODO"""
@@ -155,15 +147,16 @@ class MailAttachmentHandler(ABC):
             self.imap_folder,
         )
         client = IMAPClient(
-            host=self.host, port=self.imap_port, ssl=False, use_uid=True
+            host=self.host, port=self.imap_port, ssl=self.use_ssl, use_uid=True
         )
-        client.starttls(ssl_context)  # upgrade to TLS
+        if self.use_starttls:
+            client.starttls(ssl_context)  # upgrade to TLS
         client.login(self.login_mail, self.password)
         client.select_folder(self.imap_folder)
         logging.debug("connect_client: ok")
         return client
 
-    def check(self, client: IMAPClient, remove_flag_seen: bool = False):
+    def _check(self, client: IMAPClient, remove_flag_seen: bool = False):
         """TODO"""
         logging.debug("check: checking for new messages...")
         messages: list[int] = client.search("UNSEEN")
@@ -230,7 +223,19 @@ class MailAttachmentHandler(ABC):
         # Iterate through parts and return the first text/plain part
         attachments = []
         texts = []
+        from_original = None
         for part in message.walk():
+            try:
+                msg_orig = part.get_payload(0)  # the embedded Message object
+                _from_original = self.extract_mail(msg_orig["From"])  # type:ignore
+                if _from_original:
+                    if from_original:
+                        logging.warning("Multiple original From found")
+                    else:
+                        from_original = _from_original
+            except Exception:  # noqa:S110
+                pass
+
             attachment = self.handle_message_part(part)
             if attachment.filename:
                 attachments.append(attachment)
@@ -238,7 +243,6 @@ class MailAttachmentHandler(ABC):
                 texts.append(attachment.data)
 
         text = "\n\n".join(texts)
-        from_original = self.try_extract_from_mail(text)
 
         if from_original:
             metadata.FromOriginal = from_original
@@ -252,12 +256,17 @@ class MailAttachmentHandler(ABC):
         self, attachments: list[Attachment], metadata: MailMetadata
     ): ...
 
-    def serve(self):
+    def serve_forever(self):
         """TODO"""
         client = self.connect_client()
         while True:
-            self.check(client)
+            self._check(client)
             client.idle_check(timeout=self.idle_check_timeout)
+
+    def check(self):
+        """TODO"""
+        client = self.connect_client()
+        self._check(client)
 
 
 class MailAttachmentForwadHandler(MailAttachmentHandler):
@@ -271,6 +280,8 @@ class MailAttachmentForwadHandler(MailAttachmentHandler):
         imap_folder: str = DEFAULT_IMAP_FOLDER,
         smtp_port: int = DEFAULT_SMTP_PORT,
         idle_check_timeout: int = 10,
+        use_ssl: bool = False,
+        use_starttls: bool = True,
     ):
         super().__init__(
             login_mail=login_mail,
@@ -278,6 +289,8 @@ class MailAttachmentForwadHandler(MailAttachmentHandler):
             imap_port=imap_port,
             idle_check_timeout=idle_check_timeout,
             imap_folder=imap_folder,
+            use_ssl=use_ssl,
+            use_starttls=use_starttls,
         )
         self.smtp_port = smtp_port
 
@@ -330,7 +343,9 @@ class MailAttachmentForwadHandler(MailAttachmentHandler):
 
         # Send email
         server = smtplib.SMTP(self.host, self.smtp_port)
-        server.starttls()
+        if self.use_starttls:
+            server.starttls()
+
         server.login(self.login_mail, self.password)
         server.send_message(msg)
         server.quit()
@@ -347,6 +362,8 @@ class MailAttachmentStorageHandler(MailAttachmentHandler):
         imap_port: int = DEFAULT_IMAP_PORT,
         imap_folder: str = DEFAULT_IMAP_FOLDER,
         idle_check_timeout: int = 10,
+        use_ssl: bool = False,
+        use_starttls: bool = True,
     ):
         super().__init__(
             login_mail=login_mail,
@@ -354,6 +371,8 @@ class MailAttachmentStorageHandler(MailAttachmentHandler):
             imap_port=imap_port,
             idle_check_timeout=idle_check_timeout,
             imap_folder=imap_folder,
+            use_ssl=use_ssl,
+            use_starttls=use_starttls,
         )
         self.storage = storage
 
