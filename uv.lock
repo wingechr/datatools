@@ -761,6 +761,15 @@ wheels = [
 ]
 
 [[package]]
+name = "imapclient"
+version = "3.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/58/79/8138f8c91e791f49cf4c2269b1eaaaddb93013d162e92ddc249b84d38105/imapclient-3.1.0.tar.gz", hash = "sha256:b0413a516ffcc4b4d69f2c611c0e95da57968edf5a5c78ac82d1bf882305facc", size = 199675, upload-time = "2026-01-17T18:50:12.186Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8a/a8/a0f86ed51f792d9e6afcc062db2766033be7d1028d1fd5deaf38b075430a/imapclient-3.1.0-py2.py3-none-any.whl", hash = "sha256:34c192ffe82936e940a998ac89c474296942cd7c4f6c208f0fccfcd972946038", size = 182536, upload-time = "2026-01-17T18:49:09.105Z" },
+]
+
+[[package]]
 name = "immutables"
 version = "0.21"
 source = { registry = "https://pypi.org/simple" }
@@ -2979,11 +2988,13 @@ dependencies = [
     { name = "fastapi" },
     { name = "frictionless" },
     { name = "httpx" },
+    { name = "imapclient" },
     { name = "jsonpath-ng" },
     { name = "openpyxl" },
     { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "pandas", version = "3.0.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "pydantic" },
+    { name = "python-dateutil" },
     { name = "rdflib" },
     { name = "sqlalchemy" },
     { name = "sqlparse" },
@@ -3024,10 +3035,12 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.138" },
     { name = "frictionless", specifier = ">=5.19" },
     { name = "httpx", specifier = ">=0.28" },
+    { name = "imapclient", specifier = "~=3.0" },
     { name = "jsonpath-ng", specifier = ">=1.8" },
     { name = "openpyxl", specifier = ">=3.0" },
     { name = "pandas", specifier = ">=2.0" },
     { name = "pydantic", specifier = ">=2.13" },
+    { name = "python-dateutil", specifier = ">=2.9.0.post0" },
     { name = "rdflib", specifier = ">=7.6" },
     { name = "sqlalchemy", specifier = ">=2.0" },
     { name = "sqlparse", specifier = ">=0.5" },

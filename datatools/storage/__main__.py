@@ -10,6 +10,11 @@ import uvicorn
 
 from datatools.storage.base import DataStorage
 from datatools.storage.http import make_server_app
+from datatools.storage.mail import (
+    DEFAULT_IMAP_FOLDER,
+    DEFAULT_IMAP_PORT,
+    MailAttachmentStorageHandler,
+)
 from datatools.utils import (
     buffer_to_byte_iterable,
     json_dumps,
@@ -172,6 +177,30 @@ def serve(ctx_data_storage: DataStorage, host: str, port: int) -> None:
     """TODO"""
     app = make_server_app(data_storage=ctx_data_storage)
     uvicorn.run(app, host=host, port=port)
+
+
+@main.command("monitor-mailbox")
+@click.pass_obj
+@click.argument("login_mail")
+@click.option("--imap-port", "-p", type=int, default=DEFAULT_IMAP_PORT)
+@click.option("--imap-folder", "-f", type=str, default=DEFAULT_IMAP_FOLDER)
+@click.option("--email-whitelist", "-w", type=str, multiple=True)
+def monitor_mailbox(
+    ctx_data_storage: DataStorage,
+    login_mail: str,
+    imap_port: int,
+    imap_folder: str,
+    email_whitelist: list[str],
+) -> None:
+    """TODO"""
+    monitor = MailAttachmentStorageHandler(
+        storage=ctx_data_storage,
+        login_mail=login_mail,
+        email_whitelist=email_whitelist,
+        imap_port=imap_port,
+        imap_folder=imap_folder,
+    )
+    monitor.serve()
 
 
 if __name__ == "__main__":  # pragma: no cover
