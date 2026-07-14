@@ -30,7 +30,6 @@ def _create_msg(
 
     # original message
     msg = MIMEMultipart()
-    # msg["Message-ID"] = email.utils.make_msgid()
     msg["From"] = formataddr(("Original", TEST_MAIL_ORIGINAL))
     msg["To"] = mail_forwarded_from
     msg["Subject"] = "Original subject"
@@ -45,12 +44,10 @@ def _create_msg(
 
     # forward
     fwd = MIMEMultipart()
-    # fwd["Message-ID"] = str(msg_id)
     fwd["From"] = mail_forwarded_from
     fwd["To"] = TEST_MAIL
     fwd["Subject"] = "Fwd: Original subject"
     fwd["Date"] = date
-
     fwd.attach(MIMEText("Forwarded text", "plain"))
     fwd.attach(MIMEMessage(msg))
 
@@ -85,6 +82,10 @@ class _IMAPHandler(socketserver.StreamRequestHandler):
         super().setup()
         self.mailbox = _Mailbox()
 
+    def _send(self, data: bytes):
+        self.wfile.write(data)
+        self.wfile.flush()
+
     def handle(self):
         self._send(b"* OK IMAP4rev1 Mock Server Ready\r\n")
         while True:
@@ -97,8 +98,6 @@ class _IMAPHandler(socketserver.StreamRequestHandler):
             rest = parts[2] if len(parts) > 2 else ""
             handler = getattr(self, f"cmd_{cmd}")
             handler(tag, rest)
-
-    # -- command handlers ---------------------------------------------
 
     def cmd_CAPABILITY(self, tag: str, rest: str):
         self._send(b"* CAPABILITY IMAP4rev1\r\n")
@@ -138,10 +137,6 @@ class _IMAPHandler(socketserver.StreamRequestHandler):
 
         else:
             raise NotImplementedError()  # pragma: no cover
-
-    def _send(self, data: bytes):
-        self.wfile.write(data)
-        self.wfile.flush()
 
 
 class MockIMAPServer(socketserver.TCPServer):
