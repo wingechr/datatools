@@ -183,12 +183,14 @@ class URIRefs(MyEnum[ExtURIRef]):
     encoding = ExtURIRef(ns["encoding"])  # not used yet,e.g. "utf-8"
 
 
+# use http, becaus most others vocabs do it too
 RDF_CONTEXT = {"@vocab": "http://purl.org/dataschema/datatools#"} | {
     k: str(v) for k, v in Namespaces.as_dict().items()
 }
 
 JSON_SCHEMA_FILE_RESOURCE = (
-    "http://purl.org/dataschema/datatools/FileResource-0.0.0.schema.json"
+    # use https, otherwise vscode has trouble loading the forwarded url
+    "https://purl.org/dataschema/datatools/FileResource-0.0.0.schema.json"
 )
 
 LOCKFILE_SUFFIX = ".__lock"
