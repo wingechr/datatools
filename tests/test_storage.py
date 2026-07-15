@@ -237,7 +237,7 @@ class TestCliWrapperDataStorage(TestCase):
             runner2 = CliRunner()
             resp = runner2.invoke(
                 main,
-                ["storage", "-l", url, "import", str(path), "data"],
+                ["storage", "-l", url, "import", "data", path.as_uri()],
             )
 
             # retrieve
