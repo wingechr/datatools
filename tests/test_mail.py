@@ -4,7 +4,10 @@ from threading import Thread
 from time import sleep
 from unittest import TestCase
 
-from datatools.storage.imap import (
+from datatools.storage.mail import MailAttachmentStorageHandler
+from datatools.storage.memory import MemoryDataStorage
+from datatools.utils import get_free_port
+from tests.mock.imap import (
     TEST_DATE,
     TEST_HOST,
     TEST_LOGIN,
@@ -12,9 +15,6 @@ from datatools.storage.imap import (
     TEST_MAIL_WHILTELISTED,
     MockIMAPServer,
 )
-from datatools.storage.mail import MailAttachmentStorageHandler
-from datatools.storage.memory import MemoryDataStorage
-from datatools.utils import get_free_port
 
 
 class TestMail(TestCase):
@@ -40,6 +40,8 @@ class TestMail(TestCase):
 
         handler.check()
         resources = set(storage.find())
-        msg_id = 2  # 1 and 3 are ignored
-        expected_name = f"{TEST_DATE}_{TEST_MAIL_ORIGINAL}_{msg_id}/test.txt"
-        self.assertEqual({expected_name}, resources)
+        print(resources)
+        expected_name_2 = f"{TEST_DATE}_{TEST_MAIL_ORIGINAL}_{2}/test.txt"
+        expected_name_4 = f"{TEST_DATE}_{TEST_MAIL_WHILTELISTED}_{4}/test.txt"
+
+        self.assertEqual({expected_name_2, expected_name_4}, resources)

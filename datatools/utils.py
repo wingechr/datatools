@@ -4,6 +4,7 @@ import codecs
 from collections.abc import Callable, Iterable, Iterator
 import csv
 import datetime
+from email.utils import parseaddr
 from functools import cache, partial
 import hashlib
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -33,6 +34,7 @@ import uuid
 import chardet
 from filelock import FileLock
 import frictionless
+import html2text
 import httpx
 import jsonpath_ng
 import jsonpath_ng.ext
@@ -1439,3 +1441,41 @@ class BufferIter(Generic[T]):
             self._reverse_queue.put(self.NEXT)
 
         thread.join()  # TODO: do we need it?
+
+
+def get_plain_text_msg_and_original_from(text: str) -> tuple[str, str | None]:
+    r"""TODO
+
+    Example:
+
+    >>> get_plain_text_msg_and_original_from('text')
+    ('text', None)
+
+    >>> get_plain_text_msg_and_original_from('<html><b>text</b></html>')
+    ('**text**', None)
+
+    >>> get_plain_text_msg_and_original_from(
+    ...     '-----Original Message-----\r\n'
+    ...     'From: user <user@test.com>\r\n'
+    ...     '\r\n'
+    ...     'text'
+    ... )
+    ('-----Original Message-----\nFrom: user <user@test.com>\n\ntext', 'user@test.com')
+
+    """
+    text = text.replace("\r\n", "\n")
+    text = text.strip()
+
+    from_mail = None
+
+    if m := re.match(".*---Original Message---[-]*\nFrom: ([^\n]+)", text, re.DOTALL):
+        _name, from_mail = parseaddr(m.groups()[0])
+    if "<html>" in text:
+        h = html2text.HTML2Text()
+        h.ignore_links = False  # set True to strip links entirely
+        h.ignore_images = True
+        h.body_width = 0  # don't wrap lines
+        h.unicode_snob = True  # preserve unicode chars instead of ASCII-fying them
+        text = h.handle(text)
+    text = text.strip()
+    return text, from_mail

@@ -12,6 +12,7 @@ dependencies = [
     "coloredlogs>=15.0",
     "fastapi>=0.138",
     "frictionless>=5.19",
+    "html2text>=2025.4.15",
     "httpx>=0.28",
     "imapclient~=3.0",
     "jsonpath-ng>=1.8",

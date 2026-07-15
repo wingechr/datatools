@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
-from email import message_from_bytes
+from email import message_from_bytes, policy
 from email.message import Message
 from email.utils import parseaddr
 import logging
@@ -12,6 +12,9 @@ from urllib.parse import unquote
 
 import dateutil
 from imapclient import IMAPClient
+
+from datatools import AnnotatedFunction
+from datatools.utils import get_plain_text_msg_and_original_from
 
 if TYPE_CHECKING:
     from datatools.storage.base import DataStorage
@@ -121,9 +124,10 @@ class MailAttachmentHandler(ABC):
         """TODO"""
         logging.debug("check: checking for new messages...")
         messages: list[int] = client.search("UNSEEN")
-        for _uid, message_data in client.fetch(messages, "RFC822").items():
+        for uid, message_data in client.fetch(messages, "RFC822").items():
+            logging.info("found message %s", uid)
             message_bytes: bytes = message_data[b"RFC822"]  # type:ignore -> Exception
-            message = message_from_bytes(message_bytes)
+            message = message_from_bytes(message_bytes, policy=policy.default)
             self.handle_message(message)
         logging.debug("check: done")
 
@@ -155,9 +159,9 @@ class MailAttachmentHandler(ABC):
         if from_mail.lower() not in self.email_whitelist_lower:
             logging.info("Ignore mail from : %s", from_mail)
             return
-
+        _, message_id = parseaddr(message["Message-ID"])  # ususally <x@y>
         metadata = MailMetadata(
-            MessageID=message.get("Message-ID"),
+            MessageID=message_id,
             FromForwarded=from_mail,
             Subject=message.get("Subject"),
             Date=dateutil.parser.parse(message["Date"]).strftime("%Y-%m-%d"),
@@ -167,28 +171,30 @@ class MailAttachmentHandler(ABC):
         # Iterate through parts and return the first text/plain part
         attachments = []
         texts = []
-        from_original = None
         for part in message.walk():
-            try:
-                msg_orig = part.get_payload(0)  # the embedded Message object
-                _name, _from_original = parseaddr(msg_orig["From"])  # type: ignore
-                if _from_original:
-                    # TODO is it possible that is happens multiple times?
-                    from_original = _from_original
-            except Exception:  # noqa:S110
-                pass
+            text_or_attachment = self.handle_message_part(part)
+            if text_or_attachment.filename:
+                logging.info(
+                    "found attachment: %s (%s)",
+                    text_or_attachment.filename,
+                    text_or_attachment.contentType,
+                )
+                attachments.append(text_or_attachment)
+            elif text_or_attachment.data:
+                logging.info("found text (%s)", text_or_attachment.contentType)
+                texts.append(text_or_attachment.data)
+            else:
+                logging.info("Skipping empty part")
 
-            attachment = self.handle_message_part(part)
-            if attachment.filename:
-                attachments.append(attachment)
-            elif attachment.data:
-                texts.append(attachment.data)
+        text: str = "\n\n".join(texts)
 
-        text = "\n\n".join(texts)
+        text, from_original = get_plain_text_msg_and_original_from(text)
+
+        metadata.FromOriginal = from_original
+        metadata.MessageText = text
 
         if from_original:
-            metadata.FromOriginal = from_original
-        metadata.MessageText = text
+            logging.info("found from_original: %s", from_original)
 
         if attachments:
             self.handle_attachments(attachments, metadata)
@@ -241,6 +247,7 @@ class MailAttachmentStorageHandler(MailAttachmentHandler):
         for attachment in attachments:
 
             def make_get_mail(attachment: Attachment):
+                @AnnotatedFunction.wrap(function_id="MAIL")
                 def get_mail() -> bytes:
                     return attachment.data  # type:ignore -> Exception
 
@@ -260,4 +267,5 @@ class MailAttachmentStorageHandler(MailAttachmentHandler):
             )
 
             resource_name = f"{metadata.unique_name}/{attachment.filename}"
+            resource_name = resource_name.lower()
             task(resource_name)
