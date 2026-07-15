@@ -223,18 +223,9 @@ def json_serialize(x: Any) -> Json:
         raise NotImplementedError(f"{x.__class__}: {x}")
 
 
-def str_dumpb(
-    text: str,
-    encoding="utf-8",
-    errors: Literal["strict", "replace", "ignore"] = "strict",
-) -> bytes:
-    """TODO"""
-    return text.encode(encoding=encoding, errors=errors)
-
-
 def str_load(
     data: bytes,
-    encoding="utf-8",
+    encoding: str = DEFAULT_ENCODING,
     errors: Literal["strict", "replace", "ignore"] = "strict",
 ) -> str:
     """TODO"""
@@ -284,7 +275,7 @@ def json_loads(text: str) -> Json:
 
 def json_loadb(
     data: ByteData,
-    encoding="utf-8",
+    encoding: str = DEFAULT_ENCODING,
     errors: Literal["strict", "replace", "ignore"] = "strict",
 ) -> Json:
     """TODO"""
@@ -292,24 +283,6 @@ def json_loadb(
     bdata = as_bytes(as_byte_iterable(data))
     text = str_load(bdata, encoding=encoding, errors=errors)
     return json_loads(text)
-
-
-def json_dumpb(
-    data: Any,
-    ensure_ascii: bool = False,
-    sort_keys: bool = False,
-    indent: int = 2,
-    encoding="utf-8",
-    errors: Literal["strict", "replace", "ignore"] = "strict",
-) -> bytes:
-    """TODO"""
-    text = json_dumps(
-        data,
-        ensure_ascii=ensure_ascii,
-        sort_keys=sort_keys,
-        indent=indent,
-    )
-    return str_dumpb(text, encoding=encoding, errors=errors)
 
 
 def parse_cmd_vals(arguments: list[str]) -> dict[str, Json]:
@@ -356,7 +329,7 @@ def file_uri_to_path(uri: str) -> Path:
 
 def reverse_prints(
     stdout_data: Iterable[bytes],
-    encoding: str = "utf-8",
+    encoding: str = DEFAULT_ENCODING,
     errors: str = "replace",
 ) -> Iterable[str]:
     r"""Streaming decode byte chunks into lines.
@@ -534,7 +507,7 @@ def get_sha256_hash(hash_data: Json) -> str:
     hash_data_s = json_dumps(
         hash_data, ensure_ascii=False, indent=0, sort_keys=True, default=json_serialize
     )
-    hash_data_b = hash_data_s.encode("utf-8")
+    hash_data_b = hash_data_s.encode(DEFAULT_ENCODING)
     hashsum = hashlib.sha256(hash_data_b).hexdigest()  # noqa:S324
     # logging.error("%s %s", hashsum, hash_data)
     return hashsum

@@ -10,6 +10,8 @@ import email.utils
 from email.utils import formataddr
 import socketserver
 
+from datatools.utils import DEFAULT_ENCODING
+
 TEST_USER = "test"
 TEST_PASSWD = "test"  # noqa: S105
 TEST_HOST = "localhost"
@@ -69,7 +71,7 @@ class _Mailbox:
         self._next_id = 1
 
         # message with invalid forwarder
-        self.add_msg(_create_msg(mail_forwarded_from="not_allowed@example.com"))
+        self.add_msg(_create_msg(mail_forwarded_from="not-allowed@example.com"))
         # allowed sender, with attachment
         self.add_msg(_create_msg())
         # allowed sender, no attachment
@@ -100,7 +102,7 @@ class _IMAPHandler(socketserver.StreamRequestHandler):
             line = self.rfile.readline()
             if not line:
                 break
-            text = line.decode("utf-8", "replace").rstrip("\r\n")
+            text = line.decode(DEFAULT_ENCODING, "replace").rstrip("\r\n")
             parts = text.split(maxsplit=2)
             tag, cmd = parts[0], parts[1].upper()
             rest = parts[2] if len(parts) > 2 else ""

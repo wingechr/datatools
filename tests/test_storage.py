@@ -39,8 +39,10 @@ from datatools.types import (
     URIRefs as u,
 )
 from datatools.utils import (
+    DEFAULT_ENCODING,
     get_free_port,
     get_item_or_first,
+    identity,
     query_sql,
     sql_query_result_to_csv,
     start_http_server,
@@ -116,6 +118,14 @@ class TestStorageMemory(TestCase):
         """TODO"""
         storage = MemoryDataStorage()
         _test_action_sequence(self, storage)
+
+    def test_no_convserion(self):
+        """TODO"""
+        storage = MemoryDataStorage()
+        storage.write("data", b"data")
+        # {"x": None} => use default (passthrough) for parameter x of identity
+        storage.task(identity, input_converters={"x": None})("data2", "data")
+        self.assertTrue(storage.has("data2"))
 
 
 class TestStorageFiles(TempdirTestCase):
@@ -343,7 +353,7 @@ class TestUseCases(TestCase):
             )
 
             # check metadata
-            metadata_all: dict = get_item_or_first(storage.metadata(name).get("$"))
+            metadata_all: dict = get_item_or_first(storage.metadata(name).get("$"))  # type:ignore - root should be dict
             del metadata_all["@context"]
 
             metadata_creation_event: dict = metadata_all[u.createdBy.label]
@@ -525,7 +535,7 @@ class TestUseCases(TestCase):
         )
         task_convert = storage.task(
             function=convert,
-            output_converters={"output": json.dump},
+            output_converters={"output": json.dump},  # type:ignore TODO: why?
             input_converters={"data": json_load},
             skip_finished=True,
         )
@@ -562,7 +572,7 @@ class TestUseCases(TestCase):
     def test_use_metadata_for_loaders(self):
         """loader/dumper functions should get their default valuesfrom metadata."""
 
-        def loadb(buf: ReadableByteBuffer, encoding: str = "utf-8") -> Any:
+        def loadb(buf: ReadableByteBuffer, encoding: str = DEFAULT_ENCODING) -> Any:
             return buf.read().decode(encoding=encoding)
 
         def dumpb(text: str) -> bytes:
@@ -605,8 +615,8 @@ class TestCache(TestCase):
         # FIXME: must save index names and col dims in metadata
         # for round trip
         _c_csv = MemoryDataStorage().cache(
-            lambda df, buf: df.to_csv(buf, encoding="utf-8"),
-            lambda buf: pd.read_csv(buf, encoding="utf-8"),
+            lambda df, buf: df.to_csv(buf, encoding=DEFAULT_ENCODING),
+            lambda buf: pd.read_csv(buf, encoding=DEFAULT_ENCODING),
         )
 
         def f_single_index():

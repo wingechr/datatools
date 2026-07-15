@@ -2,6 +2,7 @@
 
 from datatools.utils import (
     DEFAULT_ENCODING,
+    BufferIter,
     is_file_readonly,
     make_file_readonly,
     make_file_writable,
@@ -31,3 +32,20 @@ class TestUtils(TempdirTestCase):
         self.assertFalse(is_file_readonly(f))
         with f.open("w", encoding=DEFAULT_ENCODING) as file:
             file.write("test")
+
+    def test_BufferIter(self):
+        """TODO
+
+        ensure that error in writing thread
+        does not cause the pipeline to get stuck
+        """
+
+        def f(_, buf):
+            buf.write(b"data1")
+            buf.write(b"data2")
+            raise ValueError()
+
+        def consume_iterator():
+            list(BufferIter(f)(None))
+
+        self.assertRaises(ValueError, consume_iterator)
