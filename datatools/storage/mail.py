@@ -2,20 +2,14 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
-from email import encoders, message_from_bytes
+from email import message_from_bytes
 from email.message import Message
-from email.mime.base import MIMEBase
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from email.utils import parseaddr
-from io import BytesIO
 import json
 import logging
-import smtplib
 import ssl
 from typing import TYPE_CHECKING
 from urllib.parse import unquote
-from zipfile import ZipFile
 
 import dateutil.parser
 from imapclient import SEEN, IMAPClient
@@ -116,9 +110,7 @@ class MailAttachmentHandler(ABC):
 
     def try_get_date_str(self, message: Message) -> str | None:
         """TODO"""
-        date = message.get("Date")
-        if not date:
-            return None
+        date = message["Date"]
         try:
             return dateutil.parser.parse(date).strftime("%Y-%m-%d")
         except Exception:
@@ -150,7 +142,7 @@ class MailAttachmentHandler(ABC):
             host=self.host, port=self.imap_port, ssl=self.use_ssl, use_uid=True
         )
         if self.use_starttls:
-            client.starttls(ssl_context)  # upgrade to TLS
+            client.starttls(ssl_context)  # upgrade to TLS # pragma: no cover
         client.login(self.login_mail, self.password)
         client.select_folder(self.imap_folder)
         logging.debug("connect_client: ok")
@@ -230,7 +222,9 @@ class MailAttachmentHandler(ABC):
                 _from_original = self.extract_mail(msg_orig["From"])  # type:ignore -> Exception
                 if _from_original:
                     if from_original:
-                        logging.warning("Multiple original From found")
+                        logging.warning(  # noqa:E501
+                            "Multiple original From found"
+                        )
                     else:
                         from_original = _from_original
             except Exception:  # noqa:S110
@@ -267,88 +261,6 @@ class MailAttachmentHandler(ABC):
         """TODO"""
         client = self.connect_client()
         self._check(client)
-
-
-class MailAttachmentForwadHandler(MailAttachmentHandler):
-    """TODO"""
-
-    def __init__(
-        self,
-        login_mail: str,
-        email_whitelist: list[str],
-        imap_port: int = DEFAULT_IMAP_PORT,
-        imap_folder: str = DEFAULT_IMAP_FOLDER,
-        smtp_port: int = DEFAULT_SMTP_PORT,
-        idle_check_timeout: int = 10,
-        use_ssl: bool = False,
-        use_starttls: bool = True,
-    ):
-        super().__init__(
-            login_mail=login_mail,
-            email_whitelist=email_whitelist,
-            imap_port=imap_port,
-            idle_check_timeout=idle_check_timeout,
-            imap_folder=imap_folder,
-            use_ssl=use_ssl,
-            use_starttls=use_starttls,
-        )
-        self.smtp_port = smtp_port
-
-    def _create_return_attachment(
-        self, attachments: list[Attachment], metadata: MailMetadata
-    ) -> bytes:
-        """TODO"""
-        buf = BytesIO()
-        with ZipFile(buf, mode="w") as zf:
-            for attachment in attachments:
-                if not attachment.has_name_and_data():
-                    continue
-                zf.writestr(attachment.filename, attachment.data)  # type:ignore -> Exception
-                zf.writestr(
-                    *self.get_metadata_file(metadata.create_for_attachment(attachment))
-                )
-
-        buf.seek(0)
-        zip_data = buf.read()
-        return zip_data
-
-    def handle_attachments(self, attachments: list[Attachment], metadata: MailMetadata):
-        """TODO"""
-        # send back
-        to_address = metadata.FromForwarded
-        if not to_address:
-            logging.error("Failed to parse From (return) address")
-            return
-
-        attachment_zip_data = self._create_return_attachment(attachments, metadata)
-
-        msg = MIMEMultipart()
-        msg["From"] = self.login_mail
-        msg["To"] = to_address
-        msg["Subject"] = f"Re: {metadata.Subject}"
-
-        # Add body
-        body = ""
-        msg.attach(MIMEText(body, "plain"))
-
-        # Attach file
-        part = MIMEBase("application", "zip")
-
-        part.set_payload(attachment_zip_data)
-        encoders.encode_base64(part)
-        part.add_header(
-            "Content-Disposition", f'attachment; filename="{metadata.unique_name}.zip"'
-        )
-        msg.attach(part)
-
-        # Send email
-        server = smtplib.SMTP(self.host, self.smtp_port)
-        if self.use_starttls:
-            server.starttls()
-
-        server.login(self.login_mail, self.password)
-        server.send_message(msg)
-        server.quit()
 
 
 class MailAttachmentStorageHandler(MailAttachmentHandler):
