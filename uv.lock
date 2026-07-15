@@ -3003,7 +3003,7 @@ wheels = [
 
 [[package]]
 name = "wingechr-datatools"
-version = "0.15.8"
+version = "0.15.9"
 source = { editable = "." }
 dependencies = [
     { name = "appdirs" },
