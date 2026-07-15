@@ -4,9 +4,8 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
 import contextlib
 import functools
-from io import BufferedReader
 import pickle
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from datatools.exceptions import (
     StorageFileExistsError,
@@ -20,8 +19,7 @@ from datatools.types import (
     RDF_CONTEXT,
     SINGLE_OUTPUT_PARAM_NAME,
     ByteData,
-    FunFromByteBuffer,
-    FunFromBytes,
+    FunFromByteFile,
     FunHashsum,
     FunParams,
     FunResult,
@@ -44,7 +42,16 @@ from datatools.utils import (
     remove_credentials_from_netloc,
 )
 
+if TYPE_CHECKING:
+    from _typeshed import SupportsRead
+
 DEFAULT_HASH_ALGORITHM = "sha256"
+
+AnnotatedFunction.wrap(function_id="READ")
+
+
+def _dummy_input_handler_read(file: "SupportsRead[bytes]") -> bytes:
+    return file.read()
 
 
 class MetadataStorage(ABC):  # TODO: subclass AbstractContextManager ?
@@ -119,14 +126,13 @@ class DataStorage(ABC):
             raise StorageFileNotFoundError(f"Not found: {name}")
         yield from self._read(name=name)
 
-    def open(self, name: Name) -> BufferedReader:
+    def open(self, name: Name) -> "SupportsRead[bytes]":
         """TODO"""
         return byte_iterable_as_buffer(self.iter_bytes(name))
 
     def read(self, name: Name) -> bytes:
         """TODO"""
-        with self.open(name) as buf:
-            return buf.read()
+        return self.open(name).read()
 
     def write(self, name: Name, data: ByteData) -> None:
         """TODO"""
@@ -184,7 +190,7 @@ class DataStorage(ABC):
     def cache(
         self,
         output_to_byte_data: FunToByteData = pickle.dumps,
-        output_from_bytes: FunFromBytes = pickle.loads,
+        output_from_bytes: FunFromByteFile = pickle.load,
         get_name_from_hash: Callable[[str], str] = identity,
         get_job_hashsum: FunHashsum = default_get_task_uuid,
     ) -> Callable:
@@ -196,13 +202,13 @@ class DataStorage(ABC):
             task = self.task(
                 function=function,
                 output_converters={SINGLE_OUTPUT_PARAM_NAME: output_to_byte_data},
-                get_job_hashsum=get_job_hashsum,
+                get_task_id=get_job_hashsum,
             )
 
             @functools.wraps(function)
             def _fun(*args, **kwargs):
-                hashsum = task.get_task_uuid(*args, **kwargs)
-                output_name = get_name_from_hash(hashsum)
+                task_id = task.get_task_id(*args, **kwargs)
+                output_name = get_name_from_hash(task_id)
                 # logging.error((hash_data, hashsum))
 
                 if not self.has(output_name):
@@ -210,12 +216,9 @@ class DataStorage(ABC):
                     task(output_name, *args, **kwargs)
 
                 # retrieval
+                file = self.open(output_name)
+                result = output_from_bytes(file)
 
-                # TODO: use buffer
-                with self.open(output_name) as file:
-                    bdata = file.read()
-
-                result = output_from_bytes(bdata)
                 return result
 
             return _fun
@@ -228,11 +231,11 @@ class DataStorage(ABC):
         output_converters: dict[str, FunToByteData | None]
         | FunToByteData
         | None = None,
-        input_converters: dict[str, FunFromByteBuffer | None]
-        | FunFromByteBuffer
+        input_converters: dict[str, FunFromByteFile | None]
+        | FunFromByteFile
         | None = None,
         metadata_generator: Callable[[Any], dict[str, Json]] | None = None,
-        get_job_hashsum: FunHashsum = default_get_task_uuid,
+        get_task_id: FunHashsum = default_get_task_uuid,
         skip_finished: bool = False,
     ) -> Task:
         """TODO"""
@@ -258,7 +261,7 @@ class DataStorage(ABC):
             "task": None,  # will be filled later
         }
 
-        def wrap_input_handler(name: str, handler: FunFromByteBuffer):
+        def wrap_input_handler(name: str, handler: FunFromByteFile):
             def handle_(name_value: Name):
                 if name_value is None:
                     raise KeyError("No value provided for input {name}")
@@ -285,12 +288,11 @@ class DataStorage(ABC):
                     if value is not None:
                         kwargs[kwarg_name] = value
 
-                with self.open(name_value) as file:
-                    return handler(file, **kwargs)
+                return handler(self.open(name_value), **kwargs)
 
             return handle_
 
-        def create_input_handler(name):
+        def create_lietral_input_handler(name):
             def handle_(value: Any):
                 with contextlib.suppress(Exception):
                     # TODO: maybe get from handler
@@ -314,14 +316,12 @@ class DataStorage(ABC):
             # generate task_id and some other stuff (only once!)
             if "@id" not in callback_data["metadata_creation_event"]:
                 task: Task = callback_data["task"]
-                task_uuid = task.get_task_uuid(
-                    **callback_data["input_parameter_values"]
-                )
+                task_id = task.get_task_id(**callback_data["input_parameter_values"])
                 datetime = callback_data["metadata_creation_event"][u.datetime.label]
-                event_id = f"event:{task_uuid}/{datetime}"
+                event_id = f"event:{task_id}/{datetime}"
 
                 callback_data["metadata_creation_event"]["@id"] = event_id
-                callback_data["metadata_creation_event"][u.taskId.label] = task_uuid
+                callback_data["metadata_creation_event"][u.taskId.label] = task_id
                 # update ids for input parameters
 
                 for p in callback_data["metadata_creation_event"][u.usedInput.label]:
@@ -394,19 +394,23 @@ class DataStorage(ABC):
             for name, conv in output_converters.items()
         }
 
-        input_converters = input_converters or {}
-        if not isinstance(input_converters, dict):
-            # input_converters is single function
-            # we map it to first input of function
+        input_converters_: dict[str, FunFromByteFile]
+        if input_converters is None:
+            input_converters_ = {}
+        elif not isinstance(input_converters, dict):
             param_name = wrapped_function.fun_parameter_names[0]
-            input_converters = {param_name: input_converters}
+            input_converters_ = {param_name: input_converters}
+        else:
+            input_converters_ = {
+                n: f or _dummy_input_handler_read for n, f in input_converters.items()
+            }
 
         # !! we need to wrap all input parameters
         wrapped_input_handlers = {
             name: (
-                wrap_input_handler(name, input_converters[name] or identity)
-                if name in input_converters
-                else create_input_handler(name)
+                wrap_input_handler(name, input_converters_[name])
+                if name in input_converters_
+                else create_lietral_input_handler(name)
             )
             for name in wrapped_function.fun_parameter_names
         }
@@ -415,7 +419,7 @@ class DataStorage(ABC):
             function,
             output_writers=wrapped_output_handlers,
             input_readers=wrapped_input_handlers,
-            get_task_uuid=get_job_hashsum,
+            get_task_id=get_task_id,
             check_done=check_names_exist if skip_finished else None,
         )
         callback_data["task"] = task

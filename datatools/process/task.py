@@ -185,7 +185,7 @@ class Task:
         output_writers: dict[str, Callable[[Any, str], Any]],
         input_readers: dict[str, Callable[[Any], Any]] | None = None,
         check_done: Callable[..., bool] | None = None,
-        get_task_uuid: FunHashsum = default_get_task_uuid,
+        get_task_id: FunHashsum = default_get_task_uuid,
     ):
         self.function = AnnotatedFunction.assert_wrapped(function)
         self.output_writers = output_writers
@@ -200,7 +200,7 @@ class Task:
             for k, v in self.function.fun_defaults.items()
             if k in self.input_parameter_names
         }
-        self._get_task_uuid = get_task_uuid
+        self._get_task_id = get_task_id
 
         # checks
 
@@ -222,13 +222,13 @@ class Task:
                 "Invalid output parameters: %s", invalid_output_parameter_names
             )
 
-    def get_task_uuid(self, *args, **kwargs) -> str:
+    def get_task_id(self, *args, **kwargs) -> str:
         """TODO
 
         FIXME: create unit tests - why dont i have to pass output args like
         the same way as in __call__?
         """
-        return self._get_task_uuid(self, *args, **kwargs)  # self is first arg (task)
+        return self._get_task_id(self, *args, **kwargs)  # self is first arg (task)
 
     def _create_job(self, *args, **kwargs) -> _Job:
         """TODO"""

@@ -58,7 +58,7 @@ class SqlMetadataStorage(PersistentMemoryMetadataStorage):
         )
         if rows:
             data_s: str = rows[0][0]
-            return json_loads(data_s)  # type:ignore
+            return json_loads(data_s)
 
     def _dump(self, data: dict) -> None:
         data_s = json_dumps(data, ensure_ascii=False)

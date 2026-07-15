@@ -1,15 +1,18 @@
 """Example script."""
 # ruff: noqa: S101, D103
 
-from io import BufferedReader
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import TYPE_CHECKING
 
 import pandas as pd
 
 from datatools import FileDataStorage
 from datatools.utils import json_dumpb, json_loadb, start_http_server
 from tests.test_storage import QueryParameterUri
+
+if TYPE_CHECKING:
+    from _typeshed import SupportsRead
 
 # test http server
 this_file_path = Path(__file__)
@@ -36,10 +39,10 @@ with TemporaryDirectory() as tempdir:
     assert name3 == "result.csv", name3
 
     # create some functions
-    def load_csv(data: BufferedReader) -> pd.DataFrame:
-        return pd.read_csv(data)
+    def load_csv(data: "SupportsRead[bytes]") -> pd.DataFrame:
+        return pd.read_csv(data)  # type:ignore (ReadCsvBuffer[bytes] still works)
 
-    def len_bytes(data: BufferedReader) -> int:
+    def len_bytes(data: "SupportsRead[bytes]") -> int:
         return len(data.read())
 
     def sum_values(value1: int, value2: int, value3: pd.DataFrame) -> int:

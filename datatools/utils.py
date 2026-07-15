@@ -211,9 +211,9 @@ def json_serialize(x: Any) -> Json:
         return None
     elif isinstance(x, np.bool_):
         return bool(x)
-    elif np.issubdtype(type(x), np.integer):  # type:ignore
+    elif np.issubdtype(type(x), np.integer):
         return int(x)
-    elif np.issubdtype(type(x), np.floating):  # type:ignore
+    elif np.issubdtype(type(x), np.floating):
         return float(x)
     elif isinstance(x, BaseModel):
         return x.model_dump(mode="json")
@@ -717,7 +717,7 @@ def normalize_sql_query(query: str) -> str:
     'SELECT 1 AS a;'
 
     """
-    query = sqlparse.format(  # type:ignore
+    query = sqlparse.format(
         query,
         reindent=False,
         keyword_case="upper",
@@ -1216,7 +1216,7 @@ class CollectStatsIterator(Generic[IterType, Accumulator, Value]):
     @property
     def value(self) -> Value:
         """TODO"""
-        return self._value  # type:ignore
+        return self._value
 
 
 class CollectStatsIteratorSize(CollectStatsIterator[bytes, int, int]):
@@ -1314,7 +1314,7 @@ class IterableStream(io.RawIOBase):
 
 def byte_iterable_as_buffer(iterable: Iterable[bytes]) -> BufferedReader:
     """TODO"""
-    return BufferedReader(IterableStream(iterable))  # type:ignore
+    return BufferedReader(IterableStream(iterable))
 
 
 def buffer_to_byte_iterable(

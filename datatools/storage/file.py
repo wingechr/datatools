@@ -60,7 +60,7 @@ class JsonFileMetadataStorage(PersistentMemoryMetadataStorage):
         data_s_new = g.serialize(
             format="json-ld", context=RDF_CONTEXT, auto_compact=True
         )
-        data_new: dict = json_loads(data_s_new)  # type:ignore
+        data_new: dict = json_loads(data_s_new)
         return data_new
 
 

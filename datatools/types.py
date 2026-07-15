@@ -5,9 +5,29 @@ from functools import cache
 import io
 from io import BufferedReader
 from pathlib import Path
-from typing import Any, ClassVar, Generic, Literal, ParamSpec, TypeAlias, TypeVar
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    ClassVar,
+    Generic,
+    Literal,
+    ParamSpec,
+    Protocol,
+    TypeAlias,
+    TypeVar,
+)
 
 from rdflib import Namespace, URIRef
+
+if TYPE_CHECKING:
+    from _typeshed import SupportsRead, SupportsWrite
+
+
+class FunFromByteFile(Protocol):
+    """TODO"""
+
+    def __call__(self, __fp: SupportsRead[bytes], *args: Any, **kwargs: Any) -> Any: ...  # noqa: D102, E501
+
 
 FunParams = ParamSpec("FunParams")
 FunResult = TypeVar("FunResult")
@@ -28,8 +48,7 @@ MetadataPairs: TypeAlias = (
 FunHashsum = Callable[..., str]
 FunToByteData = Callable[[Any], ByteData]
 FunToBytes = Callable[[Any], bytes]
-FunFromBytes = Callable[[bytes], Any]
-FunFromByteBuffer = Callable[[BufferedReader], Any]
+FunToByteFile = Callable[[Any, "SupportsWrite[bytes]"], None]
 
 # any name, must be a valid parameter name
 # # but not collide with input parameters

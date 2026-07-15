@@ -1,12 +1,12 @@
 """TODO"""
 
 import datetime
-from io import BufferedReader, BytesIO
 import json
 from pathlib import Path
 import pickle
 from tempfile import TemporaryDirectory
 from threading import Thread
+from typing import TYPE_CHECKING, Any
 from unittest import TestCase
 
 from click.testing import CliRunner
@@ -47,6 +47,10 @@ from datatools.utils import (
     wait_for_url,
 )
 from tests.base import TempdirTestCase
+
+if TYPE_CHECKING:
+    from _typeshed import SupportsRead
+
 
 QueryParameterUri = f'{u.createdBy.label}.{u.usedInput.label}[?({u.roleName.label} == "uri")].{u.value.label}'  # noqa:E501
 QueryTimestamp = f"{u.createdBy.label}.{u.datetime.label}"
@@ -343,10 +347,10 @@ class TestUseCases(TestCase):
             )
 
             # check metadata
-            metadata_all: dict = get_item_or_first(storage.metadata(name).get("$"))  # type:ignore
+            metadata_all: dict = get_item_or_first(storage.metadata(name).get("$"))
             del metadata_all["@context"]
 
-            metadata_creation_event: dict = metadata_all[u.createdBy.label]  # type:ignore
+            metadata_creation_event: dict = metadata_all[u.createdBy.label]
 
             task_uuid = metadata_creation_event[u.taskId.label]
             timestamp = metadata_creation_event[u.datetime.label]
@@ -530,12 +534,12 @@ class TestUseCases(TestCase):
             skip_finished=True,
         )
 
-        key1 = f"generated_{task_generate.get_task_uuid()}.json"
+        key1 = f"generated_{task_generate.get_task_id()}.json"
         task_generate(output=key1)
         task_generate(key1)  # does nothing, because already created
 
         # dynamically create id for next step (use same arguments as in actuall)
-        key2 = f"converted_{task_convert.get_task_uuid(data=key1)}.json"
+        key2 = f"converted_{task_convert.get_task_id(data=key1)}.json"
         task_convert(output=key2, data=key1)
 
         # check metadata
@@ -562,7 +566,7 @@ class TestUseCases(TestCase):
     def test_use_metadata_for_loaders(self):
         """loader/dumper functions should get their default valuesfrom metadata."""
 
-        def loadb(buf: BufferedReader, encoding: str = "utf-8"):
+        def loadb(buf: "SupportsRead[bytes]", encoding: str = "utf-8") -> Any:
             return buf.read().decode(encoding=encoding)
 
         def dumpb(text: str) -> bytes:
@@ -594,18 +598,18 @@ class TestCache(TestCase):
         df = pd.DataFrame([{"a": 1, "b": "Ö", "c": 1.2}, {"a": 2, "b": "ß"}])
 
         # fixme also use buffer / byte iterator / string iterator
-        c_pickle = MemoryDataStorage().cache(pickle.dumps, pickle.loads)
+        c_pickle = MemoryDataStorage().cache(pickle.dumps, pickle.load)
         # use orient="table" to preserve index names
         c_json = MemoryDataStorage().cache(
             lambda df: df.to_json(orient="table").encode("utf-8"),
-            lambda bts: pd.read_json(BytesIO(bts), orient="table"),
+            lambda buf: pd.read_json(buf, orient="table"),
         )
 
         # FIXME: must save index names and col dims in metadata
         # for round trip
         _c_csv = MemoryDataStorage().cache(
             lambda df: df.to_csv().encode("utf-8"),
-            lambda bts: pd.read_csv(BytesIO(bts), encoding="utf-8"),
+            lambda buf: pd.read_csv(buf, encoding="utf-8"),
         )
 
         def f_single_index():
