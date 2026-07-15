@@ -69,6 +69,31 @@ DATE_FMT = "%Y-%m-%d"
 TIME_FMT = "%H:%M:%S"
 ANONYMOUS_USER = "ANONYMOUS"
 DEFAULT_ENCODING = "utf-8"
+FILEMOD_WRITE: int = 0o222
+
+
+def make_file_readonly(file_path: StrPath) -> None:
+    """TODO
+
+    Note: in Windows, this also prevents delete
+    but not in Linux
+    """
+    current_permissions = os.stat(file_path).st_mode
+    readonly_permissions = current_permissions & ~FILEMOD_WRITE
+    os.chmod(file_path, readonly_permissions)
+
+
+def is_file_readonly(file_path: StrPath) -> bool:
+    """TODO"""
+    current_permissions = os.stat(file_path).st_mode
+    return not (current_permissions & FILEMOD_WRITE)
+
+
+def make_file_writable(file_path: StrPath) -> None:
+    """TODO"""
+    current_permissions = os.stat(file_path).st_mode
+    readonly_permissions = current_permissions | FILEMOD_WRITE
+    os.chmod(file_path, readonly_permissions)
 
 
 class TextFile:

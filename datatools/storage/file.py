@@ -22,6 +22,8 @@ from datatools.utils import (
     buffer_to_byte_iterable,
     json_dumps,
     json_loads,
+    make_file_readonly,
+    make_file_writable,
     uri_or_path_to_path,
     write_bytes_locked,
 )
@@ -99,10 +101,12 @@ class FileDataStorage(DataStorage):
             tempfile_suffix=TEMPFILE_SUFFIX,
             lockfile_suffix=LOCKFILE_SUFFIX,
         )
+        make_file_readonly(path)
 
     def _delete(self, name: Name) -> None:
         path = self._get_abs_path(name)
         logging.debug("Deleting %s", path)
+        make_file_writable(path)
         os.remove(path)
 
     def _list(self) -> Iterable[Name]:

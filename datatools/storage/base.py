@@ -142,6 +142,7 @@ class DataStorage(ABC):
         self._assert_valid_name(name=name)
         if not self.has(name):
             raise StorageFileNotFoundError(f"Not found: {name}")
+        # FIXME: TODO optionally delete metadata
         return self._delete(name=name)
 
     def metadata(self, name: Name) -> MetadataStorage:
