@@ -99,3 +99,8 @@ docs = "uv run mkdocs build"
 run = "uv run -m datatools -l debug"
 build = "uv build"
 bump = "bump-my-version bump"
+
+
+[tool.pytest.ini_options]
+# this comes from inside the package, we have the latest version
+filterwarnings = ["ignore:ConjunctiveGraph is deprecated, use Dataset instead"]
