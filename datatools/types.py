@@ -62,7 +62,6 @@ FunHashsum = Callable[..., str]
 SINGLE_OUTPUT_PARAM_NAME = "MAIN"
 HTTP_METHOD = Literal["GET", "PUT", "POST", "DELETE", "HEAD", "PATCH"]
 DEFAULT_CHUNK_SIZE = io.DEFAULT_BUFFER_SIZE  # 8192 bytes currently
-DEFAULT_CHUNK_SIZE = 10
 
 # https://www.w3.org/TR/vocab-dcat-3/
 
