@@ -60,7 +60,7 @@ class JsonFileMetadataStorage(PersistentMemoryMetadataStorage):
         data_s_new = g.serialize(
             format="json-ld", context=RDF_CONTEXT, auto_compact=True
         )
-        data_new: dict = json_loads(data_s_new)
+        data_new: dict = json_loads(data_s_new)  # type:ignore - should be dict
         return data_new
 
 
@@ -91,13 +91,13 @@ class FileDataStorage(DataStorage):
         with path.open("rb") as file:
             yield from buffer_to_byte_iterable(file, chunk_size=chunk_size)
 
-    def _write(self, name: Name, data: Iterable[bytes]) -> None:
+    def _write(self, name: Name, bytes_iter: Iterable[bytes]) -> None:
         path = self._get_abs_path(name)
         logging.debug("Writing %s", path)
         path.parent.mkdir(parents=True, exist_ok=True)
         write_bytes_locked(
             path=path,
-            data=data,
+            bytes_iter=bytes_iter,
             tempfile_suffix=TEMPFILE_SUFFIX,
             lockfile_suffix=LOCKFILE_SUFFIX,
         )

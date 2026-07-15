@@ -164,7 +164,7 @@ class MailAttachmentHandler(ABC):
             if b"RFC822" not in message_data:
                 logging.info("check: skipping %s", uid)
                 continue
-            message_bytes: bytes = message_data[b"RFC822"]
+            message_bytes: bytes = message_data[b"RFC822"]  # type:ignore -> Exception
             message = message_from_bytes(message_bytes)
 
             self.handle_message(message)
@@ -188,7 +188,7 @@ class MailAttachmentHandler(ABC):
         content_type = part.get_content_type()
         disposition = part.get_content_disposition()
         charset = part.get_content_charset()
-        payload_bytes: bytes = part.get_payload(decode=True)
+        payload_bytes: bytes = part.get_payload(decode=True)  # type:ignore -> Exception
         filename = part.get_filename()
         if (
             payload_bytes
@@ -227,7 +227,7 @@ class MailAttachmentHandler(ABC):
         for part in message.walk():
             try:
                 msg_orig = part.get_payload(0)  # the embedded Message object
-                _from_original = self.extract_mail(msg_orig["From"])
+                _from_original = self.extract_mail(msg_orig["From"])  # type:ignore -> Exception
                 if _from_original:
                     if from_original:
                         logging.warning("Multiple original From found")
@@ -303,7 +303,7 @@ class MailAttachmentForwadHandler(MailAttachmentHandler):
             for attachment in attachments:
                 if not attachment.has_name_and_data():
                     continue
-                zf.writestr(attachment.filename, attachment.data)
+                zf.writestr(attachment.filename, attachment.data)  # type:ignore -> Exception
                 zf.writestr(
                     *self.get_metadata_file(metadata.create_for_attachment(attachment))
                 )
@@ -384,7 +384,7 @@ class MailAttachmentStorageHandler(MailAttachmentHandler):
 
             def make_get_mail(attachment: Attachment):
                 def get_mail() -> bytes:
-                    return attachment.data
+                    return attachment.data  # type:ignore -> Exception
 
                 return get_mail
 

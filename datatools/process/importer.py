@@ -1,13 +1,13 @@
 """Abstract classes / interfaces, types"""
 
 from abc import ABC
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 import re
 
 from typing_extensions import override
 
 from datatools.process.task import AnnotatedFunction
-from datatools.types import FunToByteData, Name
+from datatools.types import FunToReadableByteBuffer, Name, WritableByteBuffer
 from datatools.utils import (
     get_name_from_uri,
     http_get_stream,
@@ -15,7 +15,7 @@ from datatools.utils import (
     query_sql,
     read_file_uri_stream,
     remove_credentials_from_netloc,
-    sql_query_result_to_csv_bytes,
+    sql_query_result_to_csv,
     subclasses_by_name,
     uri_or_path_to_path,
 )
@@ -24,7 +24,7 @@ from datatools.utils import (
 class Importer(ABC):
     """TODO"""
 
-    output_to_byte_data: FunToByteData | None = None
+    output_write_byte_data: FunToReadableByteBuffer | None = None
     get_data: Callable
 
     @classmethod
@@ -40,11 +40,16 @@ class Importer(ABC):
 
 def infer_importer_class(uri: str, **options) -> type[Importer]:
     """TODO"""
-
     for cls in subclasses_by_name(Importer).values():
         if cls.can_handle(uri, **options):
             return cls
     raise NotImplementedError(f"Cannot infer Importer class for {uri}")
+
+
+def write_chunks(data: Iterable[bytes], buf: WritableByteBuffer):
+    """TODO"""
+    for chunk in data:
+        buf.write(chunk)
 
 
 class HttpImporter(Importer):
@@ -52,6 +57,7 @@ class HttpImporter(Importer):
 
     # use generic id (tool does not matter)
     get_data = AnnotatedFunction.wrap(function_id="GET")(http_get_stream)
+    output_write_byte_data: FunToReadableByteBuffer = write_chunks
 
     @classmethod
     @override
@@ -69,6 +75,7 @@ class FileImporter(Importer):
 
     # use generic id (tool does not matter)
     get_data = AnnotatedFunction.wrap(function_id="COPY")(read_file_uri_stream)
+    output_write_byte_data: FunToReadableByteBuffer = write_chunks
 
     @classmethod
     def can_handle(cls, uri: str, **options) -> bool:
@@ -96,9 +103,7 @@ class SqlImporter(Importer):
 
     # use generic id (tool does not matter)
     get_data = AnnotatedFunction.wrap(function_id="QUERY")(query_sql)
-    output_to_byte_data: FunToByteData = AnnotatedFunction.wrap()(
-        sql_query_result_to_csv_bytes
-    )
+    output_write_byte_data: FunToReadableByteBuffer = sql_query_result_to_csv
 
     @classmethod
     @override

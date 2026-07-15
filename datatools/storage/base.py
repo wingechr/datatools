@@ -23,15 +23,17 @@ from datatools.types import (
     FunHashsum,
     FunParams,
     FunResult,
-    FunToByteData,
+    FunToReadableByteBuffer,
     Json,
     MetadataAttribute,
     MetadataValue,
     Name,
     ReadableByteBuffer,
     URIRefs as u,
+    WritableByteBuffer,
 )
 from datatools.utils import (
+    BufferIter,
     CollectStatsIteratorHash,
     CollectStatsIteratorSize,
     as_byte_iterable,
@@ -45,11 +47,15 @@ from datatools.utils import (
 
 DEFAULT_HASH_ALGORITHM = "sha256"
 
-AnnotatedFunction.wrap(function_id="READ")
 
-
+@AnnotatedFunction.wrap(function_id="READ")
 def _dummy_input_handler_read(file: ReadableByteBuffer) -> bytes:
     return file.read()
+
+
+@AnnotatedFunction.wrap(function_id="WRITE")
+def _dummy_output_handler_write(data: bytes, file: WritableByteBuffer) -> None:
+    file.write(data)
 
 
 class MetadataStorage(ABC):  # TODO: subclass AbstractContextManager ?
@@ -84,7 +90,7 @@ class DataStorage(ABC):
     def _read(self, name: Name) -> Iterable[bytes]: ...
 
     @abstractmethod
-    def _write(self, name: Name, data: Iterable[bytes]) -> None: ...
+    def _write(self, name: Name, bytes_iter: Iterable[bytes]) -> None: ...
 
     @abstractmethod
     def _delete(self, name: Name) -> None: ...
@@ -139,7 +145,7 @@ class DataStorage(ABC):
             raise StorageFileExistsError(f"Already exists: {name}")
         iter_bytes = as_byte_iterable(data)
 
-        return self._write(name=name, data=iter_bytes)
+        return self._write(name=name, bytes_iter=iter_bytes)
 
     def delete(self, name: Name) -> None:
         """TODO"""
@@ -179,7 +185,7 @@ class DataStorage(ABC):
         task = self.task(
             function=importer_class.get_data,
             output_converters={
-                SINGLE_OUTPUT_PARAM_NAME: importer_class.output_to_byte_data
+                SINGLE_OUTPUT_PARAM_NAME: importer_class.output_write_byte_data
             },
         )
         task(name, uri, **options)
@@ -187,7 +193,7 @@ class DataStorage(ABC):
 
     def cache(
         self,
-        output_to_byte_data: FunToByteData = pickle.dumps,
+        output_write_byte_data: FunToReadableByteBuffer = pickle.dump,
         output_from_bytes: FunFromReadableByteBuffer = pickle.load,
         get_name_from_hash: Callable[[str], str] = identity,
         get_job_hashsum: FunHashsum = default_get_task_uuid,
@@ -199,7 +205,7 @@ class DataStorage(ABC):
 
             task = self.task(
                 function=function,
-                output_converters={SINGLE_OUTPUT_PARAM_NAME: output_to_byte_data},
+                output_converters={SINGLE_OUTPUT_PARAM_NAME: output_write_byte_data},
                 get_task_id=get_job_hashsum,
             )
 
@@ -226,8 +232,8 @@ class DataStorage(ABC):
     def task(
         self,
         function: Callable,
-        output_converters: dict[str, FunToByteData | None]
-        | FunToByteData
+        output_converters: dict[str, FunToReadableByteBuffer | None]
+        | FunToReadableByteBuffer
         | None = None,
         input_converters: dict[str, FunFromReadableByteBuffer | None]
         | FunFromReadableByteBuffer
@@ -330,7 +336,9 @@ class DataStorage(ABC):
                 if metadata_generator:
                     callback_data["metadata_generated"] = metadata_generator(data)
 
-        def wrap_output_handler(param_name: str, handler: FunToByteData | None = None):
+        def wrap_output_handler(
+            param_name: str, handler: FunToReadableByteBuffer | None = None
+        ):
             if handler:
                 handler_w = AnnotatedFunction.assert_wrapped(handler)
                 meta_saved_with = {
@@ -340,22 +348,24 @@ class DataStorage(ABC):
                 }
             else:
                 meta_saved_with = None
-                handler = identity
+                handler = _dummy_output_handler_write
 
             def handle_(data: Any, name: Name):
-                bytes_data = handler(data)
+                # handler will write data -> buffer
+                # but we need to intercept the write and turn it into
+                # a iterable of bytes so we can hash andcount and write in chunks
 
-                bytes_iterable = as_byte_iterable(bytes_data)
-
-                hash_algo = DEFAULT_HASH_ALGORITHM
+                bytes_iterable = BufferIter(handler)(data)
 
                 bytes_iterable_size = CollectStatsIteratorSize(bytes_iterable)
+                hash_algo = DEFAULT_HASH_ALGORITHM
                 bytes_iterable_hash = CollectStatsIteratorHash(
                     bytes_iterable_size, algorithm=hash_algo
                 )
                 bytes_iterable = bytes_iterable_hash
 
-                self.write(name, bytes_iterable)
+                self.write(name=name, data=bytes_iterable)
+
                 update_metadata_job_id(data)
 
                 creation_id = callback_data["metadata_creation_event"]["@id"]

@@ -91,8 +91,8 @@ class CliWrapperDataStorage(DataStorage):
     def _read(self, name: Name) -> Iterable[bytes]:
         yield from self._request("read", name)
 
-    def _write(self, name: Name, data: Iterable[bytes]) -> None:
-        self._request("write", name, data=data)
+    def _write(self, name: Name, bytes_iter: Iterable[bytes]) -> None:
+        self._request("write", name, data=bytes_iter)
 
     def _delete(self, name: Name) -> None:
         self._request("delete", name)

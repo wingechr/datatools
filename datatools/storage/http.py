@@ -162,8 +162,8 @@ class HttpDataStorage(DataStorage):
         resp = self._request(path=f"/data/{name}", method="GET")
         yield from resp.iter_bytes(chunk_size=chunk_size)
 
-    def _write(self, name: Name, data: Iterable[bytes]) -> None:
-        self._request(path=f"/data/{name}", method="PUT", data=data)
+    def _write(self, name: Name, bytes_iter: Iterable[bytes]) -> None:
+        self._request(path=f"/data/{name}", method="PUT", data=bytes_iter)
 
     def _delete(self, name: Name) -> None:
         self._request(path=f"/data/{name}", method="DELETE")

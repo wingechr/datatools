@@ -69,8 +69,8 @@ class MemoryDataStorage(DataStorage):
         bdata: bytes = self.__data[name]
         yield bdata
 
-    def _write(self, name: Name, data: Iterable[bytes]) -> None:
-        bdata = as_bytes(data)
+    def _write(self, name: Name, bytes_iter: Iterable[bytes]) -> None:
+        bdata = as_bytes(bytes_iter)
         self.__data[name] = bdata
 
     def _delete(self, name: Name) -> None:

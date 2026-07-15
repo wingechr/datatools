@@ -1,13 +1,13 @@
 import os
 import sys
 from datatools import FileDataStorage, AnnotatedFunction
-from datatools.utils import json_dumpb, json_loadb
+import json
 
 # example functions
 @AnnotatedFunction.wrap(function_id="urn:function:generate")
-def generate(n:int=1) -> bytes:
+def generate(n:int=1) -> str:
     """generate a list of 1s"""
-    return json_dumpb([1] * n)
+    return json.dumps([1] * n)
 
 @AnnotatedFunction.wrap(function_id="urn:function:convert")
 def convert(data: list, y:int=1) -> list:
@@ -18,7 +18,7 @@ def convert(data: list, y:int=1) -> list:
 
 data_storage = FileDataStorage(".")
 task_generate = data_storage.task(generate, {"output": None}) # "output": None -> already bytes
-task_convert = data_storage.task(convert, {"output": json_dumpb}, {"data": json_loadb})
+task_convert = data_storage.task(convert, {"output": json.dump}, {"data": json.load})
 
 # create rules to links jobs
 

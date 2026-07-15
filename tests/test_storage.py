@@ -6,7 +6,7 @@ from pathlib import Path
 import pickle
 from tempfile import TemporaryDirectory
 from threading import Thread
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from unittest import TestCase
 
 from click.testing import CliRunner
@@ -35,22 +35,18 @@ from datatools.types import (
     RDF_CONTEXT,
     SINGLE_OUTPUT_PARAM_NAME,
     TEMPFILE_SUFFIX,
+    ReadableByteBuffer,
     URIRefs as u,
 )
 from datatools.utils import (
     get_free_port,
     get_item_or_first,
-    json_dumpb,
     query_sql,
-    sql_query_result_to_csv_bytes,
+    sql_query_result_to_csv,
     start_http_server,
     wait_for_url,
 )
 from tests.base import TempdirTestCase
-
-if TYPE_CHECKING:
-    from _typeshed import SupportsRead
-
 
 QueryParameterUri = f'{u.createdBy.label}.{u.usedInput.label}[?({u.roleName.label} == "uri")].{u.value.label}'  # noqa:E501
 QueryTimestamp = f"{u.createdBy.label}.{u.datetime.label}"
@@ -370,9 +366,9 @@ class TestUseCases(TestCase):
                     # "@type": u.Serialization.label,
                     u.usedFunction.label: {
                         "@id": "function:"
-                        + AnnotatedFunction(sql_query_result_to_csv_bytes).function_id,
+                        + AnnotatedFunction(sql_query_result_to_csv).function_id,
                         # "@type": u.Function.label,
-                        "description": sql_query_result_to_csv_bytes.__doc__,
+                        "description": sql_query_result_to_csv.__doc__,
                     },
                     u.roleName.label: SINGLE_OUTPUT_PARAM_NAME,
                 },
@@ -471,7 +467,7 @@ class TestUseCases(TestCase):
         task_create_output = storage.task(
             function,
             input_converters=dict.fromkeys(inputs, pickle.load),
-            output_converters=dict.fromkeys(outputs, pickle.dumps),
+            output_converters=dict.fromkeys(outputs, pickle.dump),
         )
 
         # call without output name should cause error
@@ -518,7 +514,7 @@ class TestUseCases(TestCase):
         def convert(data: list) -> list:
             return [x + 1 for x in data]
 
-        loads = AnnotatedFunction(json.load, function_id=fid_bytes2json)
+        json_load = AnnotatedFunction(json.load, function_id=fid_bytes2json)
 
         # "output": None -> already bytes
         task_generate = storage.task(
@@ -529,8 +525,8 @@ class TestUseCases(TestCase):
         )
         task_convert = storage.task(
             function=convert,
-            output_converters={"output": json_dumpb},
-            input_converters={"data": loads},
+            output_converters={"output": json.dump},
+            input_converters={"data": json_load},
             skip_finished=True,
         )
 
@@ -566,7 +562,7 @@ class TestUseCases(TestCase):
     def test_use_metadata_for_loaders(self):
         """loader/dumper functions should get their default valuesfrom metadata."""
 
-        def loadb(buf: "SupportsRead[bytes]", encoding: str = "utf-8") -> Any:
+        def loadb(buf: ReadableByteBuffer, encoding: str = "utf-8") -> Any:
             return buf.read().decode(encoding=encoding)
 
         def dumpb(text: str) -> bytes:
@@ -598,17 +594,18 @@ class TestCache(TestCase):
         df = pd.DataFrame([{"a": 1, "b": "Ö", "c": 1.2}, {"a": 2, "b": "ß"}])
 
         # fixme also use buffer / byte iterator / string iterator
-        c_pickle = MemoryDataStorage().cache(pickle.dumps, pickle.load)
+        c_pickle = MemoryDataStorage().cache(pickle.dump, pickle.load)
         # use orient="table" to preserve index names
         c_json = MemoryDataStorage().cache(
-            lambda df: df.to_json(orient="table").encode("utf-8"),
+            # actually to string, but we auto convert to bytes
+            lambda df, buf: df.to_json(buf, orient="table"),
             lambda buf: pd.read_json(buf, orient="table"),
         )
 
         # FIXME: must save index names and col dims in metadata
         # for round trip
         _c_csv = MemoryDataStorage().cache(
-            lambda df: df.to_csv().encode("utf-8"),
+            lambda df, buf: df.to_csv(buf, encoding="utf-8"),
             lambda buf: pd.read_csv(buf, encoding="utf-8"),
         )
 

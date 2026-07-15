@@ -58,7 +58,7 @@ class SqlMetadataStorage(PersistentMemoryMetadataStorage):
         )
         if rows:
             data_s: str = rows[0][0]
-            return json_loads(data_s)
+            return json_loads(data_s)  # type:ignore - should be dict
 
     def _dump(self, data: dict) -> None:
         data_s = json_dumps(data, ensure_ascii=False)
@@ -125,9 +125,9 @@ class SqlDataStorage(DataStorage):
         bdata: bytes = row[0]
         yield bdata
 
-    def _write(self, name: Name, data: Iterable[bytes]) -> None:
+    def _write(self, name: Name, bytes_iter: Iterable[bytes]) -> None:
         with self._engine.begin() as con:
-            bdata = as_bytes(data)
+            bdata = as_bytes(bytes_iter)
             con.execute(table_data.insert().values(name=name, data=bdata))
 
     def _delete(self, name: Name) -> None:

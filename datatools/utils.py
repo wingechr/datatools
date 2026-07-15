@@ -52,14 +52,16 @@ from datatools.types import (
     LOCKFILE_SUFFIX,
     TEMPFILE_SUFFIX,
     ByteData,
+    FunToReadableByteBuffer,
     Json,
+    ReadableByteBuffer,
     StrPath,
     SubCls,
     T,
+    WritableByteBuffer,
 )
 
 if TYPE_CHECKING:
-    from _typeshed import SupportsWrite
     from sqlalchemy.engine import CursorResult
     from sqlalchemy.engine.row import Row
 
@@ -237,6 +239,25 @@ def str_load(
 ) -> str:
     """TODO"""
     return data.decode(encoding=encoding, errors=errors)
+
+
+def json_dump(
+    data: Any,
+    fp: WritableByteBuffer,
+    ensure_ascii: bool = False,
+    sort_keys: bool = False,
+    indent: int = 2,
+    default: Callable | None = json_serialize,
+) -> None:
+    """TODO"""
+    json.dump(
+        data,
+        fp,
+        ensure_ascii=ensure_ascii,
+        sort_keys=sort_keys,
+        indent=indent,
+        default=default,
+    )
 
 
 def json_dumps(
@@ -914,7 +935,7 @@ def get_module_version(func: Callable) -> str | None:
     version = None
     try:
         mod = inspect.getmodule(func)
-        mod_path = mod.__name__.split(".")
+        mod_path = mod.__name__.split(".")  # type:ignore mod is not None
         while mod_path and not version:
             mod_name = ".".join(mod_path)
             mod = importlib.import_module(mod_name)
@@ -1087,14 +1108,12 @@ def wrap_exception(
         sys.exit(1)
 
 
-def sql_query_result_to_csv_bytes(data: Iterable["Row"], **options) -> Iterable[bytes]:
+def sql_query_result_to_csv(
+    data: Iterable["Row"], fp: WritableByteBuffer, **options
+) -> None:
     """TODO"""
     df = pd.DataFrame(data)
-    data_s = df.to_csv(index=False, lineterminator="\n")
-    data_b = data_s.encode()
-    # for now, we just return the whole thing.
-    # since df i in memory anyways
-    return [data_b]
+    df.to_csv(fp, index=False, lineterminator="\n", encoding=DEFAULT_ENCODING)
 
 
 def get_deterministic_uuid5(data: str) -> str:
@@ -1216,7 +1235,7 @@ class CollectStatsIterator(Generic[IterType, Accumulator, Value]):
     @property
     def value(self) -> Value:
         """TODO"""
-        return self._value
+        return self._value  # type:ignore
 
 
 class CollectStatsIteratorSize(CollectStatsIterator[bytes, int, int]):
@@ -1312,7 +1331,7 @@ class IterableStream(io.RawIOBase):
         return len(chunk)
 
 
-def byte_iterable_as_buffer(iterable: Iterable[bytes]) -> BufferedReader:
+def byte_iterable_as_buffer(iterable: Iterable[bytes]) -> ReadableByteBuffer:
     """TODO"""
     return BufferedReader(IterableStream(iterable))
 
@@ -1327,7 +1346,7 @@ def buffer_to_byte_iterable(
 
 def write_bytes_locked(
     path: Path,
-    data: Iterable[bytes],
+    bytes_iter: Iterable[bytes],
     timeout: float = 30,
     lockfile_suffix: str = LOCKFILE_SUFFIX,
     tempfile_suffix: str = TEMPFILE_SUFFIX,
@@ -1342,7 +1361,7 @@ def write_bytes_locked(
         )
         # try:
         with os.fdopen(fd, "wb") as tmp_file:
-            for chunk in data:
+            for chunk in bytes_iter:
                 tmp_file.write(chunk)
             tmp_file.flush()
             os.fsync(tmp_file.fileno())
@@ -1392,41 +1411,55 @@ class BufferIter(Generic[T]):
     EOF = object()
     NEXT = object()
 
-    def write(self, data: bytes | str):
+    def write(self, chunk: bytes | str):
         """TODO"""
         # FIXME: determine on init, dont check on every write call
-        if isinstance(data, str):
-            data = data.encode(encoding=self._encoding_if_str)
-        self._queue.put(data)
+        if isinstance(chunk, str):
+            chunk = chunk.encode(encoding=self._encoding_if_str)
+        # logging.debug("queue put %s bytes", len(chunk))
+        self._queue.put(chunk)
 
     def __init__(
         self,
-        dump: Callable[[T, "SupportsWrite[bytes]"], None],
+        dump: FunToReadableByteBuffer,
         encoding_if_str: str | None = None,
+        daemon: bool = True,
+        timeout: float | None = None,
         **kwargs,
     ):
         self._queue = Queue()
         self._reverse_queue = Queue()
         self._dump = dump
         self._kwargs = kwargs
+        self._daemon = daemon
+        self._timeout = timeout
         self._encoding_if_str: str = encoding_if_str or DEFAULT_ENCODING
 
     def __call__(self, data: T) -> Iterable[bytes]:
         """TODO"""
 
         def f():
-            self._dump(data, self, **self._kwargs)
-            # wait for consumer thread to finish processing
-            self._reverse_queue.get()
-            # send close signal
-            self._queue.put(self.EOF)
+            try:
+                self._dump(data, self, **self._kwargs)
+                # wait for consumer thread to finish processing
+                self._reverse_queue.get()
+                # send close signal
+                self._queue.put(self.EOF)
+            except Exception as exc:
+                self._queue.put(exc)
 
-        thread = Thread(target=f, daemon=False)
+        thread = Thread(target=f, daemon=self._daemon)
         thread.start()
         while True:
-            chunk = self._queue.get(block=True, timeout=None)
+            chunk = self._queue.get(
+                block=True, timeout=self._timeout
+            )  # FIXME remove timeout
             if chunk is self.EOF:
                 break
+            elif isinstance(chunk, Exception):
+                # Exception from worker thread
+                raise chunk
+            # logging.debug("queue got %s bytes", len(chunk))
             yield chunk
             # chunk consumned:
             self._reverse_queue.put(self.NEXT)

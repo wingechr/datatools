@@ -3,10 +3,9 @@
 from collections.abc import Callable, Iterable, Mapping
 from functools import cache
 import io
-from io import BufferedReader
+from io import BufferedReader, BufferedWriter
 from pathlib import Path
 from typing import (
-    TYPE_CHECKING,
     Any,
     ClassVar,
     Generic,
@@ -19,19 +18,22 @@ from typing import (
 
 from rdflib import Namespace, URIRef
 
-if TYPE_CHECKING:
-    from _typeshed import SupportsWrite
-
-
 # class ReadableByteBuffer(Protocol):  # noqa: D101
 #    def read(self, __n: int = ...) -> bytes: ...  # noqa: D102
 #    def readline(self) -> bytes: ...  # noqa: D102
 
 ReadableByteBuffer = BufferedReader
+WritableByteBuffer = BufferedWriter
 
 
 class FunFromReadableByteBuffer(Protocol):  # noqa: D101
     def __call__(self, __fp: ReadableByteBuffer, *args: Any, **kwargs: Any) -> Any: ...  # noqa: D102, E501
+
+
+class FunToReadableByteBuffer(Protocol):  # noqa: D101
+    def __call__(  # noqa: D102
+        self, __data: Any, __fp: BufferedWriter, *args: Any, **kwargs: Any
+    ) -> Any: ...
 
 
 FunParams = ParamSpec("FunParams")
@@ -51,15 +53,14 @@ MetadataPairs: TypeAlias = (
     | Iterable[tuple[MetadataAttribute, MetadataValue]]
 )
 FunHashsum = Callable[..., str]
-FunToByteData = Callable[[Any], ByteData]
-FunToBytes = Callable[[Any], bytes]
-FunToByteFile = Callable[[Any, "SupportsWrite[bytes]"], None]
+
 
 # any name, must be a valid parameter name
 # # but not collide with input parameters
 SINGLE_OUTPUT_PARAM_NAME = "MAIN"
 HTTP_METHOD = Literal["GET", "PUT", "POST", "DELETE", "HEAD", "PATCH"]
 DEFAULT_CHUNK_SIZE = io.DEFAULT_BUFFER_SIZE  # 8192 bytes currently
+DEFAULT_CHUNK_SIZE = 10
 
 # https://www.w3.org/TR/vocab-dcat-3/
 
