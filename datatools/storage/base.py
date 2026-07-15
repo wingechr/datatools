@@ -180,8 +180,6 @@ class DataStorage(ABC):
         importer_class = infer_importer_class(uri, **options)
         name = name or importer_class.get_output_name(uri, **options)
 
-        # logging.error((uri, name, options))
-
         task = self.task(
             function=importer_class.get_data,
             output_converters={

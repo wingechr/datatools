@@ -18,6 +18,7 @@ dependencies = [
     "openpyxl>=3.0",
     "pandas>=2.0",
     "pydantic>=2.13",
+    "pyodbc>=5.3.0",
     "python-dateutil>=2.9.0.post0",
     "rdflib>=7.6",
     "sqlalchemy>=2.0",
