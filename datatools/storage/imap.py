@@ -24,34 +24,40 @@ TEST_DATE = "2001-02-03"
 
 
 def _create_msg(
-    mail_forwarded_from: str = TEST_MAIL_WHILTELISTED, has_attachment: bool = True
+    mail_forwarded_from: str = TEST_MAIL_WHILTELISTED,
+    has_attachment: bool = True,
+    was_forwarded: bool = True,
 ) -> MIMEMultipart:
     date = email.utils.format_datetime(datetime.strptime(TEST_DATE, "%Y-%m-%d"))
+
+    attachment = MIMEText("example file\n", "plain")
+    attachment.add_header("Content-Disposition", "attachment", filename="test.txt")
 
     # original message
     msg = MIMEMultipart()
     msg["From"] = formataddr(("Original", TEST_MAIL_ORIGINAL))
     msg["To"] = mail_forwarded_from
     msg["Subject"] = "Original subject"
-    msg["Date"] = date
+    msg["Date"] = "not a valid date"
     msg.attach(MIMEText("Original text.", "plain"))
 
     # with attachment
     if has_attachment:
-        attachment = MIMEText("example file\n", "plain")
-        attachment.add_header("Content-Disposition", "attachment", filename="test.txt")
         msg.attach(attachment)
 
     # forward
-    fwd = MIMEMultipart()
-    fwd["From"] = mail_forwarded_from
-    fwd["To"] = TEST_MAIL
-    fwd["Subject"] = "Fwd: Original subject"
-    fwd["Date"] = date
-    fwd.attach(MIMEText("Forwarded text", "plain"))
-    fwd.attach(MIMEMessage(msg))
+    msg2 = MIMEMultipart()
+    msg2["From"] = mail_forwarded_from
+    msg2["To"] = TEST_MAIL
+    msg2["Subject"] = "Fwd: Original subject"
+    msg2["Date"] = date
+    msg2.attach(MIMEText("Forwarded text", "plain"))
+    if was_forwarded:
+        msg2.attach(MIMEMessage(msg))
+    elif has_attachment:
+        msg.attach(attachment)
 
-    return fwd
+    return msg2
 
 
 class _Mailbox:
@@ -68,6 +74,8 @@ class _Mailbox:
         self.add_msg(_create_msg())
         # allowed sender, no attachment
         self.add_msg(_create_msg(has_attachment=False))
+        # w/o forwarding
+        self.add_msg(_create_msg(was_forwarded=False))
 
     def add_msg(self, msg: MIMEMultipart):
         msg_id = self._next_id

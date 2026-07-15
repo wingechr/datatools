@@ -5,20 +5,18 @@ from dataclasses import asdict, dataclass
 from email import message_from_bytes
 from email.message import Message
 from email.utils import parseaddr
-import json
 import logging
 import ssl
 from typing import TYPE_CHECKING
 from urllib.parse import unquote
 
-import dateutil.parser
-from imapclient import SEEN, IMAPClient
+import dateutil
+from imapclient import IMAPClient
 
 if TYPE_CHECKING:
     from datatools.storage.base import DataStorage
 
 DEFAULT_IMAP_PORT: int = 143
-DEFAULT_SMTP_PORT: int = 25
 DEFAULT_IMAP_FOLDER: str = "INBOX"
 
 
@@ -70,16 +68,6 @@ class Attachment:
     filename: str | None = None
     contentType: str | None = None
 
-    def has_name_and_data(self) -> bool:
-        """TODO"""
-        if not self.filename:
-            logging.warning("no filename")
-            return False
-        if not self.data:
-            logging.warning(f"no data in {self.filename}")
-            return False
-        return True
-
 
 class MailAttachmentHandler(ABC):
     """TODO"""
@@ -108,25 +96,6 @@ class MailAttachmentHandler(ABC):
         self.use_ssl = use_ssl
         self.use_starttls = use_starttls
 
-    def try_get_date_str(self, message: Message) -> str | None:
-        """TODO"""
-        date = message["Date"]
-        try:
-            return dateutil.parser.parse(date).strftime("%Y-%m-%d")
-        except Exception:
-            return str(date)
-
-    def extract_mail(self, mail: str | None) -> str | None:
-        """TODO"""
-        if not mail:
-            return None
-        try:
-            _name, mail = parseaddr(mail)
-        except Exception:
-            logging.warning("Could not get original From mail: %s", mail)
-            return None
-        return mail
-
     def connect_client(self) -> IMAPClient:
         """TODO"""
         logging.debug("connect_client: start")
@@ -148,32 +117,15 @@ class MailAttachmentHandler(ABC):
         logging.debug("connect_client: ok")
         return client
 
-    def _check(self, client: IMAPClient, remove_flag_seen: bool = False):
+    def _check(self, client: IMAPClient):
         """TODO"""
         logging.debug("check: checking for new messages...")
         messages: list[int] = client.search("UNSEEN")
-        for uid, message_data in client.fetch(messages, "RFC822").items():
-            if b"RFC822" not in message_data:
-                logging.info("check: skipping %s", uid)
-                continue
+        for _uid, message_data in client.fetch(messages, "RFC822").items():
             message_bytes: bytes = message_data[b"RFC822"]  # type:ignore -> Exception
             message = message_from_bytes(message_bytes)
-
             self.handle_message(message)
-
-            if remove_flag_seen:
-                client.remove_flags(uid, [SEEN])
         logging.debug("check: done")
-
-    def get_metadata_file(self, metadata_dict: dict) -> tuple[str, bytes]:
-        """TODO"""
-        filename = metadata_dict["name"]
-        bytes_metadata = json.dumps(
-            metadata_dict, indent=2, ensure_ascii=False
-        ).encode()
-        filename_metadata = filename + ".metadata.json"
-
-        return filename_metadata, bytes_metadata
 
     def handle_message_part(self, part: Message) -> Attachment:
         """TODO"""
@@ -199,16 +151,16 @@ class MailAttachmentHandler(ABC):
 
     def handle_message(self, message: Message):
         """TODO"""
-        from_mail = self.extract_mail(message.get("From")) or ""
+        _name, from_mail = parseaddr(message["From"])
         if from_mail.lower() not in self.email_whitelist_lower:
             logging.info("Ignore mail from : %s", from_mail)
             return
 
         metadata = MailMetadata(
-            MessageID=self.extract_mail(message.get("Message-ID")),
+            MessageID=message.get("Message-ID"),
             FromForwarded=from_mail,
             Subject=message.get("Subject"),
-            Date=self.try_get_date_str(message),
+            Date=dateutil.parser.parse(message["Date"]).strftime("%Y-%m-%d"),
         )
         logging.info("handle_message: %s", metadata)
 
@@ -219,14 +171,10 @@ class MailAttachmentHandler(ABC):
         for part in message.walk():
             try:
                 msg_orig = part.get_payload(0)  # the embedded Message object
-                _from_original = self.extract_mail(msg_orig["From"])  # type:ignore -> Exception
+                _name, _from_original = parseaddr(msg_orig["From"])  # type: ignore
                 if _from_original:
-                    if from_original:
-                        logging.warning(  # noqa:E501
-                            "Multiple original From found"
-                        )
-                    else:
-                        from_original = _from_original
+                    # TODO is it possible that is happens multiple times?
+                    from_original = _from_original
             except Exception:  # noqa:S110
                 pass
 
@@ -250,7 +198,7 @@ class MailAttachmentHandler(ABC):
         self, attachments: list[Attachment], metadata: MailMetadata
     ): ...
 
-    def serve_forever(self):
+    def serve_forever(self):  # pragma: no cover
         """TODO"""
         client = self.connect_client()
         while True:
@@ -291,8 +239,6 @@ class MailAttachmentStorageHandler(MailAttachmentHandler):
     def handle_attachments(self, attachments: list[Attachment], metadata: MailMetadata):
         """TODO"""
         for attachment in attachments:
-            if not attachment.has_name_and_data():
-                continue
 
             def make_get_mail(attachment: Attachment):
                 def get_mail() -> bytes:
