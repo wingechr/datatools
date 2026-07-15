@@ -7,7 +7,7 @@ import re
 from typing_extensions import override
 
 from datatools.process.task import AnnotatedFunction
-from datatools.types import FunToReadableByteBuffer, Name, WritableByteBuffer
+from datatools.types import FunToWritableBuffer, Name, WritableBuffer
 from datatools.utils import (
     get_name_from_uri,
     http_get_stream,
@@ -24,7 +24,7 @@ from datatools.utils import (
 class Importer(ABC):
     """TODO"""
 
-    output_write_byte_data: FunToReadableByteBuffer | None = None
+    output_write_byte_data: FunToWritableBuffer | None = None
     get_data: Callable
 
     @classmethod
@@ -46,7 +46,7 @@ def infer_importer_class(uri: str, **options) -> type[Importer]:
     raise NotImplementedError(f"Cannot infer Importer class for {uri}")
 
 
-def write_chunks(data: Iterable[bytes], buf: WritableByteBuffer):
+def write_chunks(data: Iterable[bytes], buf: WritableBuffer):
     """TODO"""
     for chunk in data:
         buf.write(chunk)
@@ -57,7 +57,7 @@ class HttpImporter(Importer):
 
     # use generic id (tool does not matter)
     get_data = AnnotatedFunction.wrap(function_id="GET")(http_get_stream)
-    output_write_byte_data: FunToReadableByteBuffer = write_chunks
+    output_write_byte_data: FunToWritableBuffer = write_chunks
 
     @classmethod
     @override
@@ -75,7 +75,7 @@ class FileImporter(Importer):
 
     # use generic id (tool does not matter)
     get_data = AnnotatedFunction.wrap(function_id="COPY")(read_file_uri_stream)
-    output_write_byte_data: FunToReadableByteBuffer = write_chunks
+    output_write_byte_data: FunToWritableBuffer = write_chunks
 
     @classmethod
     def can_handle(cls, uri: str, **options) -> bool:
@@ -103,7 +103,7 @@ class SqlImporter(Importer):
 
     # use generic id (tool does not matter)
     get_data = AnnotatedFunction.wrap(function_id="QUERY")(query_sql)
-    output_write_byte_data: FunToReadableByteBuffer = sql_query_result_to_csv
+    output_write_byte_data: FunToWritableBuffer = sql_query_result_to_csv
 
     @classmethod
     @override

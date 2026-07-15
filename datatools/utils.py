@@ -10,8 +10,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import importlib
 import inspect
 from inspect import Parameter, Signature
-import io
-from io import BufferedReader
+from io import BufferedReader, RawIOBase
 import json
 import logging
 import math
@@ -52,16 +51,17 @@ from datatools.types import (
     LOCKFILE_SUFFIX,
     TEMPFILE_SUFFIX,
     ByteData,
-    FunToReadableByteBuffer,
+    FunToWritableBuffer,
     Json,
     ReadableByteBuffer,
     StrPath,
     SubCls,
     T,
-    WritableByteBuffer,
+    WritableBuffer,
 )
 
 if TYPE_CHECKING:
+    from _typeshed import SupportsWrite
     from sqlalchemy.engine import CursorResult
     from sqlalchemy.engine.row import Row
 
@@ -243,7 +243,7 @@ def str_load(
 
 def json_dump(
     data: Any,
-    fp: WritableByteBuffer,
+    fp: "SupportsWrite",
     ensure_ascii: bool = False,
     sort_keys: bool = False,
     indent: int = 2,
@@ -1109,7 +1109,7 @@ def wrap_exception(
 
 
 def sql_query_result_to_csv(
-    data: Iterable["Row"], fp: WritableByteBuffer, **options
+    data: Iterable["Row"], fp: WritableBuffer, **options
 ) -> None:
     """TODO"""
     df = pd.DataFrame(data)
@@ -1307,7 +1307,7 @@ def as_bytes(data: Iterable[bytes]) -> bytes:
     return b"".join(c for c in data)
 
 
-class IterableStream(io.RawIOBase):
+class IterableStream(RawIOBase):
     """Convert bytes iterator in read only buffer with lazy consumption"""
 
     def __init__(self, iterable: Iterable[bytes]):
@@ -1333,7 +1333,7 @@ class IterableStream(io.RawIOBase):
 
 def byte_iterable_as_buffer(iterable: Iterable[bytes]) -> ReadableByteBuffer:
     """TODO"""
-    return BufferedReader(IterableStream(iterable))
+    return IterableStream(iterable)  # type:ignore FIXME
 
 
 def buffer_to_byte_iterable(
@@ -1421,8 +1421,8 @@ class BufferIter(Generic[T]):
 
     def __init__(
         self,
-        dump: FunToReadableByteBuffer,
-        encoding_if_str: str | None = None,
+        dump: FunToWritableBuffer,
+        encoding_if_str: str = DEFAULT_ENCODING,
         daemon: bool = True,
         timeout: float | None = None,
         **kwargs,
@@ -1433,14 +1433,15 @@ class BufferIter(Generic[T]):
         self._kwargs = kwargs
         self._daemon = daemon
         self._timeout = timeout
-        self._encoding_if_str: str = encoding_if_str or DEFAULT_ENCODING
+        self._encoding_if_str = encoding_if_str
 
     def __call__(self, data: T) -> Iterable[bytes]:
         """TODO"""
 
         def f():
+            buf: WritableBuffer = self  # type:ignore FIXME
             try:
-                self._dump(data, self, **self._kwargs)
+                self._dump(data, buf, **self._kwargs)
                 # wait for consumer thread to finish processing
                 self._reverse_queue.get()
                 # send close signal

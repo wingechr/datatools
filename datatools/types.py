@@ -23,14 +23,15 @@ from rdflib import Namespace, URIRef
 #    def readline(self) -> bytes: ...  # noqa: D102
 
 ReadableByteBuffer = BufferedReader
-WritableByteBuffer = BufferedWriter
+WritableBuffer = BufferedWriter
 
 
 class FunFromReadableByteBuffer(Protocol):  # noqa: D101
     def __call__(self, __fp: ReadableByteBuffer, *args: Any, **kwargs: Any) -> Any: ...  # noqa: D102, E501
 
 
-class FunToReadableByteBuffer(Protocol):  # noqa: D101
+class FunToWritableBuffer(Protocol):  # noqa: D101
+    # can also write str
     def __call__(  # noqa: D102
         self, __data: Any, __fp: BufferedWriter, *args: Any, **kwargs: Any
     ) -> Any: ...
@@ -44,7 +45,8 @@ T = TypeVar("T")
 
 Json: TypeAlias = str | int | float | bool | None | list["Json"] | dict[str, "Json"]
 StrPath = Path | str
-ByteData = bytes | Iterable[bytes] | BufferedReader
+StrBytes = str | bytes
+ByteData = bytes | Iterable[bytes] | ReadableByteBuffer
 Name = str
 MetadataAttribute = str
 MetadataValue: TypeAlias = Json

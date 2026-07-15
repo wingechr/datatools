@@ -23,14 +23,14 @@ from datatools.types import (
     FunHashsum,
     FunParams,
     FunResult,
-    FunToReadableByteBuffer,
+    FunToWritableBuffer,
     Json,
     MetadataAttribute,
     MetadataValue,
     Name,
     ReadableByteBuffer,
     URIRefs as u,
-    WritableByteBuffer,
+    WritableBuffer,
 )
 from datatools.utils import (
     BufferIter,
@@ -54,7 +54,7 @@ def _dummy_input_handler_read(file: ReadableByteBuffer) -> bytes:
 
 
 @AnnotatedFunction.wrap(function_id="WRITE")
-def _dummy_output_handler_write(data: bytes, file: WritableByteBuffer) -> None:
+def _dummy_output_handler_write(data: bytes, file: WritableBuffer) -> None:
     file.write(data)
 
 
@@ -193,7 +193,7 @@ class DataStorage(ABC):
 
     def cache(
         self,
-        output_write_byte_data: FunToReadableByteBuffer = pickle.dump,
+        output_write_byte_data: FunToWritableBuffer = pickle.dump,
         output_from_bytes: FunFromReadableByteBuffer = pickle.load,
         get_name_from_hash: Callable[[str], str] = identity,
         get_job_hashsum: FunHashsum = default_get_task_uuid,
@@ -232,8 +232,8 @@ class DataStorage(ABC):
     def task(
         self,
         function: Callable,
-        output_converters: dict[str, FunToReadableByteBuffer | None]
-        | FunToReadableByteBuffer
+        output_converters: dict[str, FunToWritableBuffer | None]
+        | FunToWritableBuffer
         | None = None,
         input_converters: dict[str, FunFromReadableByteBuffer | None]
         | FunFromReadableByteBuffer
@@ -337,7 +337,7 @@ class DataStorage(ABC):
                     callback_data["metadata_generated"] = metadata_generator(data)
 
         def wrap_output_handler(
-            param_name: str, handler: FunToReadableByteBuffer | None = None
+            param_name: str, handler: FunToWritableBuffer | None = None
         ):
             if handler:
                 handler_w = AnnotatedFunction.assert_wrapped(handler)
