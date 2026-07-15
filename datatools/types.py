@@ -20,13 +20,18 @@ from typing import (
 from rdflib import Namespace, URIRef
 
 if TYPE_CHECKING:
-    from _typeshed import SupportsRead, SupportsWrite
+    from _typeshed import SupportsWrite
 
 
-class FunFromByteFile(Protocol):
-    """TODO"""
+# class ReadableByteBuffer(Protocol):  # noqa: D101
+#    def read(self, __n: int = ...) -> bytes: ...  # noqa: D102
+#    def readline(self) -> bytes: ...  # noqa: D102
 
-    def __call__(self, __fp: SupportsRead[bytes], *args: Any, **kwargs: Any) -> Any: ...  # noqa: D102, E501
+ReadableByteBuffer = BufferedReader
+
+
+class FunFromReadableByteBuffer(Protocol):  # noqa: D101
+    def __call__(self, __fp: ReadableByteBuffer, *args: Any, **kwargs: Any) -> Any: ...  # noqa: D102, E501
 
 
 FunParams = ParamSpec("FunParams")

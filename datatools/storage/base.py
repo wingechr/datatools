@@ -5,7 +5,7 @@ from collections.abc import Callable, Iterable
 import contextlib
 import functools
 import pickle
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from datatools.exceptions import (
     StorageFileExistsError,
@@ -19,7 +19,7 @@ from datatools.types import (
     RDF_CONTEXT,
     SINGLE_OUTPUT_PARAM_NAME,
     ByteData,
-    FunFromByteFile,
+    FunFromReadableByteBuffer,
     FunHashsum,
     FunParams,
     FunResult,
@@ -28,6 +28,7 @@ from datatools.types import (
     MetadataAttribute,
     MetadataValue,
     Name,
+    ReadableByteBuffer,
     URIRefs as u,
 )
 from datatools.utils import (
@@ -42,15 +43,12 @@ from datatools.utils import (
     remove_credentials_from_netloc,
 )
 
-if TYPE_CHECKING:
-    from _typeshed import SupportsRead
-
 DEFAULT_HASH_ALGORITHM = "sha256"
 
 AnnotatedFunction.wrap(function_id="READ")
 
 
-def _dummy_input_handler_read(file: "SupportsRead[bytes]") -> bytes:
+def _dummy_input_handler_read(file: ReadableByteBuffer) -> bytes:
     return file.read()
 
 
@@ -126,7 +124,7 @@ class DataStorage(ABC):
             raise StorageFileNotFoundError(f"Not found: {name}")
         yield from self._read(name=name)
 
-    def open(self, name: Name) -> "SupportsRead[bytes]":
+    def open(self, name: Name) -> ReadableByteBuffer:
         """TODO"""
         return byte_iterable_as_buffer(self.iter_bytes(name))
 
@@ -190,7 +188,7 @@ class DataStorage(ABC):
     def cache(
         self,
         output_to_byte_data: FunToByteData = pickle.dumps,
-        output_from_bytes: FunFromByteFile = pickle.load,
+        output_from_bytes: FunFromReadableByteBuffer = pickle.load,
         get_name_from_hash: Callable[[str], str] = identity,
         get_job_hashsum: FunHashsum = default_get_task_uuid,
     ) -> Callable:
@@ -231,8 +229,8 @@ class DataStorage(ABC):
         output_converters: dict[str, FunToByteData | None]
         | FunToByteData
         | None = None,
-        input_converters: dict[str, FunFromByteFile | None]
-        | FunFromByteFile
+        input_converters: dict[str, FunFromReadableByteBuffer | None]
+        | FunFromReadableByteBuffer
         | None = None,
         metadata_generator: Callable[[Any], dict[str, Json]] | None = None,
         get_task_id: FunHashsum = default_get_task_uuid,
@@ -261,7 +259,7 @@ class DataStorage(ABC):
             "task": None,  # will be filled later
         }
 
-        def wrap_input_handler(name: str, handler: FunFromByteFile):
+        def wrap_input_handler(name: str, handler: FunFromReadableByteBuffer):
             def handle_(name_value: Name):
                 if name_value is None:
                     raise KeyError("No value provided for input {name}")
@@ -394,7 +392,7 @@ class DataStorage(ABC):
             for name, conv in output_converters.items()
         }
 
-        input_converters_: dict[str, FunFromByteFile]
+        input_converters_: dict[str, FunFromReadableByteBuffer]
         if input_converters is None:
             input_converters_ = {}
         elif not isinstance(input_converters, dict):

@@ -914,7 +914,7 @@ def get_module_version(func: Callable) -> str | None:
     version = None
     try:
         mod = inspect.getmodule(func)
-        mod_path = mod.__name__.split(".")  # type: ignore
+        mod_path = mod.__name__.split(".")
         while mod_path and not version:
             mod_name = ".".join(mod_path)
             mod = importlib.import_module(mod_name)
@@ -1354,7 +1354,7 @@ def write_bytes_locked(
         #     raise
 
 
-def get_item_or_first(x):
+def get_item_or_first(x: T | list[T]) -> T | None:
     """TODO
 
     Example:

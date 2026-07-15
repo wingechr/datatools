@@ -24,7 +24,7 @@ from datatools.utils import (
 )
 
 # we need to use print()
-sys.stdout.reconfigure(errors="replace")  # type: ignore
+sys.stdout.reconfigure(errors="replace")
 
 
 def infer_storage_class(location: str, storage_class=str | None) -> type[DataStorage]:
