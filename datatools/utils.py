@@ -4,7 +4,6 @@ import codecs
 from collections.abc import Callable, Iterable, Iterator
 import csv
 import datetime
-from email.utils import parseaddr
 from functools import cache, partial
 import hashlib
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -31,10 +30,10 @@ from urllib.parse import unquote, urlparse, urlsplit
 from urllib.request import url2pathname
 import uuid
 
+from bs4 import BeautifulSoup
 import chardet
 from filelock import FileLock
 import frictionless
-import html2text
 import httpx
 import jsonpath_ng
 import jsonpath_ng.ext
@@ -1452,7 +1451,7 @@ def get_plain_text_msg_and_original_from(text: str) -> tuple[str, str | None]:
     ('text', None)
 
     >>> get_plain_text_msg_and_original_from('<html><b>text</b></html>')
-    ('**text**', None)
+    ('text', None)
 
     >>> get_plain_text_msg_and_original_from(
     ...     '-----Original Message-----\r\n'
@@ -1466,16 +1465,40 @@ def get_plain_text_msg_and_original_from(text: str) -> tuple[str, str | None]:
     text = text.replace("\r\n", "\n")
     text = text.strip()
 
+    # try to extract from mail
     from_mail = None
+    if m := re.match(".*From: [^<]*<([^>@]+@[^>@]+)>", text, re.MULTILINE | re.DOTALL):
+        from_mail = m.groups()[0]
 
-    if m := re.match(".*---Original Message---[-]*\nFrom: ([^\n]+)", text, re.DOTALL):
-        _name, from_mail = parseaddr(m.groups()[0])
-    if "<html>" in text:
-        h = html2text.HTML2Text()
-        h.ignore_links = False  # set True to strip links entirely
-        h.ignore_images = True
-        h.body_width = 0  # don't wrap lines
-        h.unicode_snob = True  # preserve unicode chars instead of ASCII-fying them
-        text = h.handle(text)
-    text = text.strip()
+    text = dirty_to_plain(text)
+
     return text, from_mail
+
+
+def dirty_to_plain(text):
+    """TODO"""
+    # protect <user@domain> style addresses from being parsed as tags
+    protected = {}
+
+    def protect(m):
+        key = f"\x00{len(protected)}\x00"
+        protected[key] = m.group(0)
+        return key
+
+    text = re.sub(r"<[^<>\s]+@[^<>\s]+>", protect, text)
+
+    soup = BeautifulSoup(text, "html.parser")
+    for tag in soup(["script", "style"]):
+        tag.decompose()
+    for br in soup.find_all("br"):
+        br.replace_with("\n")
+
+    plain = soup.get_text()
+
+    for key, val in protected.items():
+        plain = plain.replace(key, val)
+
+    lines = [line.rstrip() for line in plain.splitlines()]
+    plain = "\n".join(lines)
+    plain = re.sub(r"\n{3,}", "\n\n", plain)
+    return plain.strip()

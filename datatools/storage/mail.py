@@ -196,6 +196,8 @@ class MailAttachmentHandler(ABC):
         if from_original:
             logging.info("found from_original: %s", from_original)
 
+        logging.info(text)
+
         if attachments:
             self.handle_attachments(attachments, metadata)
 
