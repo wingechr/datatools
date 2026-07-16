@@ -42,6 +42,7 @@ from datatools.utils import (
     get_now_str,
     get_user_w_host,
     identity,
+    json_drop_empty,
     remove_credentials_from_netloc,
 )
 
@@ -384,6 +385,9 @@ class DataStorage(ABC):
                 if meta_saved_with:
                     # update id
                     output_metadata[u.serializedWith.label] = meta_saved_with
+
+                # clean output_metadata
+                output_metadata = json_drop_empty(output_metadata)
 
                 # cannot set root itself:
                 metadata = self.metadata(name)

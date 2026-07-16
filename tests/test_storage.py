@@ -413,7 +413,7 @@ class TestUseCases(TestCase):
                             "@id": event_id + "/input/options",
                             # "@type": u.LiteralParameter.label,
                             u.roleName.label: "options",
-                            u.value.label: None,
+                            # u.value.label: None, # no value
                         },
                     ],
                 },

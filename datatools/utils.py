@@ -1519,3 +1519,44 @@ def dirty_to_plain(text):
     plain = "\n".join(lines)
     plain = re.sub(r"\n{3,}", "\n\n", plain)
     return plain.strip()
+
+
+def json_drop_empty(x: T) -> T:
+    """TODO
+
+    Example:
+
+    >>> json_drop_empty(0)
+    0
+    >>> json_drop_empty("")
+    ''
+    >>> json_drop_empty([1, {}])
+    [1]
+    >>> json_drop_empty([1, {"a": []}])
+    [1]
+    >>> json_drop_empty({"a": [{}]}) # keep main structure
+    {}
+
+    """
+
+    def _is_not_empty(x: Json) -> bool:
+        if x is None:  # noqa: SIM114 - keep for clarity
+            return False
+        elif isinstance(x, (list, dict)) and not x:
+            return False
+        return True
+
+    if isinstance(x, dict):
+        # recursion
+        x_ = {k: json_drop_empty(v) for k, v in x.items()}
+        # drop empty elements
+        x_ = {k: v for k, v in x_.items() if _is_not_empty(v)}
+        return x_  # type: ignore Why - input type is output type
+    elif isinstance(x, list):
+        # recursion
+        x_ = [json_drop_empty(v) for v in x]
+        # drop empty elements
+        x_ = [v for v in x_ if _is_not_empty(v)]
+        return x_  # type: ignore Why - input type is output type
+    else:
+        return x
