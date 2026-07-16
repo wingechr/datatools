@@ -1472,7 +1472,9 @@ def get_plain_text_msg_and_original_from_and_date(
 
     # try to extract from mail
     from_mail = None
-    if m := re.match(".*From: [^<]*<([^>@]+@[^>@]+)>", text, re.MULTILINE | re.DOTALL):
+    if m := re.match(
+        r".*From: [^<]*<([^<>@\s]+@[^<>@\s]+)>", text, re.MULTILINE | re.DOTALL
+    ):
         from_mail = m.groups()[0]
 
     # try to extract Sent date (Sent: Friday, July 10, 2026 3:53 PM)
@@ -1560,3 +1562,8 @@ def json_drop_empty(x: T) -> T:
         return x_  # type: ignore Why - input type is output type
     else:
         return x
+
+
+def sanitize_filename(name: str) -> str:
+    """TODO"""
+    return re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name)

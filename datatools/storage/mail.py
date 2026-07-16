@@ -15,7 +15,10 @@ from imapclient import IMAPClient
 
 from datatools import AnnotatedFunction
 from datatools.types import URIRefs as u
-from datatools.utils import get_plain_text_msg_and_original_from_and_date
+from datatools.utils import (
+    get_plain_text_msg_and_original_from_and_date,
+    sanitize_filename,
+)
 
 if TYPE_CHECKING:
     from datatools.storage.base import DataStorage
@@ -49,10 +52,10 @@ class MailMetadata:
     @property
     def unique_name(self) -> str:
         """TODO"""
-        date_val = self.Date or "MISSING-DATE"
-        from_val = self.From or "MISSING-FROM"
-        id_val = self.ID or "MISSING-ID"
-        return f"{date_val}_{from_val}_{id_val}"
+        date_val = self.Date or "missing"
+        from_val = self.From or "missing"
+        id_val = self.ID or "missing"
+        return f"{date_val[:10]}_{from_val.lower()}_{id_val.lower()}"
 
 
 @dataclass(slots=True)
@@ -185,13 +188,13 @@ class MailAttachmentHandler(ABC):
         )
         if from_original:
             metadata.From = from_original
-        if date_original:
-            metadata.Date = date_original
-        metadata.Message = text
-
-        if from_original:
             logging.info("found from_original: %s", from_original)
 
+        if date_original:
+            metadata.Date = date_original
+            logging.info("found date_original: %s", date_original)
+
+        metadata.Message = text
         logging.info(text)
 
         if attachments:
@@ -275,6 +278,8 @@ class MailAttachmentStorageHandler(MailAttachmentHandler):
                 metadata_generator=make_get_metadata(attachment),
             )
 
-            resource_name = f"{metadata.unique_name}/{attachment.filename}"
-            resource_name = resource_name.lower()
+            message_name = sanitize_filename(metadata.unique_name)
+            filename = sanitize_filename(attachment.filename or "missing")
+            resource_name = f"{message_name}/{filename}"
+
             task(resource_name)
