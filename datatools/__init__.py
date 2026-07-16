@@ -1,6 +1,6 @@
 """data processing tools."""
 
-__version__ = "0.15.12"
+__version__ = "0.15.13"
 __all__ = ["FileDataStorage", "AnnotatedFunction"]
 
 from datatools.process.task import AnnotatedFunction
