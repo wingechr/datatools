@@ -4,6 +4,7 @@ import codecs
 from collections.abc import Callable, Iterable, Iterator
 import csv
 import datetime
+from email.utils import parsedate_to_datetime
 from functools import cache, partial
 import hashlib
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -32,6 +33,7 @@ import uuid
 
 from bs4 import BeautifulSoup
 import chardet
+import dateutil.parser
 from filelock import FileLock
 import frictionless
 import httpx
@@ -1442,26 +1444,29 @@ class BufferIter(Generic[T]):
         thread.join()  # TODO: do we need it?
 
 
-def get_plain_text_msg_and_original_from(text: str) -> tuple[str, str | None]:
+def get_plain_text_msg_and_original_from_and_date(
+    text: str,
+) -> tuple[str, str | None, str | None]:
     r"""TODO
 
     Example:
 
-    >>> get_plain_text_msg_and_original_from('text')
-    ('text', None)
+    >>> get_plain_text_msg_and_original_from_and_date('text')
+    ('text', None, None)
 
-    >>> get_plain_text_msg_and_original_from('<html><b>text</b></html>')
-    ('text', None)
+    >>> get_plain_text_msg_and_original_from_and_date('<html><b>text</b></html>')
+    ('text', None, None)
 
-    >>> get_plain_text_msg_and_original_from(
+    >>> get_plain_text_msg_and_original_from_and_date(
     ...     '-----Original Message-----\r\n'
     ...     'From: user <user@test.com>\r\n'
+    ...     'Sent: Friday, July 10, 2026 3:53 PM\r\n'
     ...     '\r\n'
     ...     'text'
     ... )
-    ('-----Original Message-----\nFrom: user <user@test.com>\n\ntext', 'user@test.com')
+    ('-----Original Message-----\nFrom: user <user@test.com>\nSent: Friday, July 10, 2026 3:53 PM\n\ntext', 'user@test.com', '2026-07-10T15:53:00')
 
-    """
+    """  # noqa: E501
     text = text.replace("\r\n", "\n")
     text = text.strip()
 
@@ -1470,9 +1475,21 @@ def get_plain_text_msg_and_original_from(text: str) -> tuple[str, str | None]:
     if m := re.match(".*From: [^<]*<([^>@]+@[^>@]+)>", text, re.MULTILINE | re.DOTALL):
         from_mail = m.groups()[0]
 
+    # try to extract Sent date (Sent: Friday, July 10, 2026 3:53 PM)
+    sent_date = None
+    if m := re.match(".*Sent: ([^\n]*)", text, re.MULTILINE | re.DOTALL):
+        sent_date = m.groups()[0]
+        # parsedate_to_datetime should be the best function, but did not pick up
+        # on PM in datetime
+        try:
+            _datetime = dateutil.parser.parse(sent_date)
+        except Exception:
+            _datetime = parsedate_to_datetime(sent_date)
+        sent_date = _datetime.strftime(DATETIMETZ_FMT)
+
     text = dirty_to_plain(text)
 
-    return text, from_mail
+    return text, from_mail, sent_date
 
 
 def dirty_to_plain(text):

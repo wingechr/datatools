@@ -175,6 +175,7 @@ class URIRefs(MyEnum[ExtURIRef]):
     Serialization = ExtURIRef(ns["Serialization"])
     Deserialization = ExtURIRef(ns["Deserialization"])
     LiteralParameter = ExtURIRef(ns["LiteralParameter"])
+    Message = ExtURIRef(ns["Message"])
 
     # FileResource -> CreationEvent
     createdBy = ExtURIRef(ns["createdBy"])
@@ -207,6 +208,8 @@ class URIRefs(MyEnum[ExtURIRef]):
     format = ExtURIRef(ns["format"])  # not used yet,e.g. "csv"
     mediatype = ExtURIRef(ns["mediatype"])  # not used yet,e.g. "text/csv"
     encoding = ExtURIRef(ns["encoding"])  # not used yet,e.g. "utf-8"
+
+    message = ExtURIRef(ns["message"])
 
 
 # use http, becaus most others vocabs do it too

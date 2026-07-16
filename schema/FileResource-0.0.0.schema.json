@@ -25,7 +25,8 @@
         "usedInput": { "$ref": "#/$defs/usedInput" },
         "creator": { "$ref": "#/$defs/creator" },
         "datetime": { "$ref": "#/$defs/datetime" },
-        "taskId": { "$ref": "#/$defs/taskId" }
+        "taskId": { "$ref": "#/$defs/taskId" },
+        "message": { "$ref": "#/$defs/message" }
       },
       "required": ["@id", "usedFunction", "creator", "datetime", "usedInput"],
       "allowOthers": true
@@ -66,6 +67,20 @@
     "event": {
       "type": "object",
       "properties": { "@id": { "$ref": "#/$defs/@id" } }
+    },
+    "message": { "$ref": "#/$defs/Message" },
+    "Message": {
+      "type": "object",
+      "properties": {
+        "@id": { "$ref": "#/$defs/@id" },
+
+        "creator": { "$ref": "#/$defs/creator" },
+        "datetime": { "$ref": "#/$defs/datetime" },
+        "name": { "$ref": "#/$defs/name" },
+        "value": { "type": "string" }
+      },
+      "required": ["@id", "creator", "datetime", "name"],
+      "allowOthers": false
     },
     "usedFunction": { "$ref": "#/$defs/Function" },
     "usedInput": {

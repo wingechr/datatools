@@ -1,7 +1,7 @@
 """Main script"""
 
 from abc import ABC, abstractmethod
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from email import message_from_bytes, policy
 from email.message import Message
 from email.utils import parseaddr
@@ -14,7 +14,8 @@ import dateutil
 from imapclient import IMAPClient
 
 from datatools import AnnotatedFunction
-from datatools.utils import get_plain_text_msg_and_original_from
+from datatools.types import URIRefs as u
+from datatools.utils import get_plain_text_msg_and_original_from_and_date
 
 if TYPE_CHECKING:
     from datatools.storage.base import DataStorage
@@ -39,28 +40,19 @@ def split_email(mail: str) -> tuple[str, str, str]:
 class MailMetadata:
     """TODO"""
 
-    MessageID: str | None
-    FromForwarded: str | None
+    ID: str
+    From: str | None
     Subject: str | None
     Date: str | None
-    FromOriginal: str | None = None
-    MessageText: str | None = None
+    Message: str | None = None
 
     @property
     def unique_name(self) -> str:
         """TODO"""
         date_val = self.Date or "MISSING-DATE"
-        from_val = self.FromOriginal or self.FromForwarded or "MISSING-FROM"
-        id_val = self.MessageID or "MISSING-ID"
+        from_val = self.From or "MISSING-FROM"
+        id_val = self.ID or "MISSING-ID"
         return f"{date_val}_{from_val}_{id_val}"
-
-    def create_for_attachment(self, attachment: "Attachment") -> dict:
-        """TODO"""
-        return asdict(self) | {
-            "fileName": attachment.filename,
-            "mediatype": attachment.contentType,
-            "bytes": len(attachment.data or b""),
-        }
 
 
 @dataclass(slots=True)
@@ -161,8 +153,8 @@ class MailAttachmentHandler(ABC):
             return
         _, message_id = parseaddr(message["Message-ID"])  # ususally <x@y>
         metadata = MailMetadata(
-            MessageID=message_id,
-            FromForwarded=from_mail,
+            ID=message_id,
+            From=from_mail,
             Subject=message.get("Subject"),
             Date=dateutil.parser.parse(message["Date"]).strftime("%Y-%m-%d"),
         )
@@ -188,10 +180,14 @@ class MailAttachmentHandler(ABC):
 
         text: str = "\n\n".join(texts)
 
-        text, from_original = get_plain_text_msg_and_original_from(text)
-
-        metadata.FromOriginal = from_original
-        metadata.MessageText = text
+        text, from_original, date_original = (
+            get_plain_text_msg_and_original_from_and_date(text)
+        )
+        if from_original:
+            metadata.From = from_original
+        if date_original:
+            metadata.Date = date_original
+        metadata.Message = text
 
         if from_original:
             logging.info("found from_original: %s", from_original)
@@ -256,9 +252,20 @@ class MailAttachmentStorageHandler(MailAttachmentHandler):
                 return get_mail
 
             def make_get_metadata(attachment: Attachment):
-                metadata_dict = metadata.create_for_attachment(attachment)
-
                 def get_metadata(_) -> dict:
+                    metadata_dict = {}
+                    # directly to resource
+                    metadata_dict[u.mediatype.label] = attachment.contentType
+                    # add message to creation event
+                    metadata_dict[f"{u.createdBy.label}.{u.message.label}"] = {
+                        "@type": u.Message.label,
+                        "@id": "mail:" + metadata.ID,
+                        u.creator.label: metadata.From,
+                        u.datetime.label: metadata.Date,
+                        u.name.label: metadata.Subject,
+                        u.value.label: metadata.Message,
+                    }
+
                     return metadata_dict
 
                 return get_metadata
