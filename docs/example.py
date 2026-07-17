@@ -1,6 +1,7 @@
 """Example script."""
 # ruff: noqa: S101, D103
 
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -8,7 +9,7 @@ import pandas as pd
 
 from datatools import FileDataStorage
 from datatools.types import ReadableByteBuffer
-from datatools.utils import json_dump, json_loadb, start_http_server
+from datatools.utils import start_http_server
 from tests.test_storage import QueryParameterUri
 
 # test http server
@@ -50,7 +51,7 @@ with TemporaryDirectory() as tempdir:
     task = st.task(
         sum_values,
         # to / from bytes convert fro output/input
-        output_converters=json_dump,
+        output_converters=json.dump,
         input_converters={
             "value1": len_bytes,
             "value2": len_bytes,
@@ -65,7 +66,7 @@ with TemporaryDirectory() as tempdir:
 
     # check result and metadata
     assert len(st.read(name1)) == len(st.read(name2))  # imported same files 2 times
-    assert json_loadb(st.read(name4)) == 2 * len(st.read(name1)) + 1
+    assert json.loads(st.read(name4)) == 2 * len(st.read(name1)) + 1
 
     assert st.metadata(name1).get(QueryParameterUri)[0] == uri1
     assert st.metadata(name2).get(QueryParameterUri)[0] == uri2

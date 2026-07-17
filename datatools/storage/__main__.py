@@ -8,6 +8,7 @@ from typing import cast
 import click
 import uvicorn
 
+from datatools.io import JsonIO
 from datatools.storage import storage, storage_classes
 from datatools.storage.base import DataStorage
 from datatools.storage.http import make_server_app
@@ -18,7 +19,6 @@ from datatools.storage.mail import (
 )
 from datatools.utils import (
     buffer_to_byte_iterable,
-    json_dumps,
     parse_cmd_vals,
     wrap_exception,
 )
@@ -42,7 +42,7 @@ def main(ctx, location: str, storage_class=str | None) -> None:
 def info(ctx_data_storage: DataStorage) -> None:
     """TODO"""
     info = ctx_data_storage.info()
-    print(json_dumps(info))
+    print(JsonIO.dumps(info))
 
 
 @main.command()
@@ -113,7 +113,7 @@ def metadata_get(ctx_data_storage: DataStorage, name: str, attribute: str) -> No
     """TODO"""
     metadata_storage = ctx_data_storage.metadata(name)
     values = list(metadata_storage.get(attribute))
-    print(json_dumps(values))
+    print(JsonIO.dumps(values))
 
 
 @metadata.command("set")

@@ -18,7 +18,7 @@ from datatools.io import JsonIO
 from datatools.storage.base import DataStorage, MetadataStorage
 from datatools.storage.memory import PersistentMemoryMetadataStorage
 from datatools.types import Name
-from datatools.utils import as_bytes, json_dumps
+from datatools.utils import as_bytes
 
 sql_base = MetaData()
 
@@ -62,7 +62,7 @@ class SqlMetadataStorage(PersistentMemoryMetadataStorage):
             return JsonIO.loads(data_s)
 
     def _dump(self, data: dict) -> None:
-        data_s = json_dumps(data, ensure_ascii=False)
+        data_s = JsonIO.with_conf().dumps(data)
         # check if row exists
         with self._engine.begin() as con:
             resp = con.execute(

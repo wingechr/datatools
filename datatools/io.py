@@ -19,6 +19,7 @@ from datatools.types import (
     ENCODING_ERROOR,
     TIME_FMT,
     Json,
+    SubCls,
 )
 
 if TYPE_CHECKING:
@@ -135,9 +136,9 @@ class IO:
     """TODO"""
 
     @classmethod
-    def with_conf(cls, **class_attrs) -> type["IO"]:
+    def with_conf(cls: type[SubCls], **class_attrs) -> type[SubCls]:
         """TODO"""
-        return type(cls.__name__, (cls,), class_attrs)
+        return type(cls.__name__, (cls,), class_attrs)  # type:ignore
 
     @classmethod
     @abstractmethod

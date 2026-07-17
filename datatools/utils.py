@@ -12,7 +12,6 @@ import importlib
 import inspect
 from inspect import Parameter, Signature
 from io import BufferedReader, RawIOBase
-import json
 import logging
 import os
 from pathlib import Path
@@ -52,7 +51,6 @@ from datatools.types import (
     DATETIMETZ_FMT,
     DEFAULT_CHUNK_SIZE,
     DEFAULT_ENCODING,
-    ENCODING_ERROOR,
     FILEMOD_WRITE,
     LOCKFILE_SUFFIX,
     TEMPFILE_SUFFIX,
@@ -67,7 +65,6 @@ from datatools.types import (
 )
 
 if TYPE_CHECKING:
-    from _typeshed import SupportsWrite
     from sqlalchemy.engine import CursorResult
     from sqlalchemy.engine.row import Row
 
@@ -94,63 +91,6 @@ def make_file_writable(file_path: StrPath) -> None:
     current_permissions = os.stat(file_path).st_mode
     readonly_permissions = current_permissions | FILEMOD_WRITE
     os.chmod(file_path, readonly_permissions)
-
-
-def str_load(
-    data: bytes,
-    encoding: str = DEFAULT_ENCODING,
-    errors: ENCODING_ERROOR = "strict",
-) -> str:
-    """TODO"""
-    return data.decode(encoding=encoding, errors=errors)
-
-
-def json_dump(
-    data: Any,
-    fp: "SupportsWrite",
-    ensure_ascii: bool = False,
-    sort_keys: bool = False,
-    indent: int = 2,
-    default: Callable | None = json_serialize,
-) -> None:
-    """TODO"""
-    json.dump(
-        data,
-        fp,
-        ensure_ascii=ensure_ascii,
-        sort_keys=sort_keys,
-        indent=indent,
-        default=default,
-    )
-
-
-def json_dumps(
-    data: Any,
-    ensure_ascii: bool = False,
-    sort_keys: bool = False,
-    indent: int = 2,
-    default: Callable | None = json_serialize,
-) -> str:
-    """TODO"""
-    return json.dumps(
-        data,
-        ensure_ascii=ensure_ascii,
-        sort_keys=sort_keys,
-        indent=indent,
-        default=default,
-    )
-
-
-def json_loadb(
-    data: ByteData,
-    encoding: str = DEFAULT_ENCODING,
-    errors: ENCODING_ERROOR = "strict",
-) -> Json:
-    """TODO"""
-    # TODO: streaming
-    bdata = as_bytes(as_byte_iterable(data))
-    text = str_load(bdata, encoding=encoding, errors=errors)
-    return JsonIO.loads(text)
 
 
 def parse_cmd_vals(arguments: list[str]) -> dict[str, Json]:
@@ -372,9 +312,9 @@ def get_sha256_hash(hash_data: Json) -> str:
     '63fc351b588eec4fad18ef579b3c42c83d6638e0dc4a55f4772ff8a61455630d'
 
     """
-    hash_data_s = json_dumps(
-        hash_data, ensure_ascii=False, indent=0, sort_keys=True, default=json_serialize
-    )
+    hash_data_s = JsonIO.with_conf(
+        ensure_ascii=False, indent=0, sort_keys=True, default=json_serialize
+    ).dumps(hash_data)
     hash_data_b = hash_data_s.encode(DEFAULT_ENCODING)
     hashsum = hashlib.sha256(hash_data_b).hexdigest()  # noqa:S324
     # logging.error("%s %s", hashsum, hash_data)
@@ -948,7 +888,7 @@ def get_deterministic_uuid5_from_data(data: Json) -> str:
     '88bc6da5-9229-5d47-ab0c-005c5f04030b'
 
     """
-    data_s = json_dumps(data, indent=0, sort_keys=True)
+    data_s = JsonIO.with_conf(indent=0, sort_keys=True).dumps(data)
     return get_deterministic_uuid5(data_s)
 
 

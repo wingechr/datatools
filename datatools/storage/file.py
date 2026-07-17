@@ -20,7 +20,6 @@ from datatools.types import (
 )
 from datatools.utils import (
     buffer_to_byte_iterable,
-    json_dumps,
     make_file_readonly,
     make_file_writable,
     uri_or_path_to_path,
@@ -55,7 +54,7 @@ class JsonFileMetadataStorage(PersistentMemoryMetadataStorage):
     @staticmethod
     def _run_through_rdf(data: dict) -> dict:
         """TODO"""
-        data_s = json_dumps(data)
+        data_s = JsonIO.dumps(data)
         g = rdflib.Graph()
         g.parse(data=data_s, format="json-ld")
         data_s_new = g.serialize(

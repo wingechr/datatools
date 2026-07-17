@@ -16,7 +16,6 @@ from datatools.storage.base import DataStorage, MetadataStorage
 from datatools.types import MetadataAttribute, MetadataValue, Name
 from datatools.utils import (
     as_bytes,
-    json_dumps,
     reverse_prints,
     try_parse_json_str,
 )
@@ -41,7 +40,7 @@ class TestCliMetadataDataStorage(MetadataStorage):
             "metadata",
             "set",
             self._name,
-            f"{attribute}={json_dumps(value)}",
+            f"{attribute}={JsonIO.dumps(value)}",
         )
 
 
