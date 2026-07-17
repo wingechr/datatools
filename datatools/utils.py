@@ -46,7 +46,7 @@ import sqlparse
 from typing_extensions import override
 import tzlocal
 
-from datatools.io import json_serialize
+from datatools.io import JsonIO, json_serialize
 from datatools.types import (
     ANONYMOUS_USER,
     DATETIMETZ_FMT,
@@ -96,69 +96,6 @@ def make_file_writable(file_path: StrPath) -> None:
     os.chmod(file_path, readonly_permissions)
 
 
-class TextFile:
-    """TODO"""
-
-    def __init__(
-        self,
-        path: str | Path,
-        encoding=DEFAULT_ENCODING,
-        errors: ENCODING_ERROOR = "strict",
-        ensure_ascii=False,
-        sort_keys=False,
-        indent=2,
-    ):
-        self.path = Path(path)
-        self.encoding = encoding
-        self.errors = errors
-        self.ensure_ascii = ensure_ascii
-        self.sort_keys = sort_keys
-        self.indent = indent
-
-    def exists(self) -> bool:
-        """TODO"""
-        return self.path.exists()
-
-    def load_bytes(self) -> bytes:
-        """TODO"""
-        logging.debug("Reading %s", self.path)
-        with self.path.open("rb") as file:
-            return file.read()
-
-    def load_str(self) -> str:
-        """TODO"""
-        data_b = self.load_bytes()
-        data_s = data_b.decode(encoding=self.encoding, errors=self.errors)
-        return data_s
-
-    def load_json(self) -> Any:
-        """TODO"""
-        data_s = self.load_str()
-        return json_loads(data_s)
-
-    def dump_bytes(self, data: bytes) -> None:
-        """TODO"""
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        logging.debug("Writing %s", self.path)
-        with self.path.open("wb") as file:
-            file.write(data)
-
-    def dump_str(self, data: str) -> None:
-        """TODO"""
-        data_b = data.encode(encoding=self.encoding, errors=self.errors)
-        self.dump_bytes(data_b)
-
-    def dump_json(self, data: Any) -> None:
-        """TODO"""
-        data_s = json_dumps(
-            data,
-            ensure_ascii=self.ensure_ascii,
-            sort_keys=self.sort_keys,
-            indent=self.indent,
-        )
-        self.dump_str(data_s)
-
-
 def str_load(
     data: bytes,
     encoding: str = DEFAULT_ENCODING,
@@ -204,11 +141,6 @@ def json_dumps(
     )
 
 
-def json_loads(text: str) -> Json:
-    """TODO"""
-    return json.loads(text)
-
-
 def json_loadb(
     data: ByteData,
     encoding: str = DEFAULT_ENCODING,
@@ -218,7 +150,7 @@ def json_loadb(
     # TODO: streaming
     bdata = as_bytes(as_byte_iterable(data))
     text = str_load(bdata, encoding=encoding, errors=errors)
-    return json_loads(text)
+    return JsonIO.loads(text)
 
 
 def parse_cmd_vals(arguments: list[str]) -> dict[str, Json]:
@@ -306,7 +238,7 @@ def try_parse_json_str(s: str) -> Any:
 
     """
     try:
-        return json_loads(s)
+        return JsonIO.loads(s)
     except Exception:
         return s
 

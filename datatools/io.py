@@ -6,7 +6,7 @@ import datetime
 from io import BytesIO, TextIOWrapper
 import json
 import math
-from typing import TYPE_CHECKING, Any, BinaryIO, Generic
+from typing import TYPE_CHECKING, Any, BinaryIO
 
 import numpy as np
 import pandas as pd
@@ -19,15 +19,13 @@ from datatools.types import (
     ENCODING_ERROOR,
     TIME_FMT,
     Json,
-    ReadableByteBuffer,
-    T,
 )
 
 if TYPE_CHECKING:
     from pandas._typing import JsonFrameOrient
 
 
-class _TestPersistentBytesIO(BytesIO):
+class PersistentBytesIO(BytesIO):
     """A BytesIO that keeps its final content accessible after close()."""
 
     def __init__(self, data: bytes = b"", *args, **kwargs):
@@ -35,6 +33,7 @@ class _TestPersistentBytesIO(BytesIO):
         super().__init__(data, *args, **kwargs)
 
     def write(self, data: bytes) -> int:
+        """TODO"""
         self.data += data
         return super().write(data)
 
@@ -132,7 +131,7 @@ def json_serialize(x: Any) -> Json:
         raise NotImplementedError(f"{x.__class__}: {x}")
 
 
-class IO(Generic[T]):
+class IO:
     """TODO"""
 
     @classmethod
@@ -142,32 +141,44 @@ class IO(Generic[T]):
 
     @classmethod
     @abstractmethod
-    def load(cls, buf: ReadableByteBuffer) -> T: ...
+    def load(cls, buf: BytesIO) -> Any: ...
 
     @classmethod
     @abstractmethod
-    def dump(cls, data: T, buf: ReadableByteBuffer) -> None: ...
+    def dump(cls, data: Any, buf: BytesIO) -> None: ...
+
+    @classmethod
+    def dumpb(cls, data: Any) -> bytes:
+        """TODO"""
+        buf = PersistentBytesIO()
+        cls.dump(data, buf)
+        return buf.data
+
+    @classmethod
+    def loadb(cls, data: bytes) -> Any:
+        """TODO"""
+        return cls.load(BytesIO(data))
 
 
-class StrIO(IO[str], Generic[T]):
+class StrIO(IO):
     r"""TODO
 
     Example:
 
-    >>> StrIO.load(_TestPersistentBytesIO('äöü'.encode(encoding='utf-8')))
+    >>> StrIO.load(PersistentBytesIO('äöü'.encode(encoding='utf-8')))
     'äöü'
-    >>> buf = _TestPersistentBytesIO('äöü'.encode(encoding='windows-1252'))
+    >>> buf = PersistentBytesIO('äöü'.encode(encoding='windows-1252'))
     >>> buf.data
     b'\xe4\xf6\xfc'
-    >>> StrIO.with_conf(encoding='windows-1252').load(_TestPersistentBytesIO(buf.data))
+    >>> StrIO.with_conf(encoding='windows-1252').load(PersistentBytesIO(buf.data))
     'äöü'
 
-    >>> buf = _TestPersistentBytesIO()
+    >>> buf = PersistentBytesIO()
     >>> s = StrIO.with_conf(encoding='windows-1252')
     >>> s.dump('äöü', buf)
     >>> buf.data
     b'\xe4\xf6\xfc'
-    >>> s.load(_TestPersistentBytesIO(buf.data))
+    >>> s.load(PersistentBytesIO(buf.data))
     'äöü'
 
     """
@@ -215,17 +226,17 @@ class StrIO(IO[str], Generic[T]):
         )
 
 
-class JsonIO(StrIO[Json], Generic[T]):
+class JsonIO(StrIO):
     r"""TODO
 
     Example:
 
-    >>> buf = _TestPersistentBytesIO()
+    >>> buf = PersistentBytesIO()
     >>> j = JsonIO.with_conf(indent=1, encoding='windows-1252')
     >>> j.dump(['täst', 1], buf)
     >>> buf.data
     b'[\n "t\xe4st",\n 1\n]'
-    >>> j.load(_TestPersistentBytesIO(buf.data))
+    >>> j.load(PersistentBytesIO(buf.data))
     ['täst', 1]
 
     """
@@ -252,15 +263,31 @@ class JsonIO(StrIO[Json], Generic[T]):
             default=json_serialize,
         )
 
+    @classmethod
+    def dumps(cls, data: Any) -> str:
+        """TODO"""
+        return json.dumps(
+            data,
+            ensure_ascii=cls.ensure_ascii,
+            sort_keys=cls.sort_keys,
+            indent=cls.indent,
+            default=json_serialize,
+        )
 
-class DataFrameJsonIO(JsonIO[pd.DataFrame], Generic[T]):
+    @classmethod
+    def loads(cls, data: str) -> Any:
+        """TODO"""
+        return json.loads(data)
+
+
+class DataFrameJsonIO(JsonIO):
     r"""TODO
 
     Example:
 
     >>> import pandas as pd
     >>> df = pd.DataFrame([{"a": 1, "b": 2}, {"a": 2}])
-    >>> buf = _TestPersistentBytesIO()
+    >>> buf = PersistentBytesIO()
     >>> DataFrameJsonIO.with_conf(indent=0,orient="records").dump(df, buf)
     >>> buf.data
     b'[{"a":1,"b":2.0},{"a":2,"b":null}]'
@@ -290,12 +317,12 @@ class DataFrameJsonIO(JsonIO[pd.DataFrame], Generic[T]):
         )
 
 
-class DataFrameCsvIO(StrIO[pd.DataFrame], Generic[T]):
+class DataFrameCsvIO(StrIO):
     r"""TODO
 
     >>> import pandas as pd
     >>> df = pd.DataFrame([{"a": 1, "b": 2}, {"a": 2}]).rename_axis(index="idx")
-    >>> buf = _TestPersistentBytesIO()
+    >>> buf = PersistentBytesIO()
     >>> DataFrameCsvIO.with_conf(indent=0,orient="records").dump(df, buf)
     >>> buf.data
     b'$idx,a,b\n0,1,2.0\n1,2,\n'

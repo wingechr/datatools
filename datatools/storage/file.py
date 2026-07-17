@@ -8,6 +8,7 @@ from pathlib import Path
 import rdflib
 
 from datatools.exceptions import StorageInvalidNameError
+from datatools.io import JsonIO
 from datatools.storage.base import DataStorage
 from datatools.storage.memory import PersistentMemoryMetadataStorage
 from datatools.types import (
@@ -18,10 +19,8 @@ from datatools.types import (
     Name,
 )
 from datatools.utils import (
-    TextFile,
     buffer_to_byte_iterable,
     json_dumps,
-    json_loads,
     make_file_readonly,
     make_file_writable,
     uri_or_path_to_path,
@@ -37,19 +36,21 @@ class JsonFileMetadataStorage(PersistentMemoryMetadataStorage):
     """
 
     def __init__(self, path: Path):
-        self._file = TextFile(path)
+        self._path = path
         super().__init__()
 
     def _load_or_init(self) -> dict | None:
-        if self._file.exists():
-            data = self._file.load_json()
+        if self._path.exists():
+            with self._path.open("rb") as file:
+                data = JsonIO.load(file)
             if not isinstance(data, dict):
                 raise ValueError("json file for metadata must be dict")
             return data
 
     def _dump(self, data: dict) -> None:
         # data = self._test_roundtrip_rdf(data)
-        self._file.dump_json(data)
+        bdata = JsonIO.dumpb(data)
+        write_bytes_locked(self._path, [bdata])
 
     @staticmethod
     def _run_through_rdf(data: dict) -> dict:
@@ -60,7 +61,7 @@ class JsonFileMetadataStorage(PersistentMemoryMetadataStorage):
         data_s_new = g.serialize(
             format="json-ld", context=RDF_CONTEXT, auto_compact=True
         )
-        data_new: dict = json_loads(data_s_new)  # type:ignore - should be dict
+        data_new: dict = JsonIO.loads(data_s_new)
         return data_new
 
 

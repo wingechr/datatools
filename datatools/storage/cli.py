@@ -11,12 +11,12 @@ from typing_extensions import override
 from datatools.exceptions import (
     SubprocessStatus,
 )
+from datatools.io import JsonIO
 from datatools.storage.base import DataStorage, MetadataStorage
 from datatools.types import MetadataAttribute, MetadataValue, Name
 from datatools.utils import (
     as_bytes,
     json_dumps,
-    json_loadb,
     reverse_prints,
     try_parse_json_str,
 )
@@ -114,7 +114,7 @@ class CliWrapperDataStorage(DataStorage):
         info_remote = self._request("info")
 
         bdata = as_bytes(info_remote)  # i dont think there is a point in streaming this
-        info_remote = json_loadb(bdata)
+        info_remote = JsonIO.loadb(bdata)
         info_client = super().info()
         info_client.update({"remote": info_remote})
 
