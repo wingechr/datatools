@@ -22,7 +22,7 @@ from datatools.exceptions import (
     StorageInvalidNameError,
 )
 from datatools.process.task import AnnotatedFunction
-from datatools.storage.__main__ import infer_storage_class
+from datatools.storage import _infer_storage_class
 from datatools.storage.base import DataStorage
 from datatools.storage.cli import CliWrapperDataStorage
 from datatools.storage.file import FileDataStorage, JsonFileMetadataStorage
@@ -215,17 +215,26 @@ class TestCliWrapperDataStorage(TestCase):
             # test file
             test_data = b"test"
             path = Path(tmpdir) / "data"
+            path_server = Path(tmpdir) / "server"
             path.write_bytes(test_data)
 
             port = get_free_port()
             url = f"http://localhost:{port}"
             runner = CliRunner()
-            # serve memory storage
             thread = Thread(
                 target=runner.invoke,
                 args=(
                     main,
-                    ["storage", "-c", "MemoryDataStorage", "serve", "-p", str(port)],
+                    [
+                        "storage",
+                        "-l",
+                        path_server.as_posix(),
+                        "-c",
+                        "FileDataStorage",
+                        "serve",
+                        "-p",
+                        str(port),
+                    ],
                 ),
                 daemon=True,
             )
@@ -305,7 +314,7 @@ class TestUseCases(TestCase):
     def test_infer_storage_class(self):
         """should fail on unknown URI"""
         self.assertRaises(
-            NotImplementedError, infer_storage_class, "xyz://bad/protocol"
+            NotImplementedError, _infer_storage_class, "xyz://bad/protocol"
         )
 
     def test_use_case_import_data(self):

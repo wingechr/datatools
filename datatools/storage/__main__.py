@@ -8,6 +8,7 @@ from typing import cast
 import click
 import uvicorn
 
+from datatools.storage import storage, storage_classes
 from datatools.storage.base import DataStorage
 from datatools.storage.http import make_server_app
 from datatools.storage.mail import (
@@ -19,7 +20,6 @@ from datatools.utils import (
     buffer_to_byte_iterable,
     json_dumps,
     parse_cmd_vals,
-    subclasses_by_name,
     wrap_exception,
 )
 
@@ -27,29 +27,14 @@ from datatools.utils import (
 sys.stdout.reconfigure(errors="replace")  # type:ignore reconfigure does exist
 
 
-def infer_storage_class(location: str, storage_class=str | None) -> type[DataStorage]:
-    """TODO"""
-    storage_classes = subclasses_by_name(DataStorage)
-    if isinstance(storage_class, str) and storage_class:
-        return storage_classes[storage_class]
-    for cls in storage_classes.values():
-        if cls._can_handle(location):
-            return cls
-    raise NotImplementedError(f"Cannot infer DataStorage class for location {location}")
-
-
 @click.group()
 @click.option("--location", "-l", default=".")
-@click.option(
-    "--storage_class", "-c", type=click.Choice(subclasses_by_name(DataStorage).keys())
-)
+@click.option("--storage_class", "-c", type=click.Choice(storage_classes.keys()))
 @click.pass_context
 def main(ctx, location: str, storage_class=str | None) -> None:
     """TODO"""
-    StorageClass = infer_storage_class(location, storage_class=storage_class)
-    data_storage = StorageClass(location)
-    logging.debug(f"Starting {data_storage}")
-    ctx.obj = data_storage
+    ctx.obj = storage(location, storage_class=storage_class)
+    logging.debug(f"Starting {ctx.obj}")
 
 
 @main.command()
