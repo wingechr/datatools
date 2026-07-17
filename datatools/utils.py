@@ -459,11 +459,20 @@ def split_credentials_from_uri(uri: str) -> tuple[str, tuple[str | None, str | N
     ('http://example.com/x', (None, 'token'))
     >>> split_credentials_from_uri("http://user:passwd@example.com/x")
     ('http://example.com/x', ('user', 'passwd'))
+    >>> split_credentials_from_uri("sqlite:///:memory:")
+    ('sqlite:///:memory:', (None, None))
+
 
     """
     parts = urlsplit(uri)
     netloc, creds = remove_credentials_from_netloc(parts.netloc)
+
     uri = urlunsplit(parts._replace(netloc=netloc))
+
+    # special cases
+    if uri.startswith("sqlite:/:"):
+        uri = uri.replace(":/", ":///", 1)
+
     if not creds:
         user, passwd = None, None
     elif ":" in creds:

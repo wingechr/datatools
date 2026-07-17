@@ -43,7 +43,7 @@ from datatools.utils import (
     get_user_w_host,
     identity,
     json_drop_empty,
-    remove_credentials_from_netloc,
+    split_credentials_from_uri,
 )
 
 DEFAULT_HASH_ALGORITHM = "sha256"
@@ -298,11 +298,14 @@ class DataStorage(ABC):
 
             return handle_
 
-        def create_lietral_input_handler(name):
+        def create_literal_input_handler(name):
             def handle_(value: Any):
+                value_for_metadata = value
                 with contextlib.suppress(Exception):
                     # TODO: maybe get from handler
-                    value = remove_credentials_from_netloc(value)[0]
+                    value_for_metadata = split_credentials_from_uri(value_for_metadata)[
+                        0
+                    ]
 
                 callback_data["input_parameter_values"][name] = value
                 callback_data["metadata_creation_event"][u.usedInput.label].append(
@@ -310,7 +313,7 @@ class DataStorage(ABC):
                         # "@type": u.LiteralParameter.label,
                         # "@id": ... TODO
                         u.roleName.label: name,
-                        u.value.label: value,
+                        u.value.label: value_for_metadata,
                     }
                 )
 
@@ -425,7 +428,7 @@ class DataStorage(ABC):
             name: (
                 wrap_input_handler(name, input_converters_[name])
                 if name in input_converters_
-                else create_lietral_input_handler(name)
+                else create_literal_input_handler(name)
             )
             for name in wrapped_function.fun_parameter_names
         }

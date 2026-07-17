@@ -61,27 +61,28 @@ def write_chunks(data: Iterable[bytes], buf: WritableBuffer):
         buf.write(chunk)
 
 
-def download_s3(s3_uri: str) -> BufferedReader:
+def write_from_buffer(data: BufferedReader, buf: WritableBuffer):
     """TODO"""
-    uri, (user, passwd) = split_credentials_from_uri(s3_uri)
+    for chunk in as_byte_iterable(data):
+        buf.write(chunk)
+
+
+def download_s3(uri: str) -> BufferedReader:
+    """TODO"""
+    uri, (user, passwd) = split_credentials_from_uri(uri)
     s3 = boto3.client(
         "s3",
         aws_access_key_id=user,
         aws_secret_access_key=passwd,
     )
-
     parsed = urlparse(uri)
     bucket = parsed.netloc
     key = parsed.path.lstrip("/")
-
-    buf = s3.download_obj(bucket, key)
+    buf = s3.get_object(
+        Bucket=bucket,
+        Key=key,
+    )
     return buf
-
-
-def write_from_buffer(data: BufferedReader, buf: WritableBuffer):
-    """TODO"""
-    for chunk in as_byte_iterable(data):
-        buf.write(chunk)
 
 
 class HttpImporter(Importer):

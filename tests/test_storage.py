@@ -436,20 +436,20 @@ class TestUseCases(TestCase):
         """TODO"""
 
         storage = MemoryDataStorage()
-        global count_calls
-        count_calls = 0
+        global _count_calls
+        _count_calls = 0
 
         @storage.cache()
         def fun(x, y=3):
-            global count_calls
-            count_calls += 1
+            global _count_calls
+            _count_calls += 1
 
             return x + y
 
         self.assertEqual(fun(1, 2), fun(1, 2))
-        self.assertEqual(count_calls, 1)
+        self.assertEqual(_count_calls, 1)
         self.assertEqual(fun(1, y=2), fun(1, y=2))
-        self.assertEqual(count_calls, 1)
+        self.assertEqual(_count_calls, 1)
 
     def test_use_case_task_graph(self):
         """TODO
@@ -470,12 +470,12 @@ class TestUseCases(TestCase):
         """
         storage = MemoryDataStorage()
 
-        global count_calls
-        count_calls = 0
+        global _count_calls
+        _count_calls = 0
 
         def function(param_input1, param_input2=-1):
-            global count_calls
-            count_calls += 1
+            global _count_calls
+            _count_calls += 1
             return param_input1 + param_input2
 
         outputs = {"output": "output.pickle"}
@@ -503,7 +503,7 @@ class TestUseCases(TestCase):
 
         self.assertTrue(all(storage.has(name) for name in outputs.values()))
 
-        self.assertEqual(count_calls, 1)
+        self.assertEqual(_count_calls, 1)
 
         # check that metadata should also be writtem
         for name in outputs.values():
