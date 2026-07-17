@@ -12,6 +12,7 @@ dependencies = [
     "click>=8.3",
     "coloredlogs>=15.0",
     "fastapi>=0.138",
+    "filelock>=3.29.7",
     "frictionless>=5.19",
     "httpx>=0.28",
     "imapclient~=3.0",
