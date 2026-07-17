@@ -24,7 +24,7 @@ import tempfile
 from threading import Thread
 import time
 from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar, cast
-from urllib.parse import unquote, urlparse, urlsplit
+from urllib.parse import unquote, urlparse, urlsplit, urlunsplit
 from urllib.request import url2pathname
 import uuid
 
@@ -428,18 +428,49 @@ def start_http_server(
     return url
 
 
-def remove_credentials_from_netloc(netloc: str) -> str:
+def remove_credentials_from_netloc(netloc: str) -> tuple[str, str]:
     """TODO
 
     Example:
 
     >>> remove_credentials_from_netloc('name:pw@example.com:80')
-    'example.com:80'
+    ('example.com:80', 'name:pw')
     >>> remove_credentials_from_netloc('example.com:80')
-    'example.com:80'
+    ('example.com:80', '')
 
     """
-    return re.sub("[^/@]+@", "", netloc)
+    if "@" in netloc:
+        parts = netloc.split("@")
+        if not len(parts) == 2:
+            raise Exception(netloc)
+        return parts[1], parts[0]
+    else:
+        return netloc, ""
+
+
+def split_credentials_from_uri(uri: str) -> tuple[str, tuple[str | None, str | None]]:
+    """TODO
+
+    Example:
+
+    >>> split_credentials_from_uri("http://example.com/x")
+    ('http://example.com/x', (None, None))
+    >>> split_credentials_from_uri("http://token@example.com/x")
+    ('http://example.com/x', (None, 'token'))
+    >>> split_credentials_from_uri("http://user:passwd@example.com/x")
+    ('http://example.com/x', ('user', 'passwd'))
+
+    """
+    parts = urlsplit(uri)
+    netloc, creds = remove_credentials_from_netloc(parts.netloc)
+    uri = urlunsplit(parts._replace(netloc=netloc))
+    if not creds:
+        user, passwd = None, None
+    elif ":" in creds:
+        user, passwd = tuple(unquote(x) for x in creds.split(":"))
+    else:
+        user, passwd = None, unquote(creds)
+    return uri, (user, passwd)
 
 
 def remove_port_from_netloc(netloc: str) -> str:
@@ -461,7 +492,7 @@ def remove_port_from_netloc(netloc: str) -> str:
 def get_name_from_uri(uri: str) -> str:
     """TODO"""
     parts = urlsplit(uri)
-    netloc = remove_credentials_from_netloc(parts.netloc)
+    netloc = remove_credentials_from_netloc(parts.netloc)[0]
     netloc = remove_port_from_netloc(parts.netloc)
     path = parts.path
     name = f"{netloc.strip('/')}/{path.strip('/')}"

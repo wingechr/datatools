@@ -134,13 +134,20 @@ def metadata_set(
 @click.pass_obj
 @click.argument("name")
 @click.argument("uri", required=False)
+@click.option("--skip-finished", "-s", is_flag=True)
 @click.argument("options", nargs=-1)
 def import_from_uri(
-    ctx_data_storage: DataStorage, name: str, uri: str, options: list[str]
+    ctx_data_storage: DataStorage,
+    name: str,
+    uri: str,
+    skip_finished: bool,
+    options: list[str],
 ) -> None:
     """TODO"""
     options_dict = parse_cmd_vals(options)
-    ctx_data_storage.import_from_uri(uri=uri, name=name, **options_dict)
+    ctx_data_storage.import_from_uri(
+        uri=uri, name=name, skip_finished=skip_finished, **options_dict
+    )
     logging.info(name)
 
 

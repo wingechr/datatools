@@ -2,19 +2,28 @@
 
 from abc import ABC
 from collections.abc import Callable, Iterable
+from io import BufferedReader
 import re
+from urllib.parse import urlparse
 
+import boto3
 from typing_extensions import override
 
 from datatools.process.task import AnnotatedFunction
-from datatools.types import FunToWritableBuffer, Name, WritableBuffer
+from datatools.types import (
+    FunToWritableBuffer,
+    Name,
+    WritableBuffer,
+)
 from datatools.utils import (
+    as_byte_iterable,
     get_name_from_uri,
     http_get_stream,
     is_file_uri_or_path,
     query_sql,
     read_file_uri_stream,
     remove_credentials_from_netloc,
+    split_credentials_from_uri,
     sql_query_result_to_csv,
     subclasses_by_name,
     uri_or_path_to_path,
@@ -52,6 +61,29 @@ def write_chunks(data: Iterable[bytes], buf: WritableBuffer):
         buf.write(chunk)
 
 
+def download_s3(s3_uri: str) -> BufferedReader:
+    """TODO"""
+    uri, (user, passwd) = split_credentials_from_uri(s3_uri)
+    s3 = boto3.client(
+        "s3",
+        aws_access_key_id=user,
+        aws_secret_access_key=passwd,
+    )
+
+    parsed = urlparse(uri)
+    bucket = parsed.netloc
+    key = parsed.path.lstrip("/")
+
+    buf = s3.download_obj(bucket, key)
+    return buf
+
+
+def write_from_buffer(data: BufferedReader, buf: WritableBuffer):
+    """TODO"""
+    for chunk in as_byte_iterable(data):
+        buf.write(chunk)
+
+
 class HttpImporter(Importer):
     """TODO"""
 
@@ -67,7 +99,27 @@ class HttpImporter(Importer):
     @classmethod
     def get_output_name(cls, uri: str, **options) -> str:
         """TODO"""
-        return get_name_from_uri(remove_credentials_from_netloc(uri))
+        return get_name_from_uri(remove_credentials_from_netloc(uri)[0])
+
+
+class S3Importer(Importer):
+    """TODO"""
+
+    # use generic id (tool does not matter)
+    get_data = AnnotatedFunction.wrap(function_id="S3")(download_s3)
+    output_write_byte_data: FunToWritableBuffer = write_from_buffer
+
+    @classmethod
+    @override
+    def can_handle(cls, uri: str, **options) -> bool:
+        return bool(re.match(r"^s3://", uri))
+
+    @classmethod
+    def get_output_name(cls, uri: str, **options) -> str:
+        """TODO"""
+        parsed = urlparse(uri)
+        key = parsed.path.lstrip("/")
+        return key
 
 
 class FileImporter(Importer):

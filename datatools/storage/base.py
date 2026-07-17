@@ -175,7 +175,9 @@ class DataStorage(ABC):
         """TODO"""
         return {"Location": str(self._location), "Class": str(self.__class__.__name__)}
 
-    def import_from_uri(self, uri: str, name: Name | None = None, **options) -> Name:
+    def import_from_uri(
+        self, uri: str, name: Name | None = None, skip_finished: bool = False, **options
+    ) -> Name:
         """TODO"""
 
         importer_class = infer_importer_class(uri, **options)
@@ -186,6 +188,7 @@ class DataStorage(ABC):
             output_converters={
                 SINGLE_OUTPUT_PARAM_NAME: importer_class.output_write_byte_data
             },
+            skip_finished=skip_finished,
         )
         task(name, uri, **options)
         return name
@@ -299,7 +302,7 @@ class DataStorage(ABC):
             def handle_(value: Any):
                 with contextlib.suppress(Exception):
                     # TODO: maybe get from handler
-                    value = remove_credentials_from_netloc(value)
+                    value = remove_credentials_from_netloc(value)[0]
 
                 callback_data["input_parameter_values"][name] = value
                 callback_data["metadata_creation_event"][u.usedInput.label].append(
