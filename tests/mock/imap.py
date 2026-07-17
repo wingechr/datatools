@@ -20,6 +20,7 @@ TEST_MAIL = f"{TEST_USER}@{TEST_HOST}"
 TEST_MAIL_ORIGINAL = "original@example.com"
 TEST_MAIL_WHILTELISTED = "allowed@example.com"
 TEST_DATE = "2001-02-03"
+TEST_DATE_ORIGINAL = "2001-02-02"
 
 
 # original message someone is forwarding
@@ -31,6 +32,9 @@ def _create_msg(
     was_forwarded: bool = True,
 ) -> MIMEMultipart:
     date = email.utils.format_datetime(datetime.strptime(TEST_DATE, "%Y-%m-%d"))
+    date_original = email.utils.format_datetime(
+        datetime.strptime(TEST_DATE_ORIGINAL, "%Y-%m-%d")
+    )
 
     attachment = MIMEText("example data", "plain")
     attachment.add_header("Content-Disposition", "attachment", filename="test.txt")
@@ -44,7 +48,11 @@ def _create_msg(
     msg["Date"] = "not a valid date"
     msg.attach(
         MIMEText(
-            f"-----Original Message-----\nFrom: {from_mail}\n\nOriginal message.",
+            (
+                f"-----Original Message-----\nFrom: {from_mail}\n"
+                f"Sent: {date_original}\n\n"
+                "Original message."
+            ),
             "plain",
         )
     )

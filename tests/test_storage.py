@@ -21,7 +21,8 @@ from datatools.exceptions import (
     StorageFileNotFoundError,
     StorageInvalidNameError,
 )
-from datatools.process.task import AnnotatedFunction
+from datatools.io import DataFrameCsvIO, DataFrameJsonIO, JsonIO
+from datatools.process.task import AnnotatedFunction, string_get_hash_data
 from datatools.storage import _infer_storage_class
 from datatools.storage.base import DataStorage
 from datatools.storage.cli import CliWrapperDataStorage
@@ -44,6 +45,7 @@ from datatools.utils import (
     get_item_or_first,
     identity,
     query_sql,
+    sanitize_filename,
     sql_query_result_to_csv,
     start_http_server,
     wait_for_url,
@@ -617,24 +619,13 @@ class TestCache(TestCase):
         # use orient="table" to preserve index names
         c_json = MemoryDataStorage().cache(
             # actually to string, but we auto convert to bytes
-            lambda df, buf: df.to_json(buf, orient="table"),
-            lambda buf: pd.read_json(buf, orient="table"),
+            DataFrameJsonIO.dump,
+            DataFrameJsonIO.load,
         )
 
-        # FIXME: must save index names and col dims in metadata
-        # for round trip
-
-        def read_csv(buf: ReadableByteBuffer) -> pd.DataFrame:
-            df = pd.read_csv(buf, encoding=DEFAULT_ENCODING)
-            df = df.set_index([c for c in df.columns if c.startswith("$")])
-            df = df.rename_axis(index=[str(c)[1:] for c in df.index.names])
-            return df
-
         c_csv = MemoryDataStorage().cache(
-            lambda df, buf: df.rename_axis(
-                index=[f"${c}" for c in df.index.names]
-            ).to_csv(buf, encoding=DEFAULT_ENCODING),
-            read_csv,
+            DataFrameCsvIO.dump,
+            DataFrameCsvIO.load,
         )
 
         def f_no_index():
@@ -670,5 +661,23 @@ class TestCache(TestCase):
                     print(df2)
                     raise
 
-        def test_cache_with_custom_name(self):
-            pass
+    def test_cache_with_custom_name(self):
+        """human readable cache.
+
+        data is json, names is not a hash but readable arguments
+        """
+
+        st = MemoryDataStorage()
+
+        @st.cache(
+            output_write_byte_data=JsonIO.dump,
+            output_from_bytes=JsonIO.load,
+            get_name_from_hash=lambda x: f"{sanitize_filename(x)}.json",
+            get_task_id=string_get_hash_data,
+        )
+        @AnnotatedFunction.wrap(function_id="fun")
+        def fun(p1, p2=10):
+            return p1 + p2
+
+        self.assertEqual(fun(1, 11), 12)
+        self.assertEqual(set(st.find()), {"fun(p1=1,p2=11).json"})

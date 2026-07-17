@@ -9,6 +9,7 @@ from datatools.storage.memory import MemoryDataStorage
 from datatools.utils import get_free_port
 from tests.mock.imap import (
     TEST_DATE,
+    TEST_DATE_ORIGINAL,
     TEST_HOST,
     TEST_LOGIN,
     TEST_MAIL_ORIGINAL,
@@ -41,7 +42,7 @@ class TestMail(TestCase):
         handler.check()
         resources = set(storage.find())
         print(resources)
-        expected_name_2 = f"{TEST_DATE}_{TEST_MAIL_ORIGINAL}_{2}/test.txt"
+        expected_name_2 = f"{TEST_DATE_ORIGINAL}_{TEST_MAIL_ORIGINAL}_{2}/test.txt"
         expected_name_4 = f"{TEST_DATE}_{TEST_MAIL_WHILTELISTED}_{4}/test.txt"
 
         self.assertEqual({expected_name_2, expected_name_4}, resources)

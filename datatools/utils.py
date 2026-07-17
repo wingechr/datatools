@@ -4,7 +4,6 @@ import codecs
 from collections.abc import Callable, Iterable, Iterator
 import csv
 import datetime
-from email.utils import parsedate_to_datetime
 from functools import cache, partial
 import hashlib
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -1169,6 +1168,23 @@ class BufferIter(Generic[T]):
         # logging.debug("queue put %s bytes", len(chunk))
         self._queue.put(chunk)
 
+    def readable(self) -> bool:
+        """TODO"""
+        return False
+
+    def writable(self) -> bool:
+        """TODO"""
+        return True
+
+    def seekable(self) -> bool:
+        """TODO"""
+        return False
+
+    @property
+    def closed(self) -> bool:
+        """TODO"""
+        return self._closed
+
     def __init__(
         self,
         dump: FunToWritableBuffer,
@@ -1184,6 +1200,7 @@ class BufferIter(Generic[T]):
         self._daemon = daemon
         self._timeout = timeout
         self._encoding_if_str = encoding_if_str
+        self._closed = False
 
     def __call__(self, data: T) -> Iterable[bytes]:
         """TODO"""
@@ -1201,6 +1218,7 @@ class BufferIter(Generic[T]):
 
         thread = Thread(target=f, daemon=self._daemon)
         thread.start()
+
         while True:
             chunk = self._queue.get(
                 block=True, timeout=self._timeout
@@ -1215,6 +1233,7 @@ class BufferIter(Generic[T]):
             # chunk consumned:
             self._reverse_queue.put(self.NEXT)
 
+        self._closed = True
         thread.join()  # TODO: do we need it?
 
 
@@ -1225,11 +1244,11 @@ def get_plain_text_msg_and_original_from_and_date(
 
     Example:
 
-    >>> get_plain_text_msg_and_original_from_and_date('text')
-    ('text', None, None)
+    >>> get_plain_text_msg_and_original_from_and_date('Sent: not a date\n\ntext')
+    ('Sent: not a date\n\ntext', None, None)
 
-    >>> get_plain_text_msg_and_original_from_and_date('<html><b>text</b></html>')
-    ('text', None, None)
+    >>> get_plain_text_msg_and_original_from_and_date('<html><b>text<br>text2</b><script>var x;</script></html>')
+    ('text\ntext2', None, None)
 
     >>> get_plain_text_msg_and_original_from_and_date(
     ...     '-----Original Message-----\r\n'
@@ -1259,9 +1278,9 @@ def get_plain_text_msg_and_original_from_and_date(
         # on PM in datetime
         try:
             _datetime = dateutil.parser.parse(sent_date)
+            sent_date = _datetime.strftime(DATETIMETZ_FMT)
         except Exception:
-            _datetime = parsedate_to_datetime(sent_date)
-        sent_date = _datetime.strftime(DATETIMETZ_FMT)
+            sent_date = None
 
     text = dirty_to_plain(text)
 

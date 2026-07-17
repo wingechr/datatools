@@ -114,7 +114,7 @@ class DataStorage(ABC):
 
     @classmethod
     def _can_handle(cls, location: str) -> bool:
-        return False
+        return False  # pragma: no cover
 
     def _get_valid_name(self, name: Name) -> Name:
         return Name(name).strip()
