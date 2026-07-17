@@ -14,7 +14,6 @@ from inspect import Parameter, Signature
 from io import BufferedReader, RawIOBase
 import json
 import logging
-import math
 import os
 from pathlib import Path
 from queue import Queue
@@ -41,16 +40,20 @@ import jsonpath_ng
 import jsonpath_ng.ext
 import jsonschema
 import jsonschema.validators
-import numpy as np
 import pandas as pd
-from pydantic import BaseModel
 import sqlalchemy as sa
 import sqlparse
 from typing_extensions import override
 import tzlocal
 
+from datatools.io import json_serialize
 from datatools.types import (
+    ANONYMOUS_USER,
+    DATETIMETZ_FMT,
     DEFAULT_CHUNK_SIZE,
+    DEFAULT_ENCODING,
+    ENCODING_ERROOR,
+    FILEMOD_WRITE,
     LOCKFILE_SUFFIX,
     TEMPFILE_SUFFIX,
     ByteData,
@@ -67,14 +70,6 @@ if TYPE_CHECKING:
     from _typeshed import SupportsWrite
     from sqlalchemy.engine import CursorResult
     from sqlalchemy.engine.row import Row
-
-
-DATETIMETZ_FMT = "%Y-%m-%dT%H:%M:%S%z"
-DATE_FMT = "%Y-%m-%d"
-TIME_FMT = "%H:%M:%S"
-ANONYMOUS_USER = "ANONYMOUS"
-DEFAULT_ENCODING = "utf-8"
-FILEMOD_WRITE: int = 0o222
 
 
 def make_file_readonly(file_path: StrPath) -> None:
@@ -108,7 +103,7 @@ class TextFile:
         self,
         path: str | Path,
         encoding=DEFAULT_ENCODING,
-        errors: Literal["strict", "replace", "ignore"] = "strict",
+        errors: ENCODING_ERROOR = "strict",
         ensure_ascii=False,
         sort_keys=False,
         indent=2,
@@ -164,72 +159,10 @@ class TextFile:
         self.dump_str(data_s)
 
 
-def json_serialize(x: Any) -> Json:
-    """TODO
-
-    Example:
-
-    >>> import json
-    >>> import numpy as np
-    >>> import datetime
-    >>> from pydantic import BaseModel
-    >>> json.dumps(datetime.date(2001,2,3), default=json_serialize)
-    '"2001-02-03"'
-    >>> json.dumps(datetime.time(4,5,6), default=json_serialize)
-    '"04:05:06"'
-    >>> json.dumps(datetime.datetime(2001,2,3,4,5,6), default=json_serialize)
-    '"2001-02-03T04:05:06"'
-    >>> json.dumps(np.nan, allow_nan=True, default=json_serialize)
-    'NaN'
-    >>> repr(json_serialize(np.nan))
-    'None'
-    >>> json.dumps(float('nan'), allow_nan=True, default=json_serialize)
-    'NaN'
-    >>> repr(json_serialize(float('nan')))
-    'None'
-    >>> json.dumps(np.int64(0), default=json_serialize)
-    '0'
-    >>> json_serialize(np.float64(0.5))
-    0.5
-    >>> json.dumps(np.bool(0), default=json_serialize)
-    'false'
-    >>> json.dumps(object(), default=json_serialize)
-    Traceback (most recent call last):
-    ...
-    NotImplementedError:
-    >>> class Test(BaseModel):
-    ...    value: int
-    >>> json.dumps(Test(value='10'), default=json_serialize)
-    '{"value": 10}'
-
-
-    """
-    if isinstance(x, datetime.datetime):
-        return x.strftime(DATETIMETZ_FMT)
-    elif isinstance(x, datetime.date):
-        return x.strftime(DATE_FMT)
-    elif isinstance(x, datetime.time):
-        return x.strftime(TIME_FMT)
-    elif isna(x):
-        # FIXME: when using json.dumps(default=json_serialize), nan will NOT
-        # be forwarded to this function
-        return None
-    elif isinstance(x, np.bool_):
-        return bool(x)
-    elif np.issubdtype(type(x), np.integer):
-        return int(x)
-    elif np.issubdtype(type(x), np.floating):
-        return float(x)
-    elif isinstance(x, BaseModel):
-        return x.model_dump(mode="json")
-    else:
-        raise NotImplementedError(f"{x.__class__}: {x}")
-
-
 def str_load(
     data: bytes,
     encoding: str = DEFAULT_ENCODING,
-    errors: Literal["strict", "replace", "ignore"] = "strict",
+    errors: ENCODING_ERROOR = "strict",
 ) -> str:
     """TODO"""
     return data.decode(encoding=encoding, errors=errors)
@@ -279,7 +212,7 @@ def json_loads(text: str) -> Json:
 def json_loadb(
     data: ByteData,
     encoding: str = DEFAULT_ENCODING,
-    errors: Literal["strict", "replace", "ignore"] = "strict",
+    errors: ENCODING_ERROOR = "strict",
 ) -> Json:
     """TODO"""
     # TODO: streaming
@@ -567,37 +500,6 @@ def jsonpath_get(data: dict[str, Json], key: str) -> list[Json]:
     match = path.find(data)
     values = [x.value for x in match]
     return values
-
-
-def isna(x: Any) -> bool:
-    """TODO
-
-    Example:
-
-    >>> import pandas as pd
-    >>> import numpy as np
-    >>> isna(0)
-    False
-    >>> isna("")
-    False
-    >>> isna(float("nan"))
-    True
-    >>> isna(float("inf"))
-    True
-    >>> isna(None)
-    True
-    >>> isna(pd.NA)
-    True
-    >>> isna(np.nan)
-    True
-
-    """
-    return bool(
-        x is None
-        or isinstance(x, float)
-        and (math.isnan(x) or math.isinf(x))
-        or pd.isna(x)
-    )
 
 
 def get_now() -> datetime.datetime:

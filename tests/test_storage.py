@@ -623,10 +623,23 @@ class TestCache(TestCase):
 
         # FIXME: must save index names and col dims in metadata
         # for round trip
-        _c_csv = MemoryDataStorage().cache(
-            lambda df, buf: df.to_csv(buf, encoding=DEFAULT_ENCODING),
-            lambda buf: pd.read_csv(buf, encoding=DEFAULT_ENCODING),
+
+        def read_csv(buf: ReadableByteBuffer) -> pd.DataFrame:
+            df = pd.read_csv(buf, encoding=DEFAULT_ENCODING)
+            df = df.set_index([c for c in df.columns if c.startswith("$")])
+            df = df.rename_axis(index=[str(c)[1:] for c in df.index.names])
+            return df
+
+        c_csv = MemoryDataStorage().cache(
+            lambda df, buf: df.rename_axis(
+                index=[f"${c}" for c in df.index.names]
+            ).to_csv(buf, encoding=DEFAULT_ENCODING),
+            read_csv,
         )
+
+        def f_no_index():
+            # NOTE: cannot use "index"
+            return df.rename_axis(index="$index")
 
         def f_single_index():
             return df.set_index("a")
@@ -635,12 +648,16 @@ class TestCache(TestCase):
             return df.set_index(["a", "b"])
 
         # test mastrix of functions and cache types
-        for f in [f_single_index, f_multi_index]:
+        for f in [
+            f_no_index,
+            f_single_index,
+            f_multi_index,
+        ]:
             for i, cache in enumerate(
                 [
                     c_pickle,
                     c_json,
-                    # c_csv,  # FIXME: must save index names and col dims in metadata
+                    c_csv,  # FIXME: must save index names and col dims in metadata
                 ]
             ):
                 df1 = f()
@@ -652,3 +669,6 @@ class TestCache(TestCase):
                     print(df1)
                     print(df2)
                     raise
+
+        def test_cache_with_custom_name(self):
+            pass

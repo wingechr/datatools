@@ -195,7 +195,7 @@ class DataStorage(ABC):
         output_write_byte_data: FunToWritableBuffer = pickle.dump,
         output_from_bytes: FunFromReadableByteBuffer = pickle.load,
         get_name_from_hash: Callable[[str], str] = identity,
-        get_job_hashsum: FunHashsum = default_get_task_uuid,
+        get_task_id: FunHashsum = default_get_task_uuid,
     ) -> Callable:
         """TODO"""
 
@@ -205,7 +205,8 @@ class DataStorage(ABC):
             task = self.task(
                 function=function,
                 output_converters={SINGLE_OUTPUT_PARAM_NAME: output_write_byte_data},
-                get_task_id=get_job_hashsum,
+                get_task_id=get_task_id,
+                skip_finished=True,
             )
 
             @functools.wraps(function)
@@ -214,9 +215,8 @@ class DataStorage(ABC):
                 output_name = get_name_from_hash(task_id)
                 # logging.error((hash_data, hashsum))
 
-                if not self.has(output_name):
-                    # run task (first arg (_output_name) is name)
-                    task(output_name, *args, **kwargs)
+                # run task (first arg (_output_name) is name)
+                task(output_name, *args, **kwargs)
 
                 # retrieval
                 file = self.open(output_name)
@@ -319,7 +319,9 @@ class DataStorage(ABC):
             # generate task_id and some other stuff (only once!)
             if "@id" not in callback_data["metadata_creation_event"]:
                 task: Task = callback_data["task"]
+
                 task_id = task.get_task_id(**callback_data["input_parameter_values"])
+
                 datetime = callback_data["metadata_creation_event"][u.datetime.label]
                 event_id = f"event:{task_id}/{datetime}"
 

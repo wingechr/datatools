@@ -1,6 +1,6 @@
 """Abstract classes / interfaces, types"""
 
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Iterable, Mapping
 from functools import cache
 import io
 from io import BufferedReader, BufferedWriter
@@ -54,7 +54,10 @@ MetadataPairs: TypeAlias = (
     Mapping[MetadataAttribute, MetadataValue]
     | Iterable[tuple[MetadataAttribute, MetadataValue]]
 )
-FunHashsum = Callable[..., str]
+
+
+class FunHashsum(Protocol):  # noqa:D101
+    def __call__(self, function_id: str, **function_kwargs: Any) -> str: ...  # noqa:D102
 
 
 # any name, must be a valid parameter name
@@ -62,6 +65,16 @@ FunHashsum = Callable[..., str]
 SINGLE_OUTPUT_PARAM_NAME = "MAIN"
 HTTP_METHOD = Literal["GET", "PUT", "POST", "DELETE", "HEAD", "PATCH"]
 DEFAULT_CHUNK_SIZE = io.DEFAULT_BUFFER_SIZE  # 8192 bytes currently
+
+LOCKFILE_SUFFIX = ".__lock"
+TEMPFILE_SUFFIX = ".__temp"
+DATETIMETZ_FMT = "%Y-%m-%dT%H:%M:%S%z"
+DATE_FMT = "%Y-%m-%d"
+TIME_FMT = "%H:%M:%S"
+ANONYMOUS_USER = "ANONYMOUS"
+DEFAULT_ENCODING = "utf-8"
+FILEMOD_WRITE: int = 0o222
+ENCODING_ERROOR = Literal["strict", "replace", "ignore"]
 
 # https://www.w3.org/TR/vocab-dcat-3/
 
@@ -221,6 +234,3 @@ JSON_SCHEMA_FILE_RESOURCE = (
     # use https, otherwise vscode has trouble loading the forwarded url
     "https://purl.org/dataschema/datatools/FileResource-0.0.0.schema.json"
 )
-
-LOCKFILE_SUFFIX = ".__lock"
-TEMPFILE_SUFFIX = ".__temp"

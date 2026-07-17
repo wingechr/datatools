@@ -112,17 +112,17 @@ def get_task_input_parameters(task: "Task", *args, **kwargs) -> dict:
     return input_params
 
 
-def default_get_hash_data(task: "Task", input_params: dict) -> Json:
+def string_get_hash_data(function_id, **input_params) -> str:
     """TODO"""
-    function_id = task.function.function_id
-    return {"function": function_id, "parameters": input_params}
+    input_params_str = ",".join(f"{k}={v}" for k, v in sorted(input_params.items()))
+    return f"{function_id}({input_params_str})"
 
 
-def default_get_task_uuid(task: "Task", *args, **kwargs) -> str:
+def default_get_task_uuid(function_id, **input_params) -> str:
     """TODO"""
-    input_params = get_task_input_parameters(task, *args, **kwargs)
-    hash_data = default_get_hash_data(task, input_params)
-    hashsum = get_deterministic_uuid5_from_data(hash_data)
+    hashsum = get_deterministic_uuid5_from_data(
+        {"function": function_id, "parameters": input_params}
+    )
     return hashsum
 
 
@@ -228,7 +228,11 @@ class Task:
         FIXME: create unit tests - why dont i have to pass output args like
         the same way as in __call__?
         """
-        return self._get_task_id(self, *args, **kwargs)  # self is first arg (task)
+        function_id = self.function.function_id
+        task = self
+        input_parameters = get_task_input_parameters(task, *args, **kwargs)
+
+        return self._get_task_id(function_id, **input_parameters)
 
     def _create_job(self, *args, **kwargs) -> _Job:
         """TODO"""
