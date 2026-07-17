@@ -1,6 +1,6 @@
 [project]
 name = "wingechr-datatools"
-version = "0.15.13"
+version = "0.15.14"
 description = "TODO"
 readme = "README.md"
 requires-python = ">=3.10,<3.15"
@@ -68,7 +68,7 @@ datatools = "datatools.__main__:main"
 
 [tool.bumpversion]
 
-current_version = "0.15.13"
+current_version = "0.15.14"
 commit = true
 tag = true
 message = "version: {current_version} → {new_version}"
