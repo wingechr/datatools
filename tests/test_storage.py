@@ -21,8 +21,9 @@ from datatools.exceptions import (
     StorageFileNotFoundError,
     StorageInvalidNameError,
 )
-from datatools.io import DataFrameCsvIO, DataFrameJsonIO, JsonIO
-from datatools.process.task import AnnotatedFunction, string_get_hash_data
+from datatools.io import DataFrameCsvIO, DataFrameJsonIO
+from datatools.process.task import AnnotatedFunction
+from datatools.shortcuts import simple_json_cache
 from datatools.storage import _infer_storage_class
 from datatools.storage.base import DataStorage
 from datatools.storage.cli import CliWrapperDataStorage
@@ -45,7 +46,6 @@ from datatools.utils import (
     get_item_or_first,
     identity,
     query_sql,
-    sanitize_filename,
     sql_query_result_to_csv,
     start_http_server,
     wait_for_url,
@@ -667,17 +667,14 @@ class TestCache(TestCase):
         data is json, names is not a hash but readable arguments
         """
 
-        st = MemoryDataStorage()
+        with TemporaryDirectory() as path:
+            cache = simple_json_cache(path)
 
-        @st.cache(
-            output_write_byte_data=JsonIO.dump,
-            output_from_bytes=JsonIO.load,
-            get_name_from_hash=lambda x: f"{sanitize_filename(x)}.json",
-            get_task_id=string_get_hash_data,
-        )
-        @AnnotatedFunction.wrap(function_id="fun")
-        def fun(p1, p2=10):
-            return p1 + p2
+            @cache
+            @AnnotatedFunction.wrap(function_id="fun")
+            def fun(p1, p2=10):
+                return p1 + p2
 
-        self.assertEqual(fun(1, 11), 12)
-        self.assertEqual(set(st.find()), {"fun(p1=1,p2=11).json"})
+            self.assertEqual(fun(1, 11), 12)
+
+            self.assertTrue((Path(path) / "fun(p1=1,p2=11).json").exists())

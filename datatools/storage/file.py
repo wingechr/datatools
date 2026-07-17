@@ -17,6 +17,7 @@ from datatools.types import (
     RDF_CONTEXT,
     TEMPFILE_SUFFIX,
     Name,
+    StrPath,
 )
 from datatools.utils import (
     buffer_to_byte_iterable,
@@ -74,7 +75,7 @@ class FileDataStorage(DataStorage):
         """Either file:// protocol or no protocol"""
         return Path(location).is_dir()
 
-    def __init__(self, location: str = "."):
+    def __init__(self, location: StrPath = "."):
         path = uri_or_path_to_path(location).resolve()
         self._location: Path  # absolute, resolved location
         super().__init__(location=path)
