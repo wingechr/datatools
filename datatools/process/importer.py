@@ -67,22 +67,21 @@ def write_from_buffer(data: BufferedReader, buf: WritableBuffer):
         buf.write(chunk)
 
 
-def download_s3(uri: str) -> BufferedReader:
+def download_s3(uri: str, endpoint_url: str | None = None) -> BufferedReader:
     """TODO"""
     uri, (user, passwd) = split_credentials_from_uri(uri)
     s3 = boto3.client(
         "s3",
+        endpoint_url=endpoint_url,
         aws_access_key_id=user,
         aws_secret_access_key=passwd,
     )
     parsed = urlparse(uri)
     bucket = parsed.netloc
     key = parsed.path.lstrip("/")
-    buf = s3.get_object(
-        Bucket=bucket,
-        Key=key,
-    )
-    return buf
+    response = s3.get_object(Bucket=bucket, Key=key)
+    buffer = response["Body"]
+    return buffer
 
 
 class HttpImporter(Importer):

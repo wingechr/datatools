@@ -433,10 +433,14 @@ def remove_credentials_from_netloc(netloc: str) -> tuple[str, str]:
 
     Example:
 
-    >>> remove_credentials_from_netloc('name:pw@example.com:80')
-    ('example.com:80', 'name:pw')
+    >>> remove_credentials_from_netloc('name:a%40b@example.com:80') # quoted @ in pass
+    ('example.com:80', 'name:a%40b')
     >>> remove_credentials_from_netloc('example.com:80')
     ('example.com:80', '')
+    >>> remove_credentials_from_netloc('name:a@b@example.com')
+    Traceback (most recent call last):
+        ...
+    Exception: ...
 
     """
     if "@" in netloc:
@@ -1143,23 +1147,25 @@ def write_bytes_locked(
     """Write bytes to `path` atomically, guarded by a cross-platform file lock."""
     lock_path = path.with_name(path.name + lockfile_suffix)
 
-    # raises filelock.Timeout if it can't acquire in time
     with FileLock(lock_path, timeout=timeout):
         fd, tmp_path = tempfile.mkstemp(
             dir=path.parent, prefix=path.name + ".", suffix=tempfile_suffix
         )
-        # try:
         with os.fdopen(fd, "wb") as tmp_file:
             for chunk in bytes_iter:
                 tmp_file.write(chunk)
             tmp_file.flush()
             os.fsync(tmp_file.fileno())
-        os.replace(tmp_path, path)  # atomic on both POSIX and Windows (Py 3.3+)
-        # # we actually want to keep the tmp file in case we want to use the data
-        # except BaseException:
-        #     if os.path.exists(tmp_path):
-        #         os.unlink(tmp_path)
-        #     raise
+        os.replace(tmp_path, path)
+
+    # on linux, the lock file is intentionally left behind and reused
+    # but i dont want this.
+    # this is not entireliy safe, but anyway:
+    if lock_path.exists():
+        try:
+            lock_path.unlink()
+        except OSError:  # pragma: no cover
+            logging.error("could not delete lockfile %s", lock_path)  # pragma: no cover
 
 
 def get_item_or_first(x: T | list[T]) -> T | None:

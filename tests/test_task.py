@@ -1,8 +1,12 @@
 """TODO"""
 
+from io import BytesIO
 from unittest import TestCase
 
-from datatools.process.importer import infer_importer_class
+import boto3
+from moto import mock_aws
+
+from datatools.process.importer import S3Importer, infer_importer_class
 from datatools.process.task import Task
 
 
@@ -48,3 +52,19 @@ class TestImporter(TestCase):
             output_writers={"output": dump_null},
             input_readers={"X": read_1},
         )
+
+    @mock_aws
+    def test_import_s3(self):
+        """TODO"""
+        s3 = boto3.client("s3")
+        s3.create_bucket(Bucket="test")
+        s3.put_object(Bucket="test", Key="test.txt", Body=b"test")
+
+        uri = "s3://test/test.txt"
+        imp = S3Importer
+        self.assertEqual(imp.get_output_name(uri), "test.txt")
+
+        buf = BytesIO()
+        imp.output_write_byte_data(imp.get_data(uri), buf)  # type:ignore
+        buf.seek(0)
+        self.assertEqual(buf.read(), b"test")

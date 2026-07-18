@@ -38,6 +38,7 @@ dev = [
     "poethepoet>=0.38",
     "ruff>=0.15",
     "vulture>=2.16",
+    "moto[s3]>=5.2.2",
 ]
 test = [
     "tox-uv>=1.33",                               # for uv-venv-runner
