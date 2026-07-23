@@ -862,9 +862,10 @@ def http_get_stream(
     uri: str, chunk_size: int = DEFAULT_CHUNK_SIZE, **options
 ) -> Iterable[bytes]:
     """TODO"""
-    resp = httpx.get(uri, follow_redirects=True)
-    resp.raise_for_status()
-    yield from resp.iter_bytes(chunk_size=chunk_size)
+
+    with httpx.stream("GET", uri, follow_redirects=True) as resp:
+        resp.raise_for_status()
+        yield from resp.iter_bytes(chunk_size=chunk_size)
 
 
 def read_file_uri_stream(
