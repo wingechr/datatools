@@ -365,7 +365,6 @@ class TestUseCases(TestCase):
 
             # check metadata
             metadata_all: dict = get_item_or_first(storage.metadata(name).get("$"))  # type:ignore - root should be dict
-            del metadata_all["@context"]
 
             metadata_creation_event: dict = metadata_all[u.createdBy.label]
 
@@ -376,7 +375,7 @@ class TestUseCases(TestCase):
 
             metadata_all_expected = {
                 "$schema": JSON_SCHEMA_FILE_RESOURCE,
-                "@id": event_id + "/output/" + SINGLE_OUTPUT_PARAM_NAME,
+                # "@id": event_id + "/output/" + SINGLE_OUTPUT_PARAM_NAME,
                 # "@type": u.FileResource.label,
                 u.name.label: ":memory:",
                 # file info
@@ -409,19 +408,19 @@ class TestUseCases(TestCase):
                     u.taskId.label: task_uuid,
                     u.usedInput.label: [
                         {
-                            "@id": event_id + "/input/uri",
+                            # "@id": event_id + "/input/uri",
                             # "@type": u.LiteralParameter.label,
                             u.roleName.label: "uri",
                             u.value.label: "sqlite:///:memory:",
                         },
                         {
-                            "@id": event_id + "/input/query",
+                            # "@id": event_id + "/input/query",
                             # "@type": u.LiteralParameter.label,
                             u.roleName.label: "query",
                             u.value.label: "select 1 as a",
                         },
                         {
-                            "@id": event_id + "/input/options",
+                            # "@id": event_id + "/input/options",
                             # "@type": u.LiteralParameter.label,
                             u.roleName.label: "options",
                             # u.value.label: None, # no value

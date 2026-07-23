@@ -16,7 +16,6 @@ from datatools.process.importer import infer_importer_class
 from datatools.process.task import AnnotatedFunction, Task, default_get_task_uuid
 from datatools.types import (
     JSON_SCHEMA_FILE_RESOURCE,
-    RDF_CONTEXT,
     SINGLE_OUTPUT_PARAM_NAME,
     ByteData,
     FunFromReadableByteBuffer,
@@ -337,7 +336,8 @@ class DataStorage(ABC):
 
                 for p in callback_data["metadata_creation_event"][u.usedInput.label]:
                     name = p[u.roleName.label]
-                    p["@id"] = f"{event_id}/input/{name}"
+                    input_id = f"{event_id}/input/{name}"  # noqa:F841 use later
+                    # p["@id"] = input_id
 
                 # generate metadata
                 if metadata_generator:
@@ -376,13 +376,13 @@ class DataStorage(ABC):
                 update_metadata_job_id(data)
 
                 creation_id = callback_data["metadata_creation_event"]["@id"]
-                output_id = f"{creation_id}/output/{param_name}"
+                output_id = f"{creation_id}/output/{param_name}"  # noqa:F841 use later
 
                 output_metadata = {
                     '$."$schema"': JSON_SCHEMA_FILE_RESOURCE,
-                    "@context": RDF_CONTEXT,
+                    # "@context": RDF_CONTEXT,
                     # "@type": u.FileResource.label,
-                    "@id": output_id,
+                    # "@id": output_id,
                     # name in storage (TODO maybe create URI?)
                     u.name.label: name,
                     u.hash.label: f"{hash_algo}:{bytes_iterable_hash.value}",
