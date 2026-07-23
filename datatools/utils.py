@@ -39,6 +39,7 @@ import jsonpath_ng.ext
 import jsonschema
 import jsonschema.validators
 import pandas as pd
+from rich.console import Console
 import sqlalchemy as sa
 import sqlparse
 from typing_extensions import override
@@ -1035,12 +1036,16 @@ class CollectStatsIterator(Generic[IterType, Accumulator, Value]):
 class CollectStatsIteratorSize(CollectStatsIterator[bytes, int, int]):
     """TODO"""
 
-    def __init__(
-        self,
-        iterator: Iterable[bytes],
-    ):
+    def __init__(self, iterator: Iterable[bytes], print_progress: bool = True):
+        self._progress = (
+            Console(stderr=True).status("").__enter__() if print_progress else None
+        )
+
         def update(acc: int, v: bytes) -> int:
-            return acc + len(v)
+            sum_bytes = acc + len(v)
+            if self._progress:
+                self._progress.update(f"{sum_bytes} bytes")
+            return sum_bytes
 
         super().__init__(iterator, initial_value=0, update_value=update)
 
@@ -1155,6 +1160,7 @@ def write_bytes_locked(
         with os.fdopen(fd, "wb") as tmp_file:
             for chunk in bytes_iter:
                 tmp_file.write(chunk)
+
             tmp_file.flush()
             os.fsync(tmp_file.fileno())
         os.replace(tmp_path, path)
