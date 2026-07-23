@@ -24,6 +24,7 @@ dependencies = [
     "pyodbc>=5.3.0",
     "python-dateutil>=2.9.0.post0",
     "rdflib>=7.6",
+    "rich>=15.0.0",
     "sqlalchemy>=2.0",
     "sqlparse>=0.5",
     "starlette>=1.3",
