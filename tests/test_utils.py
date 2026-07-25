@@ -1,8 +1,12 @@
 """TODO"""
 
+import sqlalchemy as sa
+
 from datatools.utils import (
     DEFAULT_ENCODING,
     BufferIter,
+    get_db_table_likes,
+    get_sql_table_schema_wo_data,
     is_file_readonly,
     make_file_readonly,
     make_file_writable,
@@ -49,3 +53,30 @@ class TestUtils(TempdirTestCase):
             list(BufferIter(f)(None))
 
         self.assertRaises(ValueError, consume_iterator)
+
+    def test_get_db_table_likes(self):
+        """TODO"""
+        eng = sa.create_engine("sqlite:///:memory:")
+        # test database
+        con = eng.connect()
+        con.execute(sa.text("create table t(i int primary key, b varchar(10));"))
+        con.execute(sa.text("create view v as select * from t;"))
+        items = get_db_table_likes(eng)
+        self.assertEqual(
+            items,
+            [
+                {"name": "t", "schema": "main", "type": "table"},
+                {"name": "v", "schema": "main", "type": "view"},
+            ],
+        )
+
+        table_schema = get_sql_table_schema_wo_data(con, "v")
+        self.assertEqual(
+            table_schema,
+            {
+                "fields": [
+                    {"data_type": None, "is_nullable": None, "name": "i"},
+                    {"data_type": None, "is_nullable": None, "name": "b"},
+                ]
+            },
+        )

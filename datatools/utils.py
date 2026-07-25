@@ -584,6 +584,36 @@ def detect_csv_dialect(sample_data: str) -> dict[str, Any]:
     return dialect_dict
 
 
+def get_db_table_likes(engine: sa.Engine | sa.Connection) -> list[dict]:
+    """list table/view like items from db connection."""
+    inspector = sa.inspect(engine)
+    schema_names = inspector.get_schema_names()
+    result = []
+    for schema in schema_names:
+        for otype in ["table", "view", "materialized_view"]:
+            getter = getattr(inspector, f"get_{otype}_names")
+            try:
+                names = getter(schema=schema)
+            except NotImplementedError:
+                # not available for all db types
+                continue
+            for name in names:
+                result.append({"name": name, "type": otype, "schema": schema})
+    return result
+
+
+def get_sql_table_schema_wo_data(
+    con: sa.Connection, table_name: str, schema: str | None = None
+) -> dict[str, Any]:
+    """TODO"""
+    # build select * limit 0 query
+    t = sa.table(table_name, sa.literal_column("*"))
+    t.schema = schema
+    query = sa.select(sa.literal_column("*")).select_from(t).limit(0)
+    cursor_result = con.execute(query)
+    return get_sql_table_schema(cursor_result)
+
+
 def get_sql_table_schema(result: "CursorResult") -> dict[str, Any]:
     """TODO
 
