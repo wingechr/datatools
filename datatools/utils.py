@@ -584,9 +584,9 @@ def detect_csv_dialect(sample_data: str) -> dict[str, Any]:
     return dialect_dict
 
 
-def get_db_table_likes(engine: sa.Engine | sa.Connection) -> list[dict]:
+def get_db_table_likes(connection: sa.Engine | sa.Connection) -> list[dict]:
     """list table/view like items from db connection."""
-    inspector = sa.inspect(engine)
+    inspector = sa.inspect(connection)
     schema_names = inspector.get_schema_names()
     result = []
     for schema in schema_names:
@@ -603,10 +603,10 @@ def get_db_table_likes(engine: sa.Engine | sa.Connection) -> list[dict]:
 
 
 def get_sql_table_schema_wo_data(
-    con: sa.Connection, table_name: str, schema: str | None = None
+    connection: sa.Engine | sa.Connection, table_name: str, schema: str | None = None
 ) -> dict[str, Any]:
     """TODO"""
-    inspector = sa.inspect(con)
+    inspector = sa.inspect(connection)
 
     PYTHON_TYPE_TO_FRICTIONLESS = {
         int: "integer",
