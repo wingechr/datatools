@@ -75,8 +75,20 @@ class TestUtils(TempdirTestCase):
             table_schema,
             {
                 "fields": [
-                    {"data_type": None, "is_nullable": None, "name": "i"},
-                    {"data_type": None, "is_nullable": None, "name": "b"},
+                    {"name": "i", "nullable": True, "type": "integer"},
+                    {"name": "b", "nullable": True, "type": "string"},
                 ]
+            },
+        )
+
+        table_schema = get_sql_table_schema_wo_data(con, "t")
+        self.assertEqual(
+            table_schema,
+            {
+                "fields": [
+                    {"name": "i", "nullable": True, "type": "integer"},
+                    {"name": "b", "nullable": True, "type": "string"},
+                ],
+                "primary_key": ["i"],
             },
         )

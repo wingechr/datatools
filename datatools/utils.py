@@ -606,12 +606,49 @@ def get_sql_table_schema_wo_data(
     con: sa.Connection, table_name: str, schema: str | None = None
 ) -> dict[str, Any]:
     """TODO"""
-    # build select * limit 0 query
-    t = sa.table(table_name, sa.literal_column("*"))
-    t.schema = schema
-    query = sa.select(sa.literal_column("*")).select_from(t).limit(0)
-    cursor_result = con.execute(query)
-    return get_sql_table_schema(cursor_result)
+    inspector = sa.inspect(con)
+
+    PYTHON_TYPE_TO_FRICTIONLESS = {
+        int: "integer",
+        float: "number",
+        bool: "boolean",
+        datetime.date: "date",
+        datetime.datetime: "datetime",
+        datetime.time: "time",
+        str: "string",
+        bytes: "string",
+        dict: "object",
+        list: "array",
+    }
+
+    def infer_frictionless_type(sa_type):
+        try:
+            py_type = sa_type.python_type
+        except NotImplementedError:
+            return None
+        # bool is a subclass of int in Python -- check it first
+        if py_type is bool:
+            return "boolean"
+
+        return PYTHON_TYPE_TO_FRICTIONLESS.get(py_type, "string")
+
+    result = {"fields": []}
+
+    columns = inspector.get_columns(table_name, schema=schema)
+    for col in columns:
+        field = {
+            "name": col["name"],
+            "type": infer_frictionless_type(col["type"]),
+            "nullable": col.get("nullable", True),
+        }
+        result["fields"].append(field)
+
+    pk = inspector.get_pk_constraint(table_name, schema=schema)
+    pk_cols = pk.get("constrained_columns", []) if pk else []
+    if pk_cols:
+        result["primary_key"] = pk_cols
+
+    return result
 
 
 def get_sql_table_schema(result: "CursorResult") -> dict[str, Any]:
