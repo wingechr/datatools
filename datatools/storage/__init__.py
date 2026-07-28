@@ -13,7 +13,7 @@ storage_classes: dict[str, type[DataStorage]] = {
 }
 
 
-def _infer_storage_class(location: str, storage_class=str | None) -> type[DataStorage]:
+def _infer_storage_class(location: str, storage_class: str | None) -> type[DataStorage]:
     """TODO
 
     this function should be in __main__ so that
@@ -26,7 +26,7 @@ def _infer_storage_class(location: str, storage_class=str | None) -> type[DataSt
     raise NotImplementedError(f"Cannot infer DataStorage class for location {location}")
 
 
-def storage(location: str, storage_class=str | None) -> DataStorage:
+def storage(location: str = ".", storage_class: str | None = None) -> DataStorage:
     """TODO"""
     StorageClass = _infer_storage_class(location, storage_class=storage_class)
     return StorageClass(location)
