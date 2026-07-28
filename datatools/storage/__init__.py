@@ -8,16 +8,19 @@ from datatools.storage.file import FileDataStorage
 from datatools.storage.http import HttpDataStorage
 from datatools.storage.sql import SqlDataStorage
 
-storage_classes: dict[str, type[DataStorage]] = {
-    c.__name__: c for c in [FileDataStorage, HttpDataStorage, SqlDataStorage]
-}
+
+def _get_storage_classes() -> dict[str, type[DataStorage]]:
+    return {c.__name__: c for c in [FileDataStorage, HttpDataStorage, SqlDataStorage]}
 
 
-def _infer_storage_class(location: str, storage_class: str | None) -> type[DataStorage]:
+def _infer_storage_class(
+    location: str, storage_class: type[DataStorage] | str | None = None
+) -> type[DataStorage]:
     """TODO
 
     this function should be in __main__ so that
     """
+    storage_classes = _get_storage_classes()
     if isinstance(storage_class, str) and storage_class:
         return storage_classes[storage_class]
     for cls in storage_classes.values():
@@ -26,7 +29,9 @@ def _infer_storage_class(location: str, storage_class: str | None) -> type[DataS
     raise NotImplementedError(f"Cannot infer DataStorage class for location {location}")
 
 
-def storage(location: str = ".", storage_class: str | None = None) -> DataStorage:
+def storage(
+    location: str = ".", storage_class: type[DataStorage] | str | None = None
+) -> DataStorage:
     """TODO"""
     StorageClass = _infer_storage_class(location, storage_class=storage_class)
     return StorageClass(location)

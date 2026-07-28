@@ -9,7 +9,7 @@ import click
 import uvicorn
 
 from datatools.io import JsonIO
-from datatools.storage import storage, storage_classes
+from datatools.storage import _get_storage_classes, storage
 from datatools.storage.base import DataStorage
 from datatools.storage.http import make_server_app
 from datatools.storage.mail import (
@@ -26,12 +26,14 @@ from datatools.utils import (
 # we need to use print()
 sys.stdout.reconfigure(errors="replace")  # type:ignore reconfigure does exist
 
+storage_classes = _get_storage_classes()
+
 
 @click.group()
 @click.option("--location", "-l", default=".")
 @click.option("--storage_class", "-c", type=click.Choice(storage_classes.keys()))
 @click.pass_context
-def main(ctx, location: str, storage_class=str | None) -> None:
+def main(ctx, location: str, storage_class: str | None) -> None:
     """TODO"""
     ctx.obj = storage(location, storage_class=storage_class)
     logging.debug(f"Starting {ctx.obj}")
