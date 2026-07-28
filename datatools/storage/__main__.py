@@ -148,7 +148,7 @@ def import_from_uri(
     """TODO"""
     options_dict = parse_cmd_vals(options)
     ctx_data_storage.import_from_uri(
-        uri=uri, name=name, skip_finished=skip_finished, **options_dict
+        uri=uri, name=name, exist_ok=skip_finished, **options_dict
     )
     logging.info(name)
 

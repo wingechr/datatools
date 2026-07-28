@@ -180,7 +180,7 @@ class DataStorage(ABC):
         return {"Location": str(self._location), "Class": str(self.__class__.__name__)}
 
     def import_from_uri(
-        self, uri: str, name: Name | None = None, skip_finished: bool = False, **options
+        self, uri: str, name: Name | None = None, exist_ok: bool = False, **options
     ) -> Name:
         """TODO"""
 
@@ -192,7 +192,7 @@ class DataStorage(ABC):
             output_converters={
                 SINGLE_OUTPUT_PARAM_NAME: importer_class.output_write_byte_data
             },
-            skip_finished=skip_finished,
+            skip_finished=exist_ok,
         )
         task(name, uri, **options)
         return name

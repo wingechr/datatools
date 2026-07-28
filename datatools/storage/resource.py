@@ -44,16 +44,17 @@ class Resource:
         """TODO"""
         return self._storage.delete(self._name)
 
+    @property
     def metadata(self) -> "MetadataStorage":
         """Metadata container associated with data."""
         return self._storage.metadata(self._name)
 
     def import_from_uri(
-        self, uri: str, skip_finished: bool = False, **options
+        self, uri: str, exist_ok: bool = False, **options
     ) -> "Resource":
         """TODO"""
         new_name = self._storage.import_from_uri(
-            uri, self._name, skip_finished=skip_finished, **options
+            uri, self._name, exist_ok=exist_ok, **options
         )
         if new_name != self._name:
             logging.warning("Changed name to %s", new_name)
