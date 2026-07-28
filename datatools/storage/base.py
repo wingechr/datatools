@@ -14,6 +14,7 @@ from datatools.exceptions import (
 )
 from datatools.process.importer import infer_importer_class
 from datatools.process.task import AnnotatedFunction, Task, default_get_task_uuid
+from datatools.storage.resource import Resource
 from datatools.types import (
     JSON_SCHEMA_FILE_RESOURCE,
     SINGLE_OUTPUT_PARAM_NAME,
@@ -159,6 +160,10 @@ class DataStorage(ABC):
         """Metadata container associated with data."""
         self._assert_valid_name(name=name)
         return self._metadata(name=name)
+
+    def resource(self, name: Name) -> Resource:
+        """TODO"""
+        return Resource(name, self)
 
     def _assert_valid_name(self, name: Name):
         valid_name = self._get_valid_name(name)

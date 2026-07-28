@@ -1,11 +1,18 @@
 """init"""
 
-__all__ = ["FileDataStorage", "HttpDataStorage", "SqlDataStorage", "storage"]
+__all__ = [
+    "FileDataStorage",
+    "HttpDataStorage",
+    "SqlDataStorage",
+    "storage",
+    "Resource",
+]
 
 
 from datatools.storage.base import DataStorage
 from datatools.storage.file import FileDataStorage
 from datatools.storage.http import HttpDataStorage
+from datatools.storage.resource import Resource
 from datatools.storage.sql import SqlDataStorage
 
 
