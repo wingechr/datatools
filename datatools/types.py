@@ -205,7 +205,7 @@ class URIRefs(MyEnum[ExtURIRef]):
     roleName = ExtURIRef(ns["roleName"])
     value = ExtURIRef(ns["value"])
     # CreationEvent --> xsd:string
-    taskId = ExtURIRef(ns["taskId"])
+    # taskId = ExtURIRef(ns["taskId"])
     # CreationEvent --> xsd:string(date)
     datetime = ExtURIRef(ns["datetime"])
     # CreationEvent --> uri

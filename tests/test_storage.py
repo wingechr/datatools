@@ -368,9 +368,9 @@ class TestUseCases(TestCase):
 
             metadata_creation_event: dict = metadata_all[u.createdBy.label]
 
-            task_uuid = metadata_creation_event[u.taskId.label]
+            # task_uuid = metadata_creation_event[u.taskId.label]
             timestamp = metadata_creation_event[u.datetime.label]
-            self.assertTrue(task_uuid, "")
+            # self.assertTrue(task_uuid, "")
             event_id = f"event:{task_uuid}/{timestamp}"
 
             metadata_all_expected = {
@@ -405,7 +405,7 @@ class TestUseCases(TestCase):
                         # "@type": u.Function.label,
                         "description": query_sql.__doc__,
                     },
-                    u.taskId.label: task_uuid,
+                    # u.taskId.label: task_uuid,
                     u.usedInput.label: [
                         {
                             # "@id": event_id + "/input/uri",

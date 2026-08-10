@@ -336,13 +336,13 @@ class DataStorage(ABC):
                 event_id = f"event:{task_id}/{datetime}"
 
                 callback_data["metadata_creation_event"]["@id"] = event_id
-                callback_data["metadata_creation_event"][u.taskId.label] = task_id
+                # callback_data["metadata_creation_event"][u.taskId.label] = task_id
                 # update ids for input parameters
 
-                for p in callback_data["metadata_creation_event"][u.usedInput.label]:
-                    name = p[u.roleName.label]
-                    input_id = f"{event_id}/input/{name}"  # noqa:F841 use later
-                    # p["@id"] = input_id
+                # for p in callback_data["metadata_creation_event"][u.usedInput.label]:
+                # name = p[u.roleName.label]
+                # input_id = f"{event_id}/input/{name}"  # noqa:F841 use later
+                # p["@id"] = input_id
 
                 # generate metadata
                 if metadata_generator:
