@@ -193,6 +193,7 @@ class DataStorage(ABC):
                 SINGLE_OUTPUT_PARAM_NAME: importer_class.output_write_byte_data
             },
             skip_finished=exist_ok,
+            _metadata_for_write_output=importer_class.metadata_for_write_output,
         )
         task(name, uri, **options)
         return name
@@ -247,6 +248,7 @@ class DataStorage(ABC):
         metadata_generator: Callable[[Any], dict[str, Json]] | None = None,
         get_task_id: FunHashsum = default_get_task_uuid,
         skip_finished: bool = False,
+        _metadata_for_write_output: bool = True,
     ) -> Task:
         """TODO"""
 
@@ -353,11 +355,14 @@ class DataStorage(ABC):
         ):
             if handler:
                 handler_w = AnnotatedFunction.assert_wrapped(handler)
-                meta_saved_with = {
-                    # "@type": u.Serialization.label,
-                    u.roleName.label: param_name,
-                    u.usedFunction.label: handler_w.get_metadata(),
-                }
+                if _metadata_for_write_output:
+                    meta_saved_with = {
+                        # "@type": u.Serialization.label,
+                        u.roleName.label: param_name,
+                        u.usedFunction.label: handler_w.get_metadata(),
+                    }
+                else:
+                    meta_saved_with = None
             else:
                 meta_saved_with = None
                 handler = _dummy_output_handler_write
@@ -380,8 +385,8 @@ class DataStorage(ABC):
 
                 update_metadata_job_id(data)
 
-                creation_id = callback_data["metadata_creation_event"]["@id"]
-                output_id = f"{creation_id}/output/{param_name}"  # noqa:F841 use later
+                # creation_id = callback_data["metadata_creation_event"]["@id"]
+                # output_id = f"{creation_id}/output/{param_name}"
 
                 output_metadata = {
                     '$."$schema"': JSON_SCHEMA_FILE_RESOURCE,

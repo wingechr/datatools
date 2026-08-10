@@ -7,6 +7,7 @@ from email.message import Message
 from email.utils import parseaddr
 import logging
 import ssl
+import time
 from typing import TYPE_CHECKING
 from urllib.parse import unquote
 
@@ -282,4 +283,10 @@ class MailAttachmentStorageHandler(MailAttachmentHandler):
             filename = sanitize_filename(attachment.filename or "missing")
             resource_name = f"{message_name}/{filename}"
 
+            logging.info("Downloading attachment: %s", attachment.filename)
             task(resource_name)
+            time.sleep(5)
+
+        time.sleep(10)
+        logging.info("Done")
+        time.sleep(100)

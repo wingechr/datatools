@@ -35,6 +35,7 @@ class Importer(ABC):
 
     output_write_byte_data: FunToWritableBuffer | None = None
     get_data: Callable
+    metadata_for_write_output: bool = False
 
     @classmethod
     def can_handle(cls, uri: str, **options) -> bool:
@@ -68,7 +69,7 @@ def write_from_buffer(data: BufferedReader, buf: WritableBuffer):
 
 
 def download_s3(uri: str, endpoint_url: str | None = None) -> BufferedReader:
-    """TODO"""
+    """Download from s3 bucket."""
     uri, (user, passwd) = split_credentials_from_uri(uri)
     s3 = boto3.client(
         "s3",
@@ -88,7 +89,9 @@ class HttpImporter(Importer):
     """TODO"""
 
     # use generic id (tool does not matter)
-    get_data = AnnotatedFunction.wrap(function_id="GET")(http_get_stream)
+    get_data = AnnotatedFunction.wrap(function_id="GET", parameter_names=["uri"])(
+        http_get_stream
+    )
     output_write_byte_data: FunToWritableBuffer = write_chunks
 
     @classmethod
@@ -106,7 +109,9 @@ class S3Importer(Importer):
     """TODO"""
 
     # use generic id (tool does not matter)
-    get_data = AnnotatedFunction.wrap(function_id="S3")(download_s3)
+    get_data = AnnotatedFunction.wrap(function_id="S3", parameter_names=["uri"])(
+        download_s3
+    )
     output_write_byte_data: FunToWritableBuffer = write_from_buffer
 
     @classmethod
@@ -126,7 +131,9 @@ class FileImporter(Importer):
     """TODO"""
 
     # use generic id (tool does not matter)
-    get_data = AnnotatedFunction.wrap(function_id="COPY")(read_file_uri_stream)
+    get_data = AnnotatedFunction.wrap(function_id="COPY", parameter_names=["uri"])(
+        read_file_uri_stream
+    )
     output_write_byte_data: FunToWritableBuffer = write_chunks
 
     @classmethod
@@ -153,8 +160,12 @@ class FileImporter(Importer):
 class SqlImporter(Importer):
     """TODO"""
 
+    metadata_for_write_output = True
+
     # use generic id (tool does not matter)
-    get_data = AnnotatedFunction.wrap(function_id="QUERY")(query_sql)
+    get_data = AnnotatedFunction.wrap(
+        function_id="QUERY", parameter_names=["uri", "query"]
+    )(query_sql)
     output_write_byte_data: FunToWritableBuffer = sql_query_result_to_csv
 
     @classmethod

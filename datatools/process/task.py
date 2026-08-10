@@ -51,6 +51,7 @@ class AnnotatedFunction(Generic[FunParams, FunResult]):
         fun: Callable[FunParams, FunResult],
         function_id: str | None = None,
         description: str | None = None,
+        parameter_names: list[str] | None = None,
         **params,
     ):
         # TODO: is this still a problem?
@@ -58,8 +59,12 @@ class AnnotatedFunction(Generic[FunParams, FunResult]):
         #    logging.warning("Dont wrap a function with *args / **kwargs")
 
         self.fun = fun
-        self.fun_defaults = function_get_defaults(fun)
-        self.fun_parameter_names = function_get_regular_params(fun)
+        self.fun_defaults: dict[str, Any] = function_get_defaults(fun)
+        self.fun_parameter_names: list[str] = (
+            function_get_regular_params(fun)
+            if parameter_names is None
+            else parameter_names
+        )
         self.function_id: str = function_id or get_function_id(fun)
         self.description = (
             get_function_description(fun) if description is None else description
@@ -81,6 +86,7 @@ class AnnotatedFunction(Generic[FunParams, FunResult]):
         cls,
         function_id: str | None = None,
         description: str | None = None,
+        parameter_names: list[str] | None = None,
         **params,
     ):
         """TODO"""
@@ -90,6 +96,7 @@ class AnnotatedFunction(Generic[FunParams, FunResult]):
                 fun,
                 function_id=function_id,
                 description=description,
+                parameter_names=parameter_names,
                 **params,
             )
 

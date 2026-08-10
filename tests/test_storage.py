@@ -368,10 +368,7 @@ class TestUseCases(TestCase):
 
             metadata_creation_event: dict = metadata_all[u.createdBy.label]
 
-            # task_uuid = metadata_creation_event[u.taskId.label]
-            timestamp = metadata_creation_event[u.datetime.label]
-            # self.assertTrue(task_uuid, "")
-            event_id = f"event:{task_uuid}/{timestamp}"
+            event_id = metadata_creation_event["@id"]
 
             metadata_all_expected = {
                 "$schema": JSON_SCHEMA_FILE_RESOURCE,
@@ -419,12 +416,12 @@ class TestUseCases(TestCase):
                             u.roleName.label: "query",
                             u.value.label: "select 1 as a",
                         },
-                        {
-                            # "@id": event_id + "/input/options",
-                            # "@type": u.LiteralParameter.label,
-                            u.roleName.label: "options",
-                            # u.value.label: None, # no value
-                        },
+                        # {
+                        # "@id": event_id + "/input/options",
+                        # "@type": u.LiteralParameter.label,
+                        #    u.roleName.label: "options",
+                        # u.value.label: None, # no value
+                        # },
                     ],
                 },
             }

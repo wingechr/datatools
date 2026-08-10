@@ -929,7 +929,7 @@ def wait_for_url(url: str, timeout_s=30):
 def http_get_stream(
     uri: str, chunk_size: int = DEFAULT_CHUNK_SIZE, **options
 ) -> Iterable[bytes]:
-    """TODO"""
+    """Download from http."""
 
     with httpx.stream("GET", uri, follow_redirects=True) as resp:
         resp.raise_for_status()
@@ -939,14 +939,14 @@ def http_get_stream(
 def read_file_uri_stream(
     uri: str, chunk_size: int = DEFAULT_CHUNK_SIZE, **options
 ) -> Iterable[bytes]:
-    """TODO"""
+    """Copy from file."""
     path = uri_or_path_to_path(uri).resolve()
     with path.open("rb") as file:
         yield from buffer_to_byte_iterable(file, chunk_size=chunk_size)
 
 
 def query_sql(uri: str, query: str, **options) -> Iterable["Row"]:
-    """TODO"""
+    """Get data from sql database."""
     eng = sa.create_engine(uri)
     with eng.connect() as con:
         resp = con.execute(sa.text(query))
@@ -973,7 +973,7 @@ def wrap_exception(
 def sql_query_result_to_csv(
     data: Iterable["Row"], fp: WritableBuffer, **options
 ) -> None:
-    """TODO"""
+    """Serialize as csv."""
     df = pd.DataFrame(data)
     df.to_csv(fp, index=False, lineterminator="\n", encoding=DEFAULT_ENCODING)
 
@@ -1104,6 +1104,7 @@ class CollectStatsIteratorSize(CollectStatsIterator[bytes, int, int]):
     """TODO"""
 
     def __init__(self, iterator: Iterable[bytes], print_progress: bool = True):
+
         self._progress = (
             Console(stderr=True).status("").__enter__() if print_progress else None
         )
