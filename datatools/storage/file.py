@@ -1,8 +1,8 @@
 """TODO"""
 
-from collections.abc import Iterable
 import logging
 import os
+from collections.abc import Iterable
 from pathlib import Path
 
 import rdflib
@@ -73,7 +73,7 @@ class FileDataStorage(DataStorage):
     @classmethod
     def _can_handle(cls, location: str) -> bool:
         """Either file:// protocol or no protocol"""
-        return Path(location).is_dir()
+        return Path(location).is_dir() or location.startswith("file://")
 
     def __init__(self, location: StrPath = "."):
         path = uri_or_path_to_path(location).resolve()
