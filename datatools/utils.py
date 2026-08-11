@@ -1080,17 +1080,24 @@ class CollectStatsIterator(Generic[IterType, Accumulator, Value]):
         iterator: Iterable[IterType],
         initial_value: Accumulator,
         update_value: Callable[[Accumulator, IterType], Accumulator],
+        cleanup: Callable | None = None,
     ):
         self._source = iterator
         self._update_value = update_value
         self._value: Accumulator = initial_value
+        self._cleanup = cleanup
 
     def __iter__(self) -> Iterator[IterType]:
         self._iter = iter(self._source)
         return self
 
     def __next__(self) -> IterType:
-        item = next(self._iter)
+        try:
+            item = next(self._iter)
+        except StopIteration:
+            if self._cleanup:
+                self._cleanup()
+            raise
         self._value = self._update_value(self._value, item)
         return item
 
@@ -1103,8 +1110,11 @@ class CollectStatsIterator(Generic[IterType, Accumulator, Value]):
 class CollectStatsIteratorSize(CollectStatsIterator[bytes, int, int]):
     """TODO"""
 
-    def __init__(self, iterator: Iterable[bytes], print_progress: bool = True):
-
+    def __init__(
+        self,
+        iterator: Iterable[bytes],
+        print_progress: bool = True,
+    ):
         self._progress = (
             Console(stderr=True).status("").__enter__() if print_progress else None
         )
@@ -1115,7 +1125,13 @@ class CollectStatsIteratorSize(CollectStatsIterator[bytes, int, int]):
                 self._progress.update(f"{sum_bytes} bytes")
             return sum_bytes
 
-        super().__init__(iterator, initial_value=0, update_value=update)
+        def cleanup():
+            if self._progress:
+                self._progress.__exit__(None, None, None)
+
+        super().__init__(
+            iterator, initial_value=0, update_value=update, cleanup=cleanup
+        )
 
 
 class CollectStatsIteratorHash(CollectStatsIterator[bytes, Any, str]):

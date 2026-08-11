@@ -7,7 +7,6 @@ from email.message import Message
 from email.utils import parseaddr
 import logging
 import ssl
-import time
 from typing import TYPE_CHECKING
 from urllib.parse import unquote
 
@@ -285,8 +284,5 @@ class MailAttachmentStorageHandler(MailAttachmentHandler):
 
             logging.info("Downloading attachment: %s", attachment.filename)
             task(resource_name)
-            time.sleep(5)
 
-        time.sleep(10)
-        logging.info("Done")
-        time.sleep(100)
+        logging.info("Finished. Waiting for next mail.")
