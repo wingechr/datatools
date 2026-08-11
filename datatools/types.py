@@ -62,7 +62,7 @@ class FunHashsum(Protocol):  # noqa:D101
 
 # any name, must be a valid parameter name
 # # but not collide with input parameters
-SINGLE_OUTPUT_PARAM_NAME = "MAIN"
+SINGLE_OUTPUT_PARAM_NAME = "OUTPUT"
 HTTP_METHOD = Literal["GET", "PUT", "POST", "DELETE", "HEAD", "PATCH"]
 DEFAULT_CHUNK_SIZE = io.DEFAULT_BUFFER_SIZE  # 8192 bytes currently
 

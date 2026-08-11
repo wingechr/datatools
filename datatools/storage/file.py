@@ -1,8 +1,8 @@
 """TODO"""
 
+from collections.abc import Iterable
 import logging
 import os
-from collections.abc import Iterable
 from pathlib import Path
 
 import rdflib

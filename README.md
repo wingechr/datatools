@@ -11,9 +11,3 @@
 ## Installation
 
 `pip install wingechr-datatools`
-
-```
-uv run -m datatools storage import test.html http://example.com
-uv run -m datatools storage import test2.html file:///./test.html
-uv run -m datatools storage import test.csv sqlite:///:memory: "query=select 1 as a"
-```

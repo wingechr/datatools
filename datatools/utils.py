@@ -973,7 +973,7 @@ def wrap_exception(
 def sql_query_result_to_csv(
     data: Iterable["Row"], fp: WritableBuffer, **options
 ) -> None:
-    """Serialize as csv."""
+    """Serialize as csv using pandas."""
     df = pd.DataFrame(data)
     df.to_csv(fp, index=False, lineterminator="\n", encoding=DEFAULT_ENCODING)
 
